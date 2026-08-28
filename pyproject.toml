@@ -1,0 +1,15 @@
+[tool.ruff]
+line-length = 88
+exclude = [
+    "experiments/*",
+    "*.ipynb",
+    "**/*.ipynb",
+]
+preview = true
+lint.select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # isort
+    "W",   # pycodestyle warnings
+]
+lint.ignore = ["E501"]  # Ignore line length, handled by black or another formatter

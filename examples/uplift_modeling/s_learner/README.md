@@ -1,0 +1,111 @@
+# Uplift Modeling S-Learner
+## Навигация
+* `data_collection.ipynb` - ноутбук со сборкой данных;
+* `configs` - файлы конфигурации;
+* `download_data.sh` - скрипт для подгрузки предобработанных данных.
+---
+
+## Конфиг обучения
+```yaml
+# конфигцрация accelerator для multi-gpu обучения 
+accelerator:
+  _target_: accelerate.Accelerator
+  _partial_: True
+  dataloader_config:
+    _target_: accelerate.utils.DataLoaderConfiguration
+    dispatch_batches: False
+train_dataloader:
+  _target_: torch.utils.data.DataLoader
+  dataset:
+    _target_: avatar.data.dataset.TabularDataset
+    path: /home/datalab/nfs/avatar_fm/examples/uplift_modeling/s_learner/data/s_learner/train
+    shuffle_files: True
+    shuffle_pq: True
+    hidden_state_column: seq_hidden_state # название колонки с hidden_state
+  batch_size: 2048
+  pin_memory: True
+  drop_last: False
+  num_workers: 8
+  collate_fn:
+    _target_: avatar.data.dataset.collate_fn.UpliftCollateFn
+    target_column: target_attr_1 # назване колонки факта конверсии
+    treatment_column: target_attr_3 # название колонки флага контролько целевой группы (1 - ЦГ, 0 - КГ)
+    inverse_treatment: True # если True то в treatment_column 0 заменяется на 1  и наоборот (В данном наборе данных 1 - КГ, 0 - ЦГ, поэтому необходимо сделать 1 - treatment_column)
+valid_dataloader:
+  _target_: torch.utils.data.DataLoader
+  dataset:
+    _target_: avatar.data.dataset.TabularDataset
+    path: /home/datalab/nfs/avatar_fm/examples/uplift_modeling/s_learner/data/s_learner/valid
+    shuffle_files: False
+    shuffle_pq: False
+    hidden_state_column: seq_hidden_state # название колонки с hidden_state
+  batch_size: 2048
+  pin_memory: True
+  drop_last: False
+  num_workers: 8
+  collate_fn:
+    _target_: avatar.data.dataset.collate_fn.UpliftCollateFn
+    target_column: target_attr_1 # назване колонки факта конверсии
+    treatment_column: target_attr_3 # название колонки флага контролько целевой группы (1 - ЦГ, 0 - КГ)
+    inverse_treatment: True # если True то в treatment_column 0 заменяется на 1  и наоборот (В данном наборе данных 1 - КГ, 0 - ЦГ, поэтому необходимо сделать 1 - treatment_column)
+model:
+  _target_: avatar.pipeline.uplift.SLearner
+  embedding:
+    _target_: avatar.nn.embedding.TabularEmbedding
+    num_numerical_features: 189
+    hidden_size: 64
+    vocab_size: 172
+    std_noise: null
+  tabular_backbone:
+    _target_: avatar.nn.tabular.ste.STEv2Body
+    hidden_size: ${model.embedding.hidden_size}
+    num_heads: 4
+    num_layers: 3
+    attn_dropout: 0.15
+  aggregation_config:
+    name: linear
+    num_features: 242 # 241 табличных фичи на входе + 1 признак is_treatment 
+    emb_dim: ${model.embedding.hidden_size}
+  hidden_state_dim: 128 # Размерность внешнего эмбеддинга (seq_hidden_state)
+mlflow:
+  experiment_name: uplift_modeling
+  run_name: td_response_s_learner
+  logging_dir: /home/datalab/nfs/mlruns
+optimizer:
+  _target_: torch.optim.AdamW
+  _partial_: True
+  lr: 0.001
+  weight_decay: 0
+  scale_lr_multigpu: True
+scheduler:
+  _target_: transformers.optimization.get_scheduler
+  _partial_: True
+  name: cosine
+  num_warmup_steps: 1000
+  num_training_steps: 300_000
+train:
+  start_epoch: 0
+  checkpoint_state: null
+  model_state: null
+  seed: 42
+  num_epochs: 50
+  clip_grad_norm: null
+  max_saved_checkpoints: 5
+  device_specific: True
+  early_stopping: null
+metrics:
+  valid_metrics:
+    _target_: avatar.metrics.UpliftMetrics
+    require_calibration: True
+```
+
+## Запуск обучения
+```bash
+accelerate launch -m avatar.train --config-dir=configs --config-name=train
+```
+
+## Запуск инференса
+```bash
+accelerate launch -m avatar.inference --config-dir=configs --config-name=inference
+```
+Результаты инференса можно найти в директории `predict`.

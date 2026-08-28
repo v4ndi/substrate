@@ -1,0 +1,56 @@
+load_state: /home/datalab/nfs/avatar_fm/examples/tabular_hidden_states/best_models/tabular_hidden_states/late_early_fusion/9/model.bin
+accelerator:
+  _target_: accelerate.Accelerator
+  _partial_: True
+  dataloader_config:
+    _target_: accelerate.utils.DataLoaderConfiguration
+    dispatch_batches: False
+test_dataloader:
+  _target_: torch.utils.data.DataLoader
+  dataset:
+    _target_: avatar.data.dataset.TabularDataset
+    path: /home/datalab/nfs/avatar_fm/examples/tabular_hidden_states/data/td_processed/test
+    shuffle_files: False
+    shuffle_pq: False
+    hidden_state_column: seq_hidden_state # название колонки с hidden_state
+  batch_size: 2048
+  pin_memory: True
+  drop_last: False
+  num_workers: 8
+  collate_fn:
+    _target_: avatar.data.dataset.collate_fn.TabularCollateFn
+    target_column: target_attr_1
+model:
+  _target_: avatar.pipeline.tabular.TabularClassification
+  tabular_model:
+    _target_: avatar.pipeline.tabular.TabularWithAggregatedStates
+    backbone:
+      _target_: avatar.nn.tabular.STEv2
+      embedding:
+        _target_: avatar.nn.embedding.TabularEmbedding
+        num_numerical_features: 189
+        hidden_size: 64
+        vocab_size: 172
+        std_noise: null
+        hidden_state_aggregator:
+          _target_: avatar.nn.embedding.LayerNormConcatenate
+          hidden_state_dim: 128 # Размерность external hidden_state
+          embedding_dim: ${model.tabular_model.backbone.embedding.hidden_size} # Размерность на выходе из Tabular Embedding
+      num_heads: 4
+      num_layers: 3
+      attn_dropout: 0.15
+    aggregation_config:
+      name: linear
+      num_features: 244 # 243 табличных фичи на входе 
+      emb_dim: ${model.tabular_model.backbone.embedding.hidden_size}
+    late_fusion_hidden_state_dim: 128 # Размерность hidden_state
+  num_classes: 2
+  dropout_p: 0.15
+  task_type: classification
+metrics:
+  test_metrics:
+    _target_: avatar.metrics.ClassificationInferenceMetrics
+    input_columns_to_save:
+      - epk_id
+      - targets
+    path_to_save: predicts/late_early_fusion

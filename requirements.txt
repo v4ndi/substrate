@@ -1,0 +1,27 @@
+accelerate==1.8.1
+pyspark==3.5.0
+polars==0.20.10
+mlflow==3.1.0
+scikit-uplift==0.5.1
+pre-commit==4.2.0
+torchinfo
+betacal
+torch==2.9.0
+numpy<2
+catboost==1.2.10
+hydra-core==1.3.5
+omegaconf==2.3.1
+pynvml==13.0.1
+rtdl_num_embeddings==0.0.12
+transformers==5.16.1
+xxhash==4.0.1
+pytest==9.1.1
+pytest-cov==7.1.0
+pytorch-lifestream==0.7.0
+
+# Not installable from PyPI/requirements.txt directly — install manually:
+# hotpp-benchmark: pip install "hotpp-benchmark @ git+https://df-bitbucket.ca.sbrf.ru/scm/dswm_team3/hotpp-benchmark.git#egg=hotpp"
+#   (needs corporate network access; a local checkout also works, e.g. pip install --no-deps /path/to/hotpp-benchmark)
+# torch-linear-assignment: needs a CUDA toolkit (nvcc) to build the CUDA extension, or set
+#   TLA_BUILD_CUDA=0 to build a CPU-only extension: TLA_BUILD_CUDA=0 pip install --no-build-isolation torch-linear-assignment
+#   (also requires python3-dev / Python.h headers for the target interpreter)

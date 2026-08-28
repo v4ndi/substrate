@@ -1,0 +1,65 @@
+load_state: /home/datalab/nfs/best_models/december-pilot/${product}_pilot/7/model.bin
+accelerator:
+  _target_: accelerate.Accelerator
+  _partial_: True
+  dataloader_config:
+    _target_: accelerate.utils.DataLoaderConfiguration
+    dispatch_batches: False
+  dynamo_plugin:
+    _target_: accelerate.utils.TorchDynamoPlugin
+    backend: "inductor"
+product: cc
+test_dataloader:
+  _target_: torch.utils.data.DataLoader
+  dataset:
+    _target_: avatar.data.dataset.TabularDataset
+    path: /home/datalab/projects/avatards/avatar/rusakov/december_pilot/pilot/inference_slice
+    shuffle_files: False
+    shuffle_pq: False
+    hidden_state_column: seq_hidden_state # название колонки с hidden_state
+  batch_size: 2048
+  pin_memory: True
+  drop_last: False
+  num_workers: 8
+  collate_fn:
+    _target_: avatar.data.dataset.collate_fn.TabularCollateFn
+model:
+  _target_: avatar.pipeline.uplift.SLearner
+  embedding:
+    _target_: avatar.nn.embedding.TabularEmbedding
+    use_null_embedding: True
+    num_numerical_features: 261
+    hidden_size: 64
+    vocab_size: 415
+    std_noise: 0.02
+  tabular_encoder:
+    _target_: avatar.nn.tabular.ste.STEv2Block
+    hidden_size: ${model.embedding.hidden_size}
+    num_heads: 4
+    num_layers: 3
+    attn_dropout: 0.15
+  exchange_treatment_group: true
+  treatment_interaction:
+    _target_: avatar.pipeline.uplift.treatment_interaction.IgnoreTreatmentInteraction
+  aggregation_config:
+    name: linear
+    num_features: 313
+    emb_dim: ${model.embedding.hidden_size}
+  hidden_state_dim: 512
+  proj_hiddens_to_dim: 128
+  n_groups: 6
+
+metrics:
+  test_metrics:
+    _target_: avatar.metrics.campaign.InferenceMultiTaskCampaignMetrics
+    path_to_save: /home/datalab/nfs/december_pilot/pilot/pilot_scores/${product}  # set your path
+    save_steps: 1000
+    prefix: "first"
+campaign_meta:
+  tasks:
+    cc_response:
+      comm_type:
+        - 0
+        - 1
+        - 2
+        - 3

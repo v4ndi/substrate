@@ -1,0 +1,1333 @@
+cat_cols:
+- evt_attr_179
+- evt_attr_92
+- evt_attr_95
+- evt_attr_566
+- evt_attr_1008
+- evt_attr_710
+- evt_attr_984
+- evt_attr_492
+- evt_attr_958
+- evt_attr_37
+- evt_attr_228
+- evt_attr_684
+- evt_attr_810
+- evt_attr_342
+- evt_attr_750
+- evt_attr_320
+- evt_attr_808
+- evt_attr_799
+- evt_attr_1006
+- evt_attr_593
+- evt_attr_158
+- evt_attr_314
+- evt_attr_707
+- evt_attr_407
+- evt_attr_768
+- evt_attr_294
+- evt_attr_447
+- evt_attr_531
+- evt_attr_402
+- evt_attr_223
+- evt_attr_607
+- evt_attr_76
+- evt_attr_526
+- evt_attr_831
+- evt_attr_674
+- evt_attr_426
+- evt_attr_744
+- evt_attr_505
+- evt_attr_628
+- evt_attr_577
+- evt_attr_97
+- evt_attr_358
+- evt_attr_424
+- evt_attr_911
+- evt_attr_180
+- evt_attr_766
+- evt_attr_232
+- evt_attr_621
+- evt_attr_827
+- evt_attr_516
+- evt_attr_848
+- evt_attr_908
+label_encoder:
+  columns:
+  - evt_attr_179
+  - evt_attr_92
+  - evt_attr_95
+  - evt_attr_566
+  - evt_attr_1008
+  - evt_attr_710
+  - evt_attr_984
+  - evt_attr_492
+  - evt_attr_958
+  - evt_attr_37
+  - evt_attr_228
+  - evt_attr_684
+  - evt_attr_810
+  - evt_attr_342
+  - evt_attr_750
+  - evt_attr_320
+  - evt_attr_808
+  - evt_attr_799
+  - evt_attr_1006
+  - evt_attr_593
+  - evt_attr_158
+  - evt_attr_314
+  - evt_attr_707
+  - evt_attr_407
+  - evt_attr_768
+  - evt_attr_294
+  - evt_attr_447
+  - evt_attr_531
+  - evt_attr_402
+  - evt_attr_223
+  - evt_attr_607
+  - evt_attr_76
+  - evt_attr_526
+  - evt_attr_831
+  - evt_attr_674
+  - evt_attr_426
+  - evt_attr_744
+  - evt_attr_505
+  - evt_attr_628
+  - evt_attr_577
+  - evt_attr_97
+  - evt_attr_358
+  - evt_attr_424
+  - evt_attr_911
+  - evt_attr_180
+  - evt_attr_766
+  - evt_attr_232
+  - evt_attr_621
+  - evt_attr_827
+  - evt_attr_516
+  - evt_attr_848
+  - evt_attr_908
+  spec_tokens:
+    unk: 0
+  values_to_id:
+    evt_attr_1006:
+      unk: 0
+      0: 1
+      1: 2
+    evt_attr_1008:
+      unk: 0
+      1: 1
+    evt_attr_158:
+      unk: 0
+      0: 1
+      1: 2
+    evt_attr_179:
+      unk: 0
+      0: 1
+      1: 2
+    evt_attr_180:
+      unk: 0
+      0: 1
+      1: 2
+    evt_attr_223:
+      unk: 0
+      0: 1
+      1: 2
+    evt_attr_228:
+      unk: 0
+      0: 1
+      1: 2
+    evt_attr_232:
+      unk: 0
+      0: 1
+      1: 2
+    evt_attr_294:
+      unk: 0
+      0: 1
+      1: 2
+    evt_attr_314:
+      unk: 0
+      0: 1
+      1: 2
+    evt_attr_320:
+      unk: 0
+      0: 1
+      1: 2
+    evt_attr_342:
+      unk: 0
+      0: 1
+      1: 2
+    evt_attr_358:
+      unk: 0
+      0: 1
+      1: 2
+    evt_attr_37:
+      unk: 0
+      0: 1
+      1: 2
+    evt_attr_402:
+      unk: 0
+      0: 1
+      1: 2
+    evt_attr_407:
+      unk: 0
+      0: 1
+      1: 2
+    evt_attr_424:
+      unk: 0
+      0: 1
+      1: 2
+    evt_attr_426:
+      unk: 0
+      0: 1
+      1: 2
+    evt_attr_447:
+      unk: 0
+      0: 1
+      1: 2
+    evt_attr_492:
+      unk: 0
+      0: 1
+      1: 2
+    evt_attr_505:
+      unk: 0
+      0: 1
+      1: 2
+    evt_attr_516:
+      unk: 0
+      0: 1
+      1: 2
+    evt_attr_526:
+      unk: 0
+      0: 1
+      1: 2
+    evt_attr_531:
+      unk: 0
+      0: 1
+      1: 2
+    evt_attr_566:
+      unk: 0
+      0: 1
+      1: 2
+    evt_attr_577:
+      unk: 0
+      0: 1
+      1: 2
+    evt_attr_593:
+      unk: 0
+      0: 1
+      1: 2
+      2: 3
+    evt_attr_607:
+      unk: 0
+      0: 1
+      1: 2
+    evt_attr_621:
+      unk: 0
+      0: 1
+      1: 2
+    evt_attr_628:
+      unk: 0
+      0: 1
+      1: 2
+    evt_attr_674:
+      unk: 0
+      0: 1
+      1: 2
+    evt_attr_684:
+      unk: 0
+      0: 1
+      1: 2
+    evt_attr_707:
+      unk: 0
+      0: 1
+      1: 2
+    evt_attr_710:
+      unk: 0
+      0: 1
+      1: 2
+    evt_attr_744:
+      unk: 0
+      0: 1
+      1: 2
+    evt_attr_750:
+      unk: 0
+      0: 1
+      1: 2
+    evt_attr_76:
+      unk: 0
+      1: 1
+      2: 2
+      3: 3
+      4: 4
+    evt_attr_766:
+      unk: 0
+      0: 1
+      1: 2
+    evt_attr_768:
+      unk: 0
+      0: 1
+      1: 2
+    evt_attr_799:
+      unk: 0
+      0: 1
+      1: 2
+    evt_attr_808:
+      unk: 0
+      0: 1
+      1: 2
+    evt_attr_810:
+      unk: 0
+      0: 1
+      1: 2
+    evt_attr_827:
+      unk: 0
+      0: 1
+      1: 2
+      5: 3
+      2: 4
+      3: 5
+      4: 6
+    evt_attr_831:
+      unk: 0
+      0: 1
+      1: 2
+      -1: 3
+    evt_attr_848:
+      unk: 0
+      0: 1
+      1: 2
+    evt_attr_908:
+      unk: 0
+      1: 1
+      2: 2
+      6: 3
+      3: 4
+      4: 5
+    evt_attr_911:
+      unk: 0
+      0: 1
+      1: 2
+    evt_attr_92:
+      unk: 0
+      0: 1
+      1: 2
+    evt_attr_95:
+      unk: 0
+      0: 1
+      1: 2
+    evt_attr_958:
+      unk: 0
+      0: 1
+      1: 2
+    evt_attr_97:
+      unk: 0
+      0: 1
+      1: 2
+    evt_attr_984:
+      unk: 0
+      0: 1
+      1: 2
+num_cols:
+- evt_attr_30
+- evt_attr_136
+- evt_attr_266
+- evt_attr_441
+- evt_attr_330
+- evt_attr_916
+- evt_attr_847
+- evt_attr_481
+- evt_attr_319
+- evt_attr_861
+- evt_attr_224
+- evt_attr_177
+- evt_attr_103
+- evt_attr_322
+- evt_attr_681
+- evt_attr_345
+- evt_attr_873
+- evt_attr_123
+- evt_attr_774
+- evt_attr_881
+- evt_attr_290
+- evt_attr_367
+- evt_attr_914
+- evt_attr_302
+- evt_attr_822
+- evt_attr_836
+- evt_attr_243
+- evt_attr_773
+- evt_attr_631
+- evt_attr_464
+- evt_attr_283
+- evt_attr_403
+- evt_attr_589
+- evt_attr_135
+- evt_attr_476
+- evt_attr_783
+- evt_attr_167
+- evt_attr_829
+- evt_attr_794
+- evt_attr_615
+- evt_attr_935
+- evt_attr_893
+- evt_attr_953
+- evt_attr_361
+- evt_attr_245
+- evt_attr_451
+- evt_attr_689
+- evt_attr_931
+- evt_attr_565
+- evt_attr_143
+- evt_attr_701
+- evt_attr_46
+- evt_attr_907
+- evt_attr_160
+- evt_attr_811
+- evt_attr_850
+- evt_attr_943
+- evt_attr_788
+- evt_attr_807
+- evt_attr_420
+- evt_attr_611
+- evt_attr_968
+- evt_attr_524
+- evt_attr_144
+- evt_attr_418
+- evt_attr_87
+- evt_attr_86
+- evt_attr_371
+- evt_attr_467
+- evt_attr_543
+- evt_attr_876
+- evt_attr_196
+- evt_attr_603
+- evt_attr_250
+- evt_attr_662
+- evt_attr_44
+- evt_attr_192
+- evt_attr_218
+- evt_attr_1021
+- evt_attr_21
+- evt_attr_436
+- evt_attr_940
+- evt_attr_32
+- evt_attr_581
+- evt_attr_233
+- evt_attr_74
+- evt_attr_747
+- evt_attr_1030
+- evt_attr_845
+- evt_attr_606
+- evt_attr_920
+- evt_attr_966
+- evt_attr_506
+- evt_attr_186
+- evt_attr_574
+- evt_attr_901
+- evt_attr_471
+- evt_attr_854
+- evt_attr_864
+- evt_attr_148
+- evt_attr_235
+- evt_attr_474
+- evt_attr_22
+- evt_attr_716
+- evt_attr_90
+- evt_attr_364
+- evt_attr_35
+- evt_attr_842
+- evt_attr_376
+- evt_attr_392
+- evt_attr_897
+- evt_attr_457
+- evt_attr_821
+- evt_attr_62
+- evt_attr_989
+- evt_attr_134
+- evt_attr_517
+- evt_attr_955
+- evt_attr_949
+- evt_attr_380
+- evt_attr_172
+- evt_attr_244
+- evt_attr_15
+- evt_attr_1031
+- evt_attr_1
+- evt_attr_913
+- evt_attr_258
+- evt_attr_860
+- evt_attr_479
+- evt_attr_124
+- evt_attr_205
+- evt_attr_353
+- evt_attr_746
+- evt_attr_826
+- evt_attr_651
+- evt_attr_539
+- evt_attr_131
+- evt_attr_586
+- evt_attr_537
+- evt_attr_806
+- evt_attr_635
+- evt_attr_75
+- evt_attr_332
+- evt_attr_183
+- evt_attr_385
+- evt_attr_349
+- evt_attr_525
+- evt_attr_69
+- evt_attr_270
+- evt_attr_209
+- evt_attr_350
+- evt_attr_667
+- evt_attr_530
+- evt_attr_428
+- evt_attr_1028
+- evt_attr_234
+- evt_attr_293
+- evt_attr_927
+- evt_attr_279
+- evt_attr_366
+- evt_attr_944
+- evt_attr_485
+- evt_attr_138
+- evt_attr_242
+- evt_attr_455
+- evt_attr_341
+- evt_attr_602
+- evt_attr_507
+- evt_attr_872
+- evt_attr_318
+- evt_attr_835
+- evt_attr_130
+- evt_attr_992
+- evt_attr_469
+- evt_attr_563
+- evt_attr_386
+- evt_attr_675
+- evt_attr_111
+- evt_attr_889
+- evt_attr_17
+- evt_attr_141
+- evt_attr_922
+- evt_attr_176
+- evt_attr_79
+- evt_attr_329
+- evt_attr_255
+- evt_attr_653
+- evt_attr_769
+- evt_attr_248
+offset_map:
+  evt_attr_1006: 54
+  evt_attr_1008: 13
+  evt_attr_158: 61
+  evt_attr_179: 1
+  evt_attr_180: 136
+  evt_attr_223: 88
+  evt_attr_228: 30
+  evt_attr_232: 142
+  evt_attr_294: 76
+  evt_attr_314: 64
+  evt_attr_320: 45
+  evt_attr_342: 39
+  evt_attr_358: 127
+  evt_attr_37: 27
+  evt_attr_402: 85
+  evt_attr_407: 70
+  evt_attr_424: 130
+  evt_attr_426: 109
+  evt_attr_447: 79
+  evt_attr_492: 21
+  evt_attr_505: 115
+  evt_attr_516: 155
+  evt_attr_526: 99
+  evt_attr_531: 82
+  evt_attr_566: 10
+  evt_attr_577: 121
+  evt_attr_593: 57
+  evt_attr_607: 91
+  evt_attr_621: 145
+  evt_attr_628: 118
+  evt_attr_674: 106
+  evt_attr_684: 33
+  evt_attr_707: 67
+  evt_attr_710: 15
+  evt_attr_744: 112
+  evt_attr_750: 42
+  evt_attr_76: 94
+  evt_attr_766: 139
+  evt_attr_768: 73
+  evt_attr_799: 51
+  evt_attr_808: 48
+  evt_attr_810: 36
+  evt_attr_827: 148
+  evt_attr_831: 102
+  evt_attr_848: 158
+  evt_attr_908: 161
+  evt_attr_911: 133
+  evt_attr_92: 4
+  evt_attr_95: 7
+  evt_attr_958: 24
+  evt_attr_97: 124
+  evt_attr_984: 18
+spec_tokens:
+  pad: 0
+standard_scaler:
+  columns:
+  - evt_attr_30
+  - evt_attr_136
+  - evt_attr_266
+  - evt_attr_441
+  - evt_attr_330
+  - evt_attr_916
+  - evt_attr_847
+  - evt_attr_481
+  - evt_attr_319
+  - evt_attr_861
+  - evt_attr_224
+  - evt_attr_177
+  - evt_attr_103
+  - evt_attr_322
+  - evt_attr_681
+  - evt_attr_345
+  - evt_attr_873
+  - evt_attr_123
+  - evt_attr_774
+  - evt_attr_881
+  - evt_attr_290
+  - evt_attr_367
+  - evt_attr_914
+  - evt_attr_302
+  - evt_attr_822
+  - evt_attr_836
+  - evt_attr_243
+  - evt_attr_773
+  - evt_attr_631
+  - evt_attr_464
+  - evt_attr_283
+  - evt_attr_403
+  - evt_attr_589
+  - evt_attr_135
+  - evt_attr_476
+  - evt_attr_783
+  - evt_attr_167
+  - evt_attr_829
+  - evt_attr_794
+  - evt_attr_615
+  - evt_attr_935
+  - evt_attr_893
+  - evt_attr_953
+  - evt_attr_361
+  - evt_attr_245
+  - evt_attr_451
+  - evt_attr_689
+  - evt_attr_931
+  - evt_attr_565
+  - evt_attr_143
+  - evt_attr_701
+  - evt_attr_46
+  - evt_attr_907
+  - evt_attr_160
+  - evt_attr_811
+  - evt_attr_850
+  - evt_attr_943
+  - evt_attr_788
+  - evt_attr_807
+  - evt_attr_420
+  - evt_attr_611
+  - evt_attr_968
+  - evt_attr_524
+  - evt_attr_144
+  - evt_attr_418
+  - evt_attr_87
+  - evt_attr_86
+  - evt_attr_371
+  - evt_attr_467
+  - evt_attr_543
+  - evt_attr_876
+  - evt_attr_196
+  - evt_attr_603
+  - evt_attr_250
+  - evt_attr_662
+  - evt_attr_44
+  - evt_attr_192
+  - evt_attr_218
+  - evt_attr_1021
+  - evt_attr_21
+  - evt_attr_436
+  - evt_attr_940
+  - evt_attr_32
+  - evt_attr_581
+  - evt_attr_233
+  - evt_attr_74
+  - evt_attr_747
+  - evt_attr_1030
+  - evt_attr_845
+  - evt_attr_606
+  - evt_attr_920
+  - evt_attr_966
+  - evt_attr_506
+  - evt_attr_186
+  - evt_attr_574
+  - evt_attr_901
+  - evt_attr_471
+  - evt_attr_854
+  - evt_attr_864
+  - evt_attr_148
+  - evt_attr_235
+  - evt_attr_474
+  - evt_attr_22
+  - evt_attr_716
+  - evt_attr_90
+  - evt_attr_364
+  - evt_attr_35
+  - evt_attr_842
+  - evt_attr_376
+  - evt_attr_392
+  - evt_attr_897
+  - evt_attr_457
+  - evt_attr_821
+  - evt_attr_62
+  - evt_attr_989
+  - evt_attr_134
+  - evt_attr_517
+  - evt_attr_955
+  - evt_attr_949
+  - evt_attr_380
+  - evt_attr_172
+  - evt_attr_244
+  - evt_attr_15
+  - evt_attr_1031
+  - evt_attr_1
+  - evt_attr_913
+  - evt_attr_258
+  - evt_attr_860
+  - evt_attr_479
+  - evt_attr_124
+  - evt_attr_205
+  - evt_attr_353
+  - evt_attr_746
+  - evt_attr_826
+  - evt_attr_651
+  - evt_attr_539
+  - evt_attr_131
+  - evt_attr_586
+  - evt_attr_537
+  - evt_attr_806
+  - evt_attr_635
+  - evt_attr_75
+  - evt_attr_332
+  - evt_attr_183
+  - evt_attr_385
+  - evt_attr_349
+  - evt_attr_525
+  - evt_attr_69
+  - evt_attr_270
+  - evt_attr_209
+  - evt_attr_350
+  - evt_attr_667
+  - evt_attr_530
+  - evt_attr_428
+  - evt_attr_1028
+  - evt_attr_234
+  - evt_attr_293
+  - evt_attr_927
+  - evt_attr_279
+  - evt_attr_366
+  - evt_attr_944
+  - evt_attr_485
+  - evt_attr_138
+  - evt_attr_242
+  - evt_attr_455
+  - evt_attr_341
+  - evt_attr_602
+  - evt_attr_507
+  - evt_attr_872
+  - evt_attr_318
+  - evt_attr_835
+  - evt_attr_130
+  - evt_attr_992
+  - evt_attr_469
+  - evt_attr_563
+  - evt_attr_386
+  - evt_attr_675
+  - evt_attr_111
+  - evt_attr_889
+  - evt_attr_17
+  - evt_attr_141
+  - evt_attr_922
+  - evt_attr_176
+  - evt_attr_79
+  - evt_attr_329
+  - evt_attr_255
+  - evt_attr_653
+  - evt_attr_769
+  - evt_attr_248
+  mean_std:
+    evt_attr_1:
+      mean: 530.3881135353857
+      std: 176.1681591024238
+    evt_attr_1021:
+      mean: 0.6243538238827036
+      std: 1.81980696075001
+    evt_attr_1028:
+      mean: 1.7143143486119081
+      std: 5.200766087497701
+    evt_attr_103:
+      mean: 35.5661257238945
+      std: 124.81538391132467
+    evt_attr_1030:
+      mean: 11.481806650901158
+      std: 17.475165547125986
+    evt_attr_1031:
+      mean: 0.23125985481587102
+      std: 0.5431920064775442
+    evt_attr_111:
+      mean: 1.3214540288694627
+      std: 0.7229060979582843
+    evt_attr_123:
+      mean: 47.74125399711002
+      std: 46.72358337239419
+    evt_attr_124:
+      mean: 21.132670382477222
+      std: 12.968940992002358
+    evt_attr_130:
+      mean: 11.750586396548895
+      std: 19.152240875298823
+    evt_attr_131:
+      mean: 104.38721412385786
+      std: 44.87899840132084
+    evt_attr_134:
+      mean: 1.0087051175527573
+      std: 0.6445779508135455
+    evt_attr_135:
+      mean: 42.61371256652515
+      std: 26.246952639837165
+    evt_attr_136:
+      mean: 189.9168954290786
+      std: 117.9887099638456
+    evt_attr_138:
+      mean: 66.9137586243023
+      std: 34.4780010903703
+    evt_attr_141:
+      mean: 1.6063852288294012
+      std: 2.194812754126075
+    evt_attr_143:
+      mean: 1.3084016897076352
+      std: 1.8199833120912088
+    evt_attr_144:
+      mean: 27002.588402928457
+      std: 78319.97471031899
+    evt_attr_148:
+      mean: 14.929009217485614
+      std: 33.1829641127607
+    evt_attr_15:
+      mean: 51.36076035525767
+      std: 43.273871348058925
+    evt_attr_160:
+      mean: 1.1925617019369963
+      std: 0.7871480846912344
+    evt_attr_167:
+      mean: 1.0863199177153762
+      std: 2.6269108527360907
+    evt_attr_17:
+      mean: 22.328148418057022
+      std: 36.90576199439714
+    evt_attr_172:
+      mean: 16.34293118546393
+      std: 56.54194885213697
+    evt_attr_176:
+      mean: 0.29044086978695477
+      std: 0.4563082616705214
+    evt_attr_177:
+      mean: 5.7737918728779
+      std: 14.29835562641597
+    evt_attr_183:
+      mean: 0.4373518688980858
+      std: 0.4960597182776514
+    evt_attr_186:
+      mean: 22.280112858026737
+      std: 45.593432849841385
+    evt_attr_192:
+      mean: 25910.335491174235
+      std: 36931.63168679371
+    evt_attr_196:
+      mean: 52.84555542450577
+      std: 55.2272962538795
+    evt_attr_205:
+      mean: 1.9983821135050759
+      std: 1.2258387846795025
+    evt_attr_209:
+      mean: 173344.77376591184
+      std: 745545.896528645
+    evt_attr_21:
+      mean: 1.0848566113995304
+      std: 2.6262701719161563
+    evt_attr_218:
+      mean: 3.911918158163329
+      std: 6.0229751285237105
+    evt_attr_22:
+      mean: 22.220266080852156
+      std: 24.72775326908103
+    evt_attr_224:
+      mean: 145844.5024380312
+      std: 752075.7384561526
+    evt_attr_233:
+      mean: 61.24526945776357
+      std: 77.8791229171117
+    evt_attr_234:
+      mean: 55.29654105434752
+      std: 57.63790558807752
+    evt_attr_235:
+      mean: 12.046311589098737
+      std: 30.33770505413455
+    evt_attr_242:
+      mean: 34.28613081067618
+      std: 61.05395499694415
+    evt_attr_243:
+      mean: 53387.92172180971
+      std: 240862.56076450503
+    evt_attr_244:
+      mean: 116191.00265725041
+      std: 653655.7938986635
+    evt_attr_245:
+      mean: 0.9951475265524073
+      std: 0.06949048557463353
+    evt_attr_248:
+      mean: 55.336645451975706
+      std: 57.65896483851754
+    evt_attr_250:
+      mean: 0.28882324685584837
+      std: 0.4542049146381511
+    evt_attr_255:
+      mean: 128887.9428216747
+      std: 552123.7927748658
+    evt_attr_258:
+      mean: 2.4837297442969732
+      std: 4.654289520513047
+    evt_attr_266:
+      mean: 144641.16541357446
+      std: 494167.5416225681
+    evt_attr_270:
+      mean: 3.810341717078738
+      std: 2.605650461965628
+    evt_attr_279:
+      mean: 1.770151924773615
+      std: 3.1029221195843872
+    evt_attr_283:
+      mean: 16.59090652116187
+      std: 54.430213813144015
+    evt_attr_290:
+      mean: 17.203006867814178
+      std: 54.65696027301813
+    evt_attr_293:
+      mean: 331348.2343747838
+      std: 1466389.5835533375
+    evt_attr_30:
+      mean: 26373.54323520633
+      std: 75571.85282831237
+    evt_attr_302:
+      mean: 1.9050237240381402
+      std: 1.181246984964837
+    evt_attr_318:
+      mean: 1.095198460260177
+      std: 2.638243704692786
+    evt_attr_319:
+      mean: 0.7610913914126954
+      std: 1.5204363339024827
+    evt_attr_32:
+      mean: 3.0514438355388136
+      std: 5.143167695397527
+    evt_attr_322:
+      mean: 21.35089713828996
+      std: 43.080664881074355
+    evt_attr_329:
+      mean: 59.479645954723686
+      std: 73.48961753721582
+    evt_attr_330:
+      mean: 12.046311589098737
+      std: 30.33770505413455
+    evt_attr_332:
+      mean: 16.56753117795236
+      std: 30.897820709609288
+    evt_attr_341:
+      mean: 1.0937255338649854
+      std: 2.637601776116986
+    evt_attr_345:
+      mean: 21620.77863498981
+      std: 57037.48185393939
+    evt_attr_349:
+      mean: 1.683392119046505
+      std: 2.508688088447994
+    evt_attr_35:
+      mean: 341071.4235714347
+      std: 1484457.8216127818
+    evt_attr_350:
+      mean: 1.071938558002819
+      std: 3.5360504683088996
+    evt_attr_353:
+      mean: 19.351209856759652
+      std: 41.97577795188511
+    evt_attr_361:
+      mean: 100936.46602827117
+      std: 365626.68627852865
+    evt_attr_364:
+      mean: 12.743122664577484
+      std: 31.263239601994364
+    evt_attr_366:
+      mean: 10.288338552995107
+      std: 21.30920724334498
+    evt_attr_367:
+      mean: 2.2723483997393354
+      std: 3.1141757019795624
+    evt_attr_371:
+      mean: 1.2823601349183182
+      std: 3.95923836947186
+    evt_attr_376:
+      mean: 143614.80664483918
+      std: 612514.8835172948
+    evt_attr_380:
+      mean: 187767.72499856688
+      std: 863281.3100115178
+    evt_attr_385:
+      mean: 12.246269550669815
+      std: 22.391107639066345
+    evt_attr_386:
+      mean: 67389.1041112661
+      std: 142540.97725097556
+    evt_attr_392:
+      mean: 13.730463562631659
+      std: 28.077799688275157
+    evt_attr_403:
+      mean: 20.68698515279124
+      std: 27.737893591548506
+    evt_attr_418:
+      mean: 1.1447670392360867
+      std: 2.6966853602063194
+    evt_attr_420:
+      mean: 18.745869394903597
+      std: 56.74741246221022
+    evt_attr_428:
+      mean: 4.310998320439571
+      std: 11.5133460847154
+    evt_attr_436:
+      mean: 5.847805337035527
+      std: 10.116252517151697
+    evt_attr_44:
+      mean: 0.5388343494816689
+      std: 1.105426694882086
+    evt_attr_441:
+      mean: 26.460053147643837
+      std: 29.97038650606156
+    evt_attr_451:
+      mean: 3.1023883494250026
+      std: 8.524394422616426
+    evt_attr_455:
+      mean: 0.7744465654010552
+      std: 0.4179462953049233
+    evt_attr_457:
+      mean: 50.26803306935221
+      std: 42.58658439979359
+    evt_attr_46:
+      mean: 90.14420788859684
+      std: 104.2877276568344
+    evt_attr_464:
+      mean: 3.270825791564508
+      std: 1.3591376067115029
+    evt_attr_467:
+      mean: 39.51824896106437
+      std: 49.68862973763095
+    evt_attr_469:
+      mean: 1.132841962522543
+      std: 4.0966043304196855
+    evt_attr_471:
+      mean: 149661.4724311588
+      std: 519226.9087365212
+    evt_attr_474:
+      mean: 1.1997311649059506
+      std: 4.127791930419519
+    evt_attr_476:
+      mean: 199692.88759899294
+      std: 663797.9308695056
+    evt_attr_479:
+      mean: 21.19701856609423
+      std: 27.73483642638813
+    evt_attr_481:
+      mean: 16.56753117795236
+      std: 30.897820709609288
+    evt_attr_485:
+      mean: 1.5457237758943214
+      std: 0.8672474205008861
+    evt_attr_506:
+      mean: 176650.95884740906
+      std: 808350.2084015438
+    evt_attr_507:
+      mean: 6.664232874446763
+      std: 13.040203886017867
+    evt_attr_517:
+      mean: 29.825607596963483
+      std: 37.0643175572897
+    evt_attr_524:
+      mean: 1854.1131018232686
+      std: 11233.276953655299
+    evt_attr_525:
+      mean: 3.5136049665965805
+      std: 9.88115582101195
+    evt_attr_530:
+      mean: 102435.56537891582
+      std: 440709.07204436715
+    evt_attr_537:
+      mean: 0.8693245320589145
+      std: 2.1086850801157015
+    evt_attr_539:
+      mean: 0.7356854207697513
+      std: 4.4335395502628465
+    evt_attr_543:
+      mean: 56.3310555269662
+      std: 57.809093058314716
+    evt_attr_563:
+      mean: 1.0764941268097774
+      std: 4.011030065018411
+    evt_attr_565:
+      mean: 1.4975209846217101
+      std: 4.581045199928682
+    evt_attr_574:
+      mean: 112837.59849452347
+      std: 645606.1890291992
+    evt_attr_581:
+      mean: 24.048152187019614
+      std: 26.73514337431373
+    evt_attr_586:
+      mean: 1.2499523278944744
+      std: 3.3074847671639187
+    evt_attr_589:
+      mean: 29.912699624882798
+      std: 36.71921175714214
+    evt_attr_602:
+      mean: 1.1393663530476872
+      std: 4.040512063385328
+    evt_attr_603:
+      mean: 62.760759564566214
+      std: 77.90112050787366
+    evt_attr_606:
+      mean: 63.66970366861067
+      std: 78.02846432984452
+    evt_attr_611:
+      mean: 2.321784801460671
+      std: 9.37527203732517
+    evt_attr_615:
+      mean: 25811.480450219715
+      std: 51787.7249443381
+    evt_attr_62:
+      mean: 7.354580179078436
+      std: 12.239271385089236
+    evt_attr_631:
+      mean: 7.218633171219622
+      std: 43.0525485687193
+    evt_attr_635:
+      mean: 0.7179586455191845
+      std: 2.086988707177641
+    evt_attr_651:
+      mean: 0.4104945840930011
+      std: 2.8082114173525645
+    evt_attr_653:
+      mean: 1.3733103417829697
+      std: 4.52366237208131
+    evt_attr_662:
+      mean: 3.810341717078738
+      std: 2.605650461965628
+    evt_attr_667:
+      mean: 1.016518071582615
+      std: 0.8051056919465928
+    evt_attr_675:
+      mean: 351308.35076772847
+      std: 1710458.040396005
+    evt_attr_681:
+      mean: 44442.74293500714
+      std: 176984.83663294147
+    evt_attr_689:
+      mean: 3.5549788193527005
+      std: 5.180803132149677
+    evt_attr_69:
+      mean: 180.59519786724158
+      std: 199.92105335837658
+    evt_attr_701:
+      mean: 4.312447921436897
+      std: 13.752650186610222
+    evt_attr_716:
+      mean: 21901.02882729256
+      std: 117433.68021182412
+    evt_attr_74:
+      mean: 8.1890913571494
+      std: 13.216070332310979
+    evt_attr_746:
+      mean: 160.33337409787046
+      std: 157.67960905267344
+    evt_attr_747:
+      mean: 21.501240001871302
+      std: 27.782437077750888
+    evt_attr_75:
+      mean: 11.342987851684732
+      std: 28.58929047992773
+    evt_attr_769:
+      mean: 2.3574482805425987
+      std: 1.9292416523016882
+    evt_attr_773:
+      mean: 7.118048916126745
+      std: 14.71258077878706
+    evt_attr_774:
+      mean: 184766.5785038668
+      std: 861474.6512692281
+    evt_attr_783:
+      mean: 0.20792892210964387
+      std: 0.6236437044047287
+    evt_attr_788:
+      mean: 2.242188792080434
+      std: 14.437771543698506
+    evt_attr_79:
+      mean: 9.473894333312028
+      std: 14.8876274713558
+    evt_attr_794:
+      mean: 1.218766402729467
+      std: 1.299850211602445
+    evt_attr_806:
+      mean: 22668.808374608525
+      std: 61057.589689863526
+    evt_attr_807:
+      mean: 70.59421279747295
+      std: 56.8255661451492
+    evt_attr_811:
+      mean: 125749.2395611926
+      std: 545348.3606362396
+    evt_attr_821:
+      mean: 1.6714563679983447
+      std: 3.878502751255777
+    evt_attr_822:
+      mean: 14.033561689417715
+      std: 32.844550565187504
+    evt_attr_826:
+      mean: 5.7524175061723355
+      std: 11.503576366850668
+    evt_attr_829:
+      mean: 6628.603403267796
+      std: 117638.12742118855
+    evt_attr_835:
+      mean: 32.86671894015718
+      std: 39.26901854706204
+    evt_attr_836:
+      mean: 48.788480943347615
+      std: 58.649832171043975
+    evt_attr_842:
+      mean: 128887.9428216747
+      std: 552123.7927748658
+    evt_attr_845:
+      mean: 1.4311915917870879
+      std: 4.82222245604013
+    evt_attr_847:
+      mean: 14.69172679765349
+      std: 19.743857893688954
+    evt_attr_850:
+      mean: 144196.66729785808
+      std: 512767.3169642186
+    evt_attr_854:
+      mean: 149370.73549921293
+      std: 499006.8400565376
+    evt_attr_86:
+      mean: 4.1174399519259595
+      std: 9.91829538633436
+    evt_attr_860:
+      mean: 0.6758758060934636
+      std: 2.849701933551715
+    evt_attr_861:
+      mean: 1.0804474522933016
+      std: 2.6219773356429
+    evt_attr_864:
+      mean: 208.77482926006434
+      std: 454.5122251459792
+    evt_attr_87:
+      mean: 1.6267231308218777
+      std: 0.9863279387663391
+    evt_attr_872:
+      mean: 1.1789540338112843
+      std: 2.211498990191496
+    evt_attr_873:
+      mean: 60268.550376995096
+      std: 260835.4011709362
+    evt_attr_876:
+      mean: 120341.16041745873
+      std: 866798.2152165136
+    evt_attr_881:
+      mean: 31.175517293410444
+      std: 50.14454283417065
+    evt_attr_889:
+      mean: 37279.243461278194
+      std: 197926.61388392068
+    evt_attr_893:
+      mean: 3.0980809259524045
+      std: 1.566862499993438
+    evt_attr_897:
+      mean: 433184.8213679094
+      std: 1176092.0255039667
+    evt_attr_90:
+      mean: 1.0767908996685025
+      std: 0.8155101871752771
+    evt_attr_901:
+      mean: 32553.394336540685
+      std: 150890.75919824778
+    evt_attr_907:
+      mean: 0.9202636428868408
+      std: 5.302188582927898
+    evt_attr_913:
+      mean: 1.3116468192130115
+      std: 0.9093676722642041
+    evt_attr_914:
+      mean: 9.890841486789853
+      std: 15.51962610231484
+    evt_attr_916:
+      mean: 173207.73558381692
+      std: 470653.19501821586
+    evt_attr_920:
+      mean: 1042.7329434345922
+      std: 1277.136808861783
+    evt_attr_922:
+      mean: 7836.974016165686
+      std: 12296.55606359207
+    evt_attr_927:
+      mean: 0.3567146506560433
+      std: 0.7900128880157732
+    evt_attr_931:
+      mean: 0.9860396834862113
+      std: 1.1945301560446355
+    evt_attr_935:
+      mean: 133531.04636166623
+      std: 251700.92731048033
+    evt_attr_940:
+      mean: 134255.45313499277
+      std: 571474.0957156664
+    evt_attr_943:
+      mean: 0.3567146506560433
+      std: 0.7900128880157732
+    evt_attr_944:
+      mean: 0.2917946653365479
+      std: 0.45744467530827
+    evt_attr_949:
+      mean: 1.4266953248391108
+      std: 1.482824307832003
+    evt_attr_953:
+      mean: 10.11937964984229
+      std: 44.807148819220814
+    evt_attr_955:
+      mean: 0.837379411317035
+      std: 2.0710242116358337
+    evt_attr_966:
+      mean: 12.719924436253466
+      std: 31.20104338530924
+    evt_attr_968:
+      mean: 5945.7145018742685
+      std: 137846.1670843758
+    evt_attr_989:
+      mean: 1.1971817120973816
+      std: 2.6333108675130497
+    evt_attr_992:
+      mean: 0.6886546977944321
+      std: 5.971994255803789
+vocab_size: 167

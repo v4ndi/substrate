@@ -1,0 +1,48 @@
+load_state: best_models/uplift_modeling/td_response_s_learner/0/model.bin
+accelerator:
+  _target_: accelerate.Accelerator
+  _partial_: True
+  dataloader_config:
+    _target_: accelerate.utils.DataLoaderConfiguration
+    dispatch_batches: False
+test_dataloader:
+  _target_: torch.utils.data.DataLoader
+  dataset:
+    _target_: avatar.data.dataset.TabularDataset
+    path: /home/datalab/nfs/avatar_fm/examples/uplift_modeling/s_learner/data/s_learner/valid
+    shuffle_files: False
+    shuffle_pq: False
+    hidden_state_column: seq_hidden_state # название колонки с hidden_state
+  batch_size: 4096
+  pin_memory: True
+  drop_last: False
+  num_workers: 8
+  collate_fn:
+    _target_: avatar.data.dataset.collate_fn.UpliftCollateFn
+    target_column: target_attr_1 # назване колонки факта конверсии
+    treatment_column: target_attr_3 # название колонки флага контролько целевой группы (1 - ЦГ, 0 - КГ)
+    inverse_treatment: True # если True то в treatment_column 0 заменяется на 1  и наоборот (В данном наборе данных 1 - КГ, 0 - ЦГ, поэтому необходимо сделать 1 - treatment_column)
+model:
+  _target_: avatar.pipeline.uplift.SLearner
+  embedding:
+    _target_: avatar.nn.embedding.TabularEmbedding
+    num_numerical_features: 189
+    hidden_size: 64
+    vocab_size: 172
+    std_noise: null
+  tabular_encoder:
+    _target_: avatar.nn.tabular.ste.STEv2Block
+    hidden_size: ${model.embedding.hidden_size}
+    num_heads: 4
+    num_layers: 3
+    attn_dropout: 0.15
+  aggregation_config:
+    name: linear
+    num_features: 242 # 241 табличных фичи на входе + 1 признак is_treatment 
+    emb_dim: ${model.embedding.hidden_size}
+  hidden_state_dim: 128 # Размерность внешнего эмбеддинга (seq_hidden_state)
+metrics:
+  test_metrics:
+    _target_: avatar.metrics.UpliftMetrics
+    require_calibration: True
+    save_submit_path: predict

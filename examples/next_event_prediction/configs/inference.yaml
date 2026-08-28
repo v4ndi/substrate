@@ -1,0 +1,79 @@
+load_state: best_models/next_event_prediction/self_supervised/0/model.bin
+accelerator:
+  _target_: accelerate.Accelerator
+  _partial_: True
+  dataloader_config:
+    _target_: accelerate.utils.DataLoaderConfiguration
+    dispatch_batches: False
+  kwargs_handlers:
+    - _target_: accelerate.utils.DistributedDataParallelKwargs
+      find_unused_parameters: True
+test_dataloader:
+  _target_: torch.utils.data.DataLoader
+  dataset:
+    _target_: avatar.data.dataset.EventSequenceDataset
+    path: data/processed_sequences/valid
+    min_length: 1
+    max_length: 128
+    random_slicing: True
+    event_time_column: "evt_dttm"
+    event_ids_column: "event_ids"
+    sequence_columns: ["month_part", "evt_attr_9", "evt_attr_15", "channel_group", "sale_product_class_id"]
+    read_columns: null
+    selected_event_ids: null
+    shuffle_files: True
+    shuffle_pq: True
+  batch_size: 512
+  pin_memory: True
+  drop_last: False
+  num_workers: 8
+  collate_fn:
+    _target_: avatar.data.dataset.collate_fn.EventSequenceCollateFn
+    sequence_columns: ${test_dataloader.dataset.sequence_columns}
+    create_attention_mask: True
+model:
+  _target_: avatar.pipeline.sequence.NextKTokensPrediction
+  model:
+    _target_: avatar.nn.sequence.TransformersWrapper
+    feature_encoder:
+      _target_: avatar.nn.feature_encoder.FeatureAttentionEncoder
+      dropout_p: 0.1
+      time_encoding: delta
+      embedding:
+        _target_: avatar.nn.embedding.EventSequenceEmbedding
+        hidden_size: 128
+        columns_meta:
+          evt_attr_9:
+            type: categorical
+            n_classes: 524
+            event_id: 0
+          evt_attr_15:
+            type: numeric
+            n_classes: 1
+            event_id: 0
+          channel_group:
+            type: categorical
+            n_classes: 10
+            event_id: 2
+          sale_product_class_id:
+            type: categorical
+            n_classes: 39
+            event_id: 2
+    backbone:
+      _target_: transformers.GPT2Model
+      config:
+        _target_: transformers.GPT2Config
+        n_positions: 128
+        vocab_size: 0 # может быть любое значение, так как nn.Embedding gpt мы не используем
+        n_embd: ${model.model.feature_encoder.embedding.hidden_size}
+        n_layer: 2
+        n_head: 2
+        pad_token_id: 0
+        bos_token_id: 1
+        eos_token_id: 2
+metrics:
+  test_metrics:
+    _target_: avatar.metrics.CollectEmbeddings
+    path_to_save: "hidden_states"
+    save_steps: 250
+    additional_columns:

@@ -1,0 +1,135 @@
+accelerator:
+  _target_: accelerate.Accelerator
+  _partial_: True
+  dataloader_config:
+    _target_: accelerate.utils.DataLoaderConfiguration
+    dispatch_batches: False
+  kwargs_handlers:
+  - _target_: accelerate.utils.DistributedDataParallelKwargs
+    find_unused_parameters: True
+product: sa
+train_dataloader:
+  _target_: torch.utils.data.DataLoader
+  dataset:
+    _target_: avatar.data.dataset.TabularDataset
+    path: /home/datalab/projects/avatards/avatar/rusakov/january_pilot/pilot/train/splited_tabular/split_type=train/product_name=${product}_response
+    shuffle_files: True
+    shuffle_pq: True
+    hidden_state_column: seq_hidden_state # название колонки с hidden_state
+  batch_size: 4096
+  pin_memory: True
+  drop_last: False
+  num_workers: 8
+  collate_fn:
+    _target_: avatar.data.dataset.collate_fn.UpliftCollateFn
+    target_column: target_attr_1 # назване колонки факта конверсии
+    treatment_column: target_attr_3 # название колонки флага контролько целевой группы (1 - ЦГ, 0 - КГ)
+    inverse_treatment: True # если True то в treatment_column 0 заменяется на 1  и наоборот (В данном наборе данных 1 - КГ, 0 - ЦГ, поэтому необходимо сделать 1 - treatment_column)
+    group_column: target_attr_2
+valid_dataloader:
+  _target_: torch.utils.data.DataLoader
+  dataset:
+    _target_: avatar.data.dataset.TabularDataset
+    path: /home/datalab/projects/avatards/avatar/rusakov/january_pilot/pilot/train/splited_tabular/split_type=calib/product_name=${product}_response
+    shuffle_files: False
+    shuffle_pq: False
+    hidden_state_column: seq_hidden_state # название колонки с hidden_state
+  batch_size: 4096
+  pin_memory: True
+  drop_last: False
+  num_workers: 8
+  collate_fn:
+    _target_: avatar.data.dataset.collate_fn.UpliftCollateFn
+    target_column: target_attr_1 # назване колонки факта конверсии
+    treatment_column: target_attr_3 # название колонки флага контролько целевой группы (1 - ЦГ, 0 - КГ)
+    inverse_treatment: True # если True то в treatment_column 0 заменяется на 1  и наоборот (В данном наборе данных 1 - КГ, 0 - ЦГ, поэтому необходимо сделать 1 - treatment_column)
+    group_column: target_attr_2
+model:
+  _target_: avatar.pipeline.uplift.SLearner
+  embedding:
+    _target_: avatar.nn.embedding.TabularEmbedding
+    use_null_embedding: True
+    num_numerical_features: 261
+    hidden_size: 64
+    vocab_size: 415
+    std_noise: 0.02
+  tabular_encoder:
+    _target_: avatar.nn.tabular.ste.STEv2Block
+    hidden_size: ${model.embedding.hidden_size}
+    num_heads: 4
+    num_layers: 3
+    attn_dropout: 0.15
+  exchange_treatment_group: true
+  treatment_interaction:
+    _target_: avatar.pipeline.uplift.treatment_interaction.IgnoreTreatmentInteraction
+  aggregation_config:
+    name: linear
+    num_features: 313
+    emb_dim: ${model.embedding.hidden_size}
+  hidden_state_dim: 512
+  proj_hiddens_to_dim: 128
+  n_groups: 6
+mlflow:
+  experiment_name: january-pilot
+  run_name: ${product}_pilot
+  logging_dir: ./mlruns
+optimizer:
+  _target_: torch.optim.AdamW
+  _partial_: True
+  lr: 0.001
+  weight_decay: 0.01
+  scale_lr_multigpu: True
+  named_params_to_group:
+    - name: ['num_embed', 'cat_embed']
+      opt_params:
+        lr: 0.00005
+    - name: ['tabular_backbone']
+      opt_params:
+        lr: 0.0001
+scheduler:
+  _target_: transformers.optimization.get_scheduler
+  _partial_: True
+  name: cosine
+  num_warmup_steps: 1000
+  num_training_steps: null
+swa_model:
+   _target_: torch.optim.swa_utils.AveragedModel
+   _partial_: True
+   avg_fn: 0.9
+   min_num_steps: 128
+   min_epoch: 0
+   usage: True
+train:
+  start_epoch: 0
+  checkpoint_state: null
+  model_state: null
+  seed: 42
+  num_epochs: 40
+  clip_grad_norm: null
+  max_saved_checkpoints: null
+  device_specific: True
+metrics:
+  valid_metrics:
+    _target_: avatar.metrics.utils.GroupAverageMetricWrapper
+    metric:
+      _target_: avatar.metrics.utils.GroupAverageMetricWrapper
+      metric:
+        _target_: avatar.metrics.uplift.UpliftMetrics
+        require_calibration: true
+      groups: null
+      avg_over_regulars:
+        avg_calib_uplift_at_20: ^calib_group_\d+_uplift_at_20$
+        avg_test_calibrated_uplift_at_20: ^test_group_\d+_calibrated_uplift_at_20$
+
+        avg_calib_qini_auc_score: ^calib_group_\d+_qini_auc_score$
+        avg_test_calibrated_qini_auc_score: ^cc_test_group_\d+_calibrated_qini_auc_score$
+
+        avg_calib_treatment_roc_auc_score: ^calib_group_\d+_treatment_roc_auc_score$
+        avg_test_treatment_roc_auc_score: ^test_group_\d+_treatment_roc_auc_score$
+
+        avg_calib_control_roc_auc_score: ^calib_group_\d+_control_roc_auc_score$
+        avg_test_control_roc_auc_score: ^test_group_\d+_control_roc_auc_score$
+
+    avg_over_regulars:
+      avg_calib_roc_auc_score: ^avg_calib_[^_]+_roc_auc_score$
+      avg_test_roc_auc_score: ^avg_test_[^_]+_roc_auc_score$
