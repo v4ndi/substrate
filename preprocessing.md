@@ -1,8 +1,54 @@
 # Design: non-Spark реализация `avatar.preprocessing`
 
-Статус: draft, обсуждение. Реализацию не начинать до утверждения.
-Автор контекста: сессия 2026-08-29. Связано с `TODO.md` (миграция препроцессинга
-на torch/GPU) и `[[avatar-fm-tabular-preproc]]`.
+Статус: **РЕАЛИЗОВАНО** (2026-08-29), путь A (pyarrow + numpy). Ниже — исходный
+дизайн; фактические отклонения см. в разделе «Статус реализации».
+Связано с `TODO.md` (миграция препроцессинга на torch/GPU) и
+`[[avatar-fm-tabular-preproc]]`.
+
+---
+
+## 0. Статус реализации
+
+Готово и покрыто тестами (`tests/local/`, 31 тест; парити со Spark на синтетике):
+
+| Модуль | Что |
+|---|---|
+| `avatar/preprocessing/base/` | `MeanStdAccumulator`, `ValueCountAccumulator`, `CategoricalMapper`, `signed_log1p`, `standardize`, `build_offset_map`, `iter_record_batches` |
+| `avatar/preprocessing/local/` | `LabelEncoder`, `StandardScaler`, `NumCatPipeline`, `TabularPreprocessor`, `EventSequencePreprocessor` |
+| `avatar/preprocessing/__init__.py` | ленивые импорты `spark` / `local` |
+| `examples/tabular_preprocessing/`, `examples/eventsequence_preprocessing/` | генератор данных + `run_both_backends.py` (fit обоими бэкендами, кросс-загрузка артефакта, сверка выхода) + README |
+
+Проверено: fit-статистики совпадают со Spark; артефакт `dump()` одного бэкенда
+грузится `load()` другого в обе стороны; выход идентичен (`cat_features` точно,
+`num_features` |Δ|<1e-4); инвариантность к `batch_rows`; для sequence —
+инвариантность к числу hash-бакетов.
+
+**Отклонения от исходного дизайна:**
+
+1. **ABC не поднимали в `base/`.** Spark-пакет не тронут; local-классы
+   duck-typed под тот же интерфейс. `base/artifact.py` как dataclass не делали —
+   артефакт остался плоским dict (как у Spark) + необязательные ключи
+   `_backend` / `_version`.
+2. **Sequence `transform`:** реализован дефолтный путь через внешние hash-бакеты
+   по `id` (`n_buckets = ceil(rows / 5M)`, авто), а не «требовать
+   id-партиционированный вход». Партиционированный вход остаётся рекомендацией
+   для 100M-логов (тогда бакетирование — no-op).
+3. **Обнаружено при парити:** Spark `sort().groupBy().collect_list()` **не
+   сохраняет порядок событий** после group-by shuffle (проверено: у части
+   пользователей список не монотонен по времени, детерминировано в рамках
+   плана). Local сортирует по полноточному сырому timestamp и всегда
+   монотонен. Парити по sequence проверяется на **мультимножестве** событий
+   группы, плюс отдельная проверка монотонности local.
+4. **Потоковая mean/std** может отличаться на ~1 ULP при разных `batch_rows`
+   (неассоциативность суммирования, Чан-комбайн). Выход в float32 при этом
+   идентичен. Тест сверяет статистики с `rel=1e-12`.
+5. `signed_log1p` от NaN → NaN и распространяется в mean/std ровно как в Spark
+   (`F.mean`/`F.stddev`); null исключаются по маске `is_null`. При `n<2`
+   (одно значение) local пишет `std=nan` + WARNING — Spark в этом месте
+   падает на `float(None)`.
+
+Не сделано: polars fast-path (путь B), bump `polars>=1.x` — при необходимости
+отдельным PR.
 
 ---
 
