@@ -1,5 +1,22 @@
-from . import spark
+"""Feature preprocessing.
 
-__all__ = [
-    "spark",
-]
+Two interchangeable backends, imported lazily so that neither ``pyspark`` nor the
+local stack is a hard import cost:
+
+* :mod:`avatar.preprocessing.spark` -- distributed, requires a Spark environment.
+* :mod:`avatar.preprocessing.local` -- single machine (pyarrow + numpy), streaming.
+
+Artifacts produced by ``dump()`` are compatible across backends.
+"""
+
+import importlib
+
+__all__ = ["spark", "local"]
+
+
+def __getattr__(name):
+    if name in __all__:
+        module = importlib.import_module(f"{__name__}.{name}")
+        globals()[name] = module
+        return module
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
