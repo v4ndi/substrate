@@ -126,9 +126,12 @@ class EventSequencePreprocessor(NumCatPipeline):
             data[c] = np.asarray(
                 enc[c].to_numpy(zero_copy_only=False), dtype=np.int64
             )
-        data[self.event_time_column] = date_to_scaled_unix(
-            batch.column(batch.schema.get_field_index(self.event_time_column)),
-            self.time_unit,
+        time_col = batch.column(batch.schema.get_field_index(self.event_time_column))
+        data[self.event_time_column] = date_to_scaled_unix(time_col, self.time_unit)
+        # Spark sorts on the raw timestamp *before* scaling; keep a full-precision
+        # key so ties are not introduced by float32 rounding of the scaled value.
+        data["__sort_key__"] = np.asarray(
+            time_col.cast(pa.int64()).to_numpy(zero_copy_only=False), dtype=np.int64
         )
         data[self.event_type_ids_columns] = np.asarray(
             batch.column(
@@ -140,7 +143,7 @@ class EventSequencePreprocessor(NumCatPipeline):
 
     def _aggregate_frame(self, df: pd.DataFrame) -> pd.DataFrame:
         keys = [self.id_column] + self.groupby_columns
-        df = df.sort_values([self.id_column, self.event_time_column], kind="stable")
+        df = df.sort_values([self.id_column, "__sort_key__"], kind="stable")
         list_cols = (
             (self.num_cols or [])
             + self.cat_cols
@@ -153,7 +156,11 @@ class EventSequencePreprocessor(NumCatPipeline):
     def _frame_to_table(self, agg: pd.DataFrame) -> pa.Table:
         arrays, names = [], []
         for k in [self.id_column] + self.groupby_columns:
-            arrays.append(pa.array(agg[k].to_numpy()))
+            vals = [
+                None if (isinstance(v, float) and np.isnan(v)) else v
+                for v in agg[k].tolist()
+            ]
+            arrays.append(pa.array(vals))
             names.append(k)
         for c in self.num_cols or []:
             arrays.append(pa.array(agg[c].tolist(), type=pa.list_(pa.float32())))
