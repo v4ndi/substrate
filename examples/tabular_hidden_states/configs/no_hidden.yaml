@@ -36,21 +36,22 @@ model:
   _target_: avatar.pipeline.tabular.TabularClassification
   tabular_model:
     _target_: avatar.pipeline.tabular.TabularWithAggregatedStates
-    backbone:
-      _target_: avatar.nn.tabular.STEv2
-      embedding:
-        _target_: avatar.nn.embedding.TabularEmbedding
-        num_numerical_features: 189
-        hidden_size: 64
-        vocab_size: 172
-        std_noise: null
+    embedding:
+      _target_: avatar.nn.embedding.TabularEmbedding
+      num_numerical_features: 189
+      hidden_size: 64
+      vocab_size: 172
+      std_noise: null
+    encoder:
+      _target_: avatar.nn.tabular.TabularTransformer
+      hidden_size: ${model.tabular_model.embedding.hidden_size}
       num_heads: 4
       num_layers: 3
       attn_dropout: 0.15
     aggregation_config:
       name: linear
       num_features: 243 # Размер hidden_state на выходе из STEv2, у нас всего 243 табличных фичи на входе поэтому num_features 243 
-      emb_dim: ${model.tabular_model.backbone.embedding.hidden_size}
+      emb_dim: ${model.tabular_model.embedding.hidden_size}
   num_classes: 2
   dropout_p: 0.15
   task_type: classification

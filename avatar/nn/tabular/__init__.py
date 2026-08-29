@@ -1,14 +1,11 @@
-from avatar.nn.tabular.dcnv2 import DCNv2
-
-from .base_tabular import BaseTabularBackbone, BaseTabularEncoder
-from .ste import STEv2, STEv2Block
-from .ste.ste_modeling import EncoderBlock
+from avatar.nn.tabular.base import BaseTabularEncoder, EncoderBlock, SublayerConnection
+from avatar.nn.tabular.models import TabularTransformer
+from avatar.nn.tabular.utils import build_feature_padding_mask
 
 __all__ = [
-    "BaseTabularBackbone",
     "BaseTabularEncoder",
-    "DCNv2",
     "EncoderBlock",
-    "STEv2",
-    "STEv2Block",
+    "SublayerConnection",
+    "TabularTransformer",
+    "build_feature_padding_mask",
 ]

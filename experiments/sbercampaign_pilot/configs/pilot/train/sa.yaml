@@ -54,7 +54,7 @@ model:
     vocab_size: 415
     std_noise: 0.02
   tabular_encoder:
-    _target_: avatar.nn.tabular.ste.STEv2Block
+    _target_: avatar.nn.tabular.TabularTransformer
     hidden_size: ${model.embedding.hidden_size}
     num_heads: 4
     num_layers: 3
