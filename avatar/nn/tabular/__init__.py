@@ -1,7 +1,6 @@
-from avatar.nn.tabular.dcn import DCNv2
+from avatar.nn.tabular.dcnv2 import DCNv2
 
 from .base_tabular import BaseTabularBackbone, BaseTabularEncoder
-from .mlp_embedding import MLPEmbedding
 from .moe import ExpertsWrapper, GateTopK, MoE, UniversalGate
 from .ste import MoESTEv2, STEv2, STEv2Block
 from .ste.ste_modeling import EncoderBlock
@@ -14,7 +13,6 @@ __all__ = [
     "EncoderBlock",
     "ExpertsWrapper",
     "GateTopK",
-    "MLPEmbedding",
     "MoE",
     "MoESTEv2",
     "MultiTreatmentSTE",
