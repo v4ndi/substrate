@@ -206,22 +206,6 @@ class EventSequenceBatch:
             targets=move_to_device(self._targets, device),
         )
 
-    def to_padded_batch(self):
-        """Converts to a PaddedBatch format.
-
-        Returns:
-            PaddedBatch containing all events and timestamps, with sequence lengths.
-
-        Note:
-            Requires hotpp.data.PaddedBatch to be available.
-        """
-
-        from hotpp.data import PaddedBatch
-
-        dictionary_for_batch = self._events
-        dictionary_for_batch["timestamps"] = self._timestamps
-        return PaddedBatch(dictionary_for_batch, self._attention_mask.sum(dim=1))
-
     @property
     def device(self) -> torch.device:
         """Returns the device where the event tensors are stored."""

@@ -10,31 +10,6 @@ from .supervised import RegressionMetrics, ResponseMetrics
 from .uplift import UpliftMetrics
 from .utils import GroupAverageMetricWrapper, GroupDevidedMetricsWrapper
 
-# Optional Horizon metrics with graceful fallback
-try:
-    from .horizon_metric import (
-        HorizonInference,
-        HorizonMetric,
-        KeyEventsInference,
-        compute_f_score,
-    )
-
-    _HAS_HORIZON = True
-except ImportError:
-    _HAS_HORIZON = False
-    import warnings
-
-    warnings.warn(
-        "HoTPP benchmark not installed. Horizon metrics will be unavailable. ",
-        category=ImportWarning,
-        stacklevel=2,
-    )
-    # Create null objects to prevent import errors
-    HorizonInference = None
-    HorizonMetric = None
-    KeyEventsInference = None
-    compute_f_score = None
-
 __all__ = [
     # Base classes
     "BaseMetric",
@@ -54,11 +29,6 @@ __all__ = [
     # Wrappers
     "GroupAverageMetricWrapper",
     "GroupDevidedMetricsWrapper",
-    # Optional Horizon metrics (None if not available)
-    "HorizonMetric",
-    "HorizonInference",
-    "KeyEventsInference",
-    "compute_f_score",
     "SequenceStats",
     "ExpertsWorkload",
     "RocAucScore",
