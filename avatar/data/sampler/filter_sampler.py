@@ -96,52 +96,6 @@ class ColumnFilterSampler(BaseSampler):
                 continue
 
 
-class ColumnsFilterSampler(BaseSampler):
-    def __init__(self, filters: dict[str, list[Any | None]]):
-        """Filter samples by a column with optional min/max inclusive bounds.
-        Args:
-            filters: dict where
-                key = column name (str)
-                value = [min_value, max_value], where each Any | None
-        Raises:
-            AssertionError
-                If both bounds are provided and `min_value` is not less than or equal to `max_value`.
-                If for rule there are more than 2 bounds.
-            ValueError
-                If both bounds are `None` when evaluating the condition.
-        Examples:
-            ColumnsFilterSampler({age: [18, 65], height=[None, 150]})
-        """
-        super().__init__()
-        self.filters = filters
-
-    def _check_condition(self, data, min_max_values):
-        assert len(min_max_values) == 2, "too many bounds for col"
-        min_value, max_value = min_max_values[0], min_max_values[1]
-        assert min_value <= max_value, "min_value must be less or equal than max_value"
-
-        if min_value is not None and max_value is not None:
-            return data >= min_value and data <= max_value
-        elif min_value is not None and max_value is None:
-            return data >= min_value
-        elif min_value is None and max_value is not None:
-            return data <= max_value
-        else:
-            raise ValueError("min_value and max_value cannot be both None")
-
-    def __iter__(self):
-        for data in self.dataset_iterator:
-            if self.filters is None:
-                yield data
-            elif all(
-                self._check_condition(data=data[col], min_max_values=min_max_values)
-                for col, min_max_values in self.filters.items()
-            ):
-                yield data
-            else:
-                continue
-
-
 class MultiTaskColumnsFilterSampler(BaseSampler):
     def __init__(
         self,
