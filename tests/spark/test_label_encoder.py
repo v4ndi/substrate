@@ -1,12 +1,6 @@
 import pytest
-from pyspark.sql import SparkSession
 
 from avatar.preprocessing.spark import LabelEncoder
-
-
-@pytest.fixture(scope="session")
-def spark_session():
-    return SparkSession.builder.appName("SequencePreprocessorTests").getOrCreate()
 
 
 @pytest.fixture

@@ -1,15 +1,7 @@
 import pytest
-from pyspark.sql import SparkSession
 from pyspark.sql import types as T
 
 from avatar.preprocessing.spark.pipeline import TabularPreprocessor
-
-
-@pytest.fixture(scope="module")
-def spark():
-    spark = SparkSession.builder.appName("TabularPreprocessorTests").getOrCreate()
-    yield spark
-    spark.stop()
 
 
 @pytest.fixture

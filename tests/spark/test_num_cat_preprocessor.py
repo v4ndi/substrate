@@ -2,16 +2,10 @@ import math
 
 import numpy as np
 import pytest
-from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 
 from avatar.preprocessing.spark import LabelEncoder, StandardScaler
 from avatar.preprocessing.spark.pipeline.base_pipe import NumCatPipeline
-
-
-@pytest.fixture(scope="session")
-def spark_session():
-    return SparkSession.builder.appName("SequencePreprocessorTests").getOrCreate()
 
 
 @pytest.fixture

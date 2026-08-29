@@ -3,18 +3,11 @@ from datetime import date, datetime, timedelta
 
 import numpy as np
 import pytest
-from pyspark.sql import Row, SparkSession
+from pyspark.sql import Row
 from pyspark.sql import functions as F
 from pyspark.sql import types as T
 
 from avatar.preprocessing.spark.pipeline import EventSequencePreprocessor
-
-
-@pytest.fixture(scope="module")
-def spark():
-    spark = SparkSession.builder.appName("SequencePreprocessorTests").getOrCreate()
-    yield spark
-    spark.stop()
 
 
 @pytest.fixture

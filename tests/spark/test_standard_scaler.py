@@ -1,16 +1,10 @@
 import math
 
 import pytest
-from pyspark.sql import SparkSession
 from pyspark.sql.types import DoubleType, StructField, StructType
 from pyspark.testing.utils import assertDataFrameEqual
 
 from avatar.preprocessing.spark import StandardScaler
-
-
-@pytest.fixture(scope="session")
-def spark_session():
-    return SparkSession.builder.appName("SequencePreprocessorTests").getOrCreate()
 
 
 @pytest.fixture
