@@ -6,7 +6,7 @@ import pyarrow.parquet as pq
 import pytest
 from torch.utils.data import DataLoader
 
-from avatar.data.dataset import BaseIterDataset, IterDataset
+from avatar.data.base import BaseParquetDataset
 
 
 # Fixture to create a temporary directory with multiple parquet files
@@ -38,7 +38,7 @@ def temp_parquet_dir():
 # Test for BaseIterDataset
 def test_base_iter_dataset(temp_parquet_dir):
     # Initialize the dataset
-    dataset = BaseIterDataset(
+    dataset = BaseParquetDataset(
         path=temp_parquet_dir, shuffle_files=False, shuffle_pq=False
     )
     # Test __len__
@@ -58,7 +58,9 @@ def test_base_iter_dataset(temp_parquet_dir):
 # Test for IterDataset without shuffling
 def test_iter_dataset_no_shuffle(temp_parquet_dir):
     # Initialize the dataset
-    dataset = IterDataset(path=temp_parquet_dir, shuffle_files=False, shuffle_pq=False)
+    dataset = BaseParquetDataset(
+        path=temp_parquet_dir, shuffle_files=False, shuffle_pq=False
+    )
     dataset.files = sorted(
         dataset.files, key=lambda x: int(x.split("/")[-1][5])
     )  # Number of files must be less then 10
@@ -83,7 +85,9 @@ def test_iter_dataset_no_shuffle(temp_parquet_dir):
 # Test for IterDataset with shuffling
 def test_iter_dataset_with_shuffle(temp_parquet_dir):
     # Initialize the dataset
-    dataset = IterDataset(path=temp_parquet_dir, shuffle_files=True, shuffle_pq=True)
+    dataset = BaseParquetDataset(
+        path=temp_parquet_dir, shuffle_files=True, shuffle_pq=True
+    )
 
     # Collect all records
     records = list(dataset)
@@ -109,7 +113,7 @@ def test_iter_dataset_with_shuffle(temp_parquet_dir):
 # Test for IterDataset with specific columns
 def test_iter_dataset_specific_columns(temp_parquet_dir):
     # Initialize the dataset with specific columns
-    dataset = IterDataset(
+    dataset = BaseParquetDataset(
         path=temp_parquet_dir,
         read_columns=["col1", "col3"],
         shuffle_files=False,
@@ -139,7 +143,9 @@ def test_iter_dataset_specific_columns(temp_parquet_dir):
 # Test for IterDataset with multiple workers
 def test_iter_dataset_multiple_workers(temp_parquet_dir):
     # Initialize the dataset
-    dataset = IterDataset(path=temp_parquet_dir, shuffle_files=False, shuffle_pq=False)
+    dataset = BaseParquetDataset(
+        path=temp_parquet_dir, shuffle_files=False, shuffle_pq=False
+    )
 
     # Create a DataLoader with 2 workers
     dataloader = DataLoader(dataset, num_workers=2, batch_size=None)

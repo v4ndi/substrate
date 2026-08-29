@@ -8,7 +8,7 @@ accelerator:
 test_dataloader:
   _target_: torch.utils.data.DataLoader
   dataset:
-    _target_: avatar.data.dataset.TabularDataset
+    _target_: avatar.data.TabularDataset
     path: /home/datalab/nfs/avatar_fm/examples/tabular_hidden_states/data/td_processed/test
     shuffle_files: False
     shuffle_pq: False
@@ -18,7 +18,7 @@ test_dataloader:
   drop_last: False
   num_workers: 8
   collate_fn:
-    _target_: avatar.data.dataset.collate_fn.TabularCollateFn
+    _target_: avatar.data.TabularCollateFn
     target_column: target_attr_1
 model:
   _target_: avatar.pipeline.tabular.TabularClassification

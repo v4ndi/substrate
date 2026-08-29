@@ -1,26 +1,8 @@
-from typing import Any
-
 import torch
 
+from avatar.data.base.batch import move_to_device
 
-def move_to_device(
-    data: torch.Tensor | Any, device: torch.device
-) -> torch.Tensor | Any | None:
-    """Safely moves data to the specified torch device while handling None values.
-
-    Args:
-        data: Input data to move. Can be:
-            - A torch.Tensor (will be moved to device)
-            - None (returns None)
-        device: Target device (e.g., 'cuda:0' or torch.device('cpu'))
-    """
-    if data is not None:
-        if isinstance(data, dict):
-            return {key: val.to(device) for key, val in data.items()}
-
-        return data.to(device)
-    else:
-        return None
+__all__ = ["TabularBatch", "UpliftTabularBatch", "move_to_device"]
 
 
 class TabularBatch:

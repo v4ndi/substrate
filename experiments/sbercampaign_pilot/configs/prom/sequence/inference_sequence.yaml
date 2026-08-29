@@ -10,7 +10,7 @@ accelerator:
 test_dataloader:
   _target_: torch.utils.data.DataLoader
   dataset:
-    _target_: avatar.data.dataset.EventSequenceDataset
+    _target_: avatar.data.EventSequenceDataset
     path: /home/datalab/projects/avatar/avatards/rusakov/8m_chains_2026_02_01_test_amazme_v2
     max_length: 1024
     event_time_column: evt_dttm
@@ -25,7 +25,7 @@ test_dataloader:
   drop_last: false
   num_workers: 8
   collate_fn:
-    _target_: avatar.data.dataset.collate_fn.EventSequenceCollateFn
+    _target_: avatar.data.EventSequenceCollateFn
     sequence_columns: ${test_dataloader.dataset.sequence_columns}
     create_attention_mask: true
 model:

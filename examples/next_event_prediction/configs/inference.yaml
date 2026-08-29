@@ -11,7 +11,7 @@ accelerator:
 test_dataloader:
   _target_: torch.utils.data.DataLoader
   dataset:
-    _target_: avatar.data.dataset.EventSequenceDataset
+    _target_: avatar.data.EventSequenceDataset
     path: data/processed_sequences/valid
     min_length: 1
     max_length: 128
@@ -28,7 +28,7 @@ test_dataloader:
   drop_last: False
   num_workers: 8
   collate_fn:
-    _target_: avatar.data.dataset.collate_fn.EventSequenceCollateFn
+    _target_: avatar.data.EventSequenceCollateFn
     sequence_columns: ${test_dataloader.dataset.sequence_columns}
     create_attention_mask: True
 model:

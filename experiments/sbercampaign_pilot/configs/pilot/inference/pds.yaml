@@ -12,7 +12,7 @@ product: pds
 test_dataloader:
   _target_: torch.utils.data.DataLoader
   dataset:
-    _target_: avatar.data.dataset.TabularDataset
+    _target_: avatar.data.TabularDataset
     path: /home/datalab/projects/avatards/avatar/rusakov/december_pilot/pilot/train_splited_tabular/split_type=calib/product_name=${product}_response
     shuffle_files: False
     shuffle_pq: False
@@ -22,7 +22,7 @@ test_dataloader:
   drop_last: False
   num_workers: 8
   collate_fn:
-    _target_: avatar.data.dataset.collate_fn.TabularCollateFn
+    _target_: avatar.data.TabularCollateFn
 model:
   _target_: avatar.pipeline.uplift.SLearner
   embedding:

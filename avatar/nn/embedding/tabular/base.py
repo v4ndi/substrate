@@ -1,4 +1,4 @@
-from avatar.data.tabular_batch import TabularBatch
+from avatar.data.tabular.batch import TabularBatch
 from avatar.nn.embedding.base.embedding import BaseEmbedding
 
 

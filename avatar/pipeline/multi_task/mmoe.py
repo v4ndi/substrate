@@ -4,7 +4,7 @@ import math
 import torch
 import torch.nn as nn
 
-from avatar.data.tabular_batch import TabularBatch
+from avatar.data.tabular.batch import TabularBatch
 from avatar.nn.tabular import BaseTabularEncoder
 from avatar.nn.utils import get_aggregation_layer
 from avatar.nn.utils.ffn import FeedForwardNetwork

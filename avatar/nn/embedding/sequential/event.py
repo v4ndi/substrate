@@ -3,7 +3,7 @@ from typing import Any
 import torch
 import torch.nn as nn
 
-from avatar.data.event_seq_batch import EventSequenceBatch
+from avatar.data.sequential.batch import EventSequenceBatch
 from avatar.nn.embedding.base.primitives import LinearEmbeddings
 from avatar.nn.embedding.sequential.base import BaseEventSequenceEmbedding
 

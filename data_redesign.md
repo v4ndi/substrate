@@ -1,7 +1,9 @@
 # Design: `avatar/data` restructure — `base` / `sequential` / `tabular`, one sharding engine, HDFS
 
-Status: **draft / proposal** (2026-08-29). Companion to `train_redesign.md` — land this
-first, before the `train.py` / `inference.py` rewrite.
+Status: **implemented** (2026-08-30). Companion to `train_redesign.md`, which is still a
+proposal — this landed first, as planned.
+
+What shipped, and where it deviates from the proposal below, is summarised in §9.
 
 Three asks:
 
@@ -469,3 +471,69 @@ rebuild (2–4) are independent and can proceed in parallel.
   step 3 is a prerequisite, not a follow-up.
 - **Scope** — three independent changes (layout, sharding engine, HDFS). Land in the
   step order; keep `ShardTabularDataset` byte-parity as the guard rail through 2–4.
+
+---
+
+## 9. What shipped (2026-08-30)
+
+Implemented as designed, with the deviations below. Suite: **272 passed, 2 skipped**
+(the skips need a libhdfs install); baseline before this work was 231.
+
+### Deviations from the proposal
+
+- **`ShardTabularDataset` / `ShardEventSequenceDataset` are gone, not aliased in
+  place.** §3.5 proposed keeping `Shard*` subclasses; instead `TabularDataset` and
+  `EventSequenceDataset` *are* the sharded classes (`shard=True` by default) and the
+  old names resolve to them through the `avatar.data.dataset` shim. Nothing
+  referenced the `Shard*` names — 0 configs, 0 imports — so there was no reason for
+  a second pair of classes.
+- **No byte-parity golden test against the old tabular segments.** The `ShardPlanner`
+  spec (`tests/data/base/test_shard_planner.py`, 31 cases) asserts the *properties*
+  the old code was trying to achieve — disjoint ranks, equal cardinality, only the
+  global remainder lost, rotation actually rotating — which is a stronger guarantee
+  than reproducing the previous output. The extracted math is unchanged, so the
+  segments are identical anyway.
+- **A real sequence-slicing bug was fixed, not just moved.** `_filter_by_length`
+  computed slice bounds from the *raw* sequence length and then applied them to the
+  *modality-filtered* sequence. With `random_slicing=True` and `selected_event_ids`
+  set, the offset could land past the end of the filtered sequence and silently
+  empty it. Bounds now come from the post-filter length, which is also what makes
+  the predicate deterministic enough for the scan to predict. `max_length >=
+  min_length` is asserted for the same reason.
+- **Filter-time accounting moved into the datasets.** The base times nothing; each
+  dataset reports through `_time_filter()` / `_source_rows`, so `filter_sec` still
+  measures the predicate rather than parquet decoding.
+- **`train.py` needed changes after all.** §6 predicted the `shard_by_rank` guards
+  would merely *collapse*; in fact the rename would have silently turned
+  `getattr(dataset, "shard_by_rank", False)` into `False`, so accelerate would have
+  re-sharded an already-sharded loader. The four call sites now read `shard`, and
+  the shard-metrics block reads public properties (`scan_duration_sec`,
+  `file_counts`, `uses_filter_cache`, `filter_cache_hit`, `scan_rank_count`,
+  `total_parquet_bytes`) instead of reaching into private attributes.
+
+### Distributed test coverage
+
+`tests/data/test_distributed_sharding.py` spawns real `torchrun` processes with a
+real process group and gathers per-rank results through an actual
+`all_gather_object`. It runs on the **gloo** backend over CPU, which is what lets a
+multi-rank and a *simulated multi-node* job (two launcher groups, `--nnodes=2`,
+distinct `node_rank`, one rendezvous) run on a single-GPU host — NCCL cannot, since
+two ranks cannot share one device. What that leaves untested is NCCL itself and a
+real inter-machine network; the sharding logic under test is backend-independent.
+
+The in-process suite (`tests/data/sequential/test_sequence_sharding.py`) simulates
+ranks through the `WORLD_SIZE` / `RANK` variables `torchrun` exports, replacing the
+previous approach of mocking `torch.distributed` — the mocks were why the old,
+broken sharding appeared to pass.
+
+### Follow-ups
+
+- Remove the `avatar.data.dataset` / `...collate_fn` shims once out-of-repo configs
+  have migrated (one release).
+- HDFS is exercised only through `LocalFileSystem` parity and URI dispatch; a run
+  against a live namenode is still needed, together with a `num_workers` sweep to
+  size the per-worker JVM cost.
+- `read_parquet_file(shuffle=True)` still materialises a whole file to permute rows.
+  Row-group streaming with a shuffle buffer matters more over HDFS than locally.
+- Segments are read in full even when a worker owns only part of a file. Bounded to
+  two partial files per worker, so it was left alone.

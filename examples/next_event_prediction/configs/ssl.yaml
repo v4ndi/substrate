@@ -11,7 +11,7 @@ accelerator:
 train_dataloader:
   _target_: torch.utils.data.DataLoader
   dataset:
-    _target_: avatar.data.dataset.EventSequenceDataset
+    _target_: avatar.data.EventSequenceDataset
     path: data/processed_sequences/train
     min_length: 1
     max_length: 128
@@ -28,13 +28,13 @@ train_dataloader:
   drop_last: False
   num_workers: 8
   collate_fn:
-    _target_: avatar.data.dataset.collate_fn.EventSequenceCollateFn
+    _target_: avatar.data.EventSequenceCollateFn
     sequence_columns: ${train_dataloader.dataset.sequence_columns}
     create_attention_mask: True
 valid_dataloader:
   _target_: torch.utils.data.DataLoader
   dataset:
-    _target_: avatar.data.dataset.EventSequenceDataset
+    _target_: avatar.data.EventSequenceDataset
     path: data/processed_sequences/valid
     min_length: 1
     max_length: 128
@@ -51,7 +51,7 @@ valid_dataloader:
   drop_last: False
   num_workers: 8
   collate_fn:
-    _target_: avatar.data.dataset.collate_fn.EventSequenceCollateFn
+    _target_: avatar.data.EventSequenceCollateFn
     sequence_columns: ${train_dataloader.dataset.sequence_columns}
     create_attention_mask: True
 model:

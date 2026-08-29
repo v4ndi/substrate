@@ -1,6 +1,6 @@
 import torch.nn as nn
 
-from avatar.data.event_seq_batch import EventSequenceBatch
+from avatar.data.sequential.batch import EventSequenceBatch
 from avatar.nn.sequential.backbone.base import SequenceBackbone
 from avatar.nn.sequential.event_encoder.base import BaseEventEncoder
 

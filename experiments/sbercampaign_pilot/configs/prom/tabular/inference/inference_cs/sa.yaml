@@ -12,7 +12,7 @@ product: sa
 test_dataloader:
   _target_: torch.utils.data.DataLoader
   dataset:
-    _target_: avatar.data.dataset.TabularDataset
+    _target_: avatar.data.TabularDataset
     path: /home/datalab/projects/avatards/avatar/rusakov/pilot_cs_full_table/split_type=test  ##
     shuffle_files: False
     shuffle_pq: False
@@ -24,7 +24,7 @@ test_dataloader:
   drop_last: False
   num_workers: 8
   collate_fn:
-    _target_: avatar.data.dataset.collate_fn.TabularCollateFn
+    _target_: avatar.data.TabularCollateFn
 model:
   _target_: avatar.pipeline.uplift.SLearner
   embedding:

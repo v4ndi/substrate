@@ -8,7 +8,7 @@ product: sa
 train_dataloader:
   _target_: torch.utils.data.DataLoader
   dataset:
-    _target_: avatar.data.dataset.TabularDataset
+    _target_: avatar.data.TabularDataset
     path: /home/datalab/projects/avatar/avatards/rusakov/prom/splited_tabular/split_type=train/product_name=${product}_response
     shuffle_files: True
     shuffle_pq: True
@@ -18,7 +18,7 @@ train_dataloader:
   drop_last: False
   num_workers: 8
   collate_fn:
-    _target_: avatar.data.dataset.collate_fn.UpliftCollateFn
+    _target_: avatar.data.UpliftCollateFn
     target_column: target_attr_1 # назване колонки факта конверсии
     treatment_column: target_attr_3 # название колонки флага контролько целевой группы (1 - ЦГ, 0 - КГ)
     inverse_treatment: True # если True то в treatment_column 0 заменяется на 1  и наоборот (В данном наборе данных 1 - КГ, 0 - ЦГ, поэтому необходимо сделать 1 - treatment_column)
@@ -26,7 +26,7 @@ train_dataloader:
 valid_dataloader:
   _target_: torch.utils.data.DataLoader
   dataset:
-    _target_: avatar.data.dataset.TabularDataset
+    _target_: avatar.data.TabularDataset
     path: /home/datalab/projects/avatar/avatards/rusakov/prom/splited_tabular/split_type=calib/product_name=${product}_response
     shuffle_files: False
     shuffle_pq: False
@@ -36,7 +36,7 @@ valid_dataloader:
   drop_last: False
   num_workers: 8
   collate_fn:
-    _target_: avatar.data.dataset.collate_fn.UpliftCollateFn
+    _target_: avatar.data.UpliftCollateFn
     target_column: target_attr_1 # назване колонки факта конверсии
     treatment_column: target_attr_3 # название колонки флага контролько целевой группы (1 - ЦГ, 0 - КГ)
     inverse_treatment: True # если True то в treatment_column 0 заменяется на 1  и наоборот (В данном наборе данных 1 - КГ, 0 - ЦГ, поэтому необходимо сделать 1 - treatment_column)

@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 from omegaconf import DictConfig, OmegaConf
 
-from avatar.data.event_seq_batch import EventSequenceBatch
+from avatar.data.sequential.batch import EventSequenceBatch
 from avatar.nn.embedding.base.embedding import BaseEmbedding
 
 

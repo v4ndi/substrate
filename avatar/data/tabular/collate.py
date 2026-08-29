@@ -3,8 +3,8 @@ from typing import Any
 
 import torch
 
-from avatar.data.dataset.collate_fn.base_collate_fn import BaseCollateFn
-from avatar.data.tabular_batch import TabularBatch
+from avatar.data.base.collate import BaseCollateFn
+from avatar.data.tabular.batch import TabularBatch
 
 
 def check_columns_to_tensor(columns_to_tensor: dict[str, str] | None):

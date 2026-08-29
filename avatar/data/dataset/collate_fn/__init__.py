@@ -1,7 +1,19 @@
-from .base_collate_fn import BaseCollateFn
-from .fixed_horizon_collate_fn import FixedHorizonCollateFn
-from .sequence_collate_fn import EventSequenceCollateFn
-from .tabular_collate_fn import (
+"""Deprecated module path.
+
+``avatar.data.dataset.collate_fn`` moved to :mod:`avatar.data.tabular.collate`
+and :mod:`avatar.data.sequential.collate`. This shim keeps existing Hydra
+``_target_`` strings resolving for one release.
+"""
+
+import warnings
+
+from avatar.data.base.collate import BaseCollateFn
+from avatar.data.sequential.collate import (
+    ColesCollateFn,
+    EventSequenceCollateFn,
+    FixedHorizonCollateFn,
+)
+from avatar.data.tabular.collate import (
     MultiTaskSupervisedCollateFn,
     MultiTaskUpliftCollateFn,
     SupervisedCollateFn,
@@ -9,8 +21,17 @@ from .tabular_collate_fn import (
     UpliftCollateFn,
 )
 
+warnings.warn(
+    "avatar.data.dataset.collate_fn has moved: use avatar.data.tabular.collate, "
+    "avatar.data.sequential.collate, or the flat re-exports on avatar.data. "
+    "This shim will be removed in the next release.",
+    DeprecationWarning,
+    stacklevel=2,
+)
+
 __all__ = [
     "BaseCollateFn",
+    "ColesCollateFn",
     "EventSequenceCollateFn",
     "FixedHorizonCollateFn",
     "MultiTaskSupervisedCollateFn",

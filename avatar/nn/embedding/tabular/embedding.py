@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from avatar.data.tabular_batch import TabularBatch
+from avatar.data.tabular.batch import TabularBatch
 from avatar.nn.embedding.tabular.base import BaseTabularEmbedding
 from avatar.nn.embedding.tabular.hidden_state_agg import BaseHiddenStateAggregator
 from avatar.nn.embedding.tabular.numeric import NumericFeatureEmbedding

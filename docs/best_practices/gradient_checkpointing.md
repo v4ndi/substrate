@@ -53,7 +53,7 @@ accelerator:
 train_dataloader:
   _target_: torch.utils.data.DataLoader
   dataset:
-    _target_: avatar.data.dataset.ShardEventSequenceDataset
+    _target_: avatar.data.EventSequenceDataset
     path: /home/datalab/projects/avatards/avatar/core_fm/large/ssl_training/train/large/middle # train
     min_length: 16
     max_length: 512
@@ -70,13 +70,13 @@ train_dataloader:
   drop_last: True
   num_workers: 8
   collate_fn:
-    _target_: avatar.data.dataset.collate_fn.EventSequenceCollateFn
+    _target_: avatar.data.EventSequenceCollateFn
     sequence_columns: ${train_dataloader.dataset.sequence_columns}
     create_attention_mask: True
 valid_dataloader:
   _target_: torch.utils.data.DataLoader
   dataset:
-    _target_: avatar.data.dataset.EventSequenceDataset
+    _target_: avatar.data.EventSequenceDataset
     path: /home/datalab/projects/avatards/avatar/core_fm/large/ssl_training/valid
     max_length: 512
     min_length: 1
@@ -92,7 +92,7 @@ valid_dataloader:
   drop_last: False
   num_workers: 8
   collate_fn:
-    _target_: avatar.data.dataset.collate_fn.EventSequenceCollateFn
+    _target_: avatar.data.EventSequenceCollateFn
     sequence_columns: ${valid_dataloader.dataset.sequence_columns}
     create_attention_mask: True
 model:

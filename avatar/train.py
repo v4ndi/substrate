@@ -150,16 +150,14 @@ def main(config: DictConfig) -> None:
             "performance_metrics_sampling_interval_sec": performance_config[
                 "sampling_interval_sec"
             ],
-            "shard_by_rank": bool(getattr(train_dataset, "shard_by_rank", False)),
+            "shard": bool(getattr(train_dataset, "shard", False)),
             "drop_tail": getattr(train_dataset, "drop_tail", None),
             "rotate_tail": getattr(train_dataset, "rotate_tail", None),
             "filter_cache": getattr(train_dataset, "filter_cache", None),
             "filter_cache_dir": getattr(train_dataset, "filter_cache_dir", None),
             "scan_workers_per_rank": getattr(train_dataset, "scan_workers", None),
             "scan_ranks": getattr(train_dataset, "scan_ranks", None),
-            "effective_scan_ranks": getattr(
-                train_dataset, "_effective_scan_ranks", None
-            ),
+            "effective_scan_ranks": getattr(train_dataset, "scan_rank_count", None),
             "batch_size_per_rank": train_dataloader.batch_size,
             "num_workers_per_rank": train_dataloader.num_workers,
             "parquet_file_count": len(getattr(train_dataset, "files", [])),
@@ -254,7 +252,7 @@ def train(
     )
     train_dataset = train_dataloader.dataset
     shard_metrics_enabled = bool(
-        performance_enabled and getattr(train_dataset, "shard_by_rank", False)
+        performance_enabled and getattr(train_dataset, "shard", False)
     )
     if shard_metrics_enabled and hasattr(train_dataset, "configure_epoch_metrics"):
         train_dataset.configure_epoch_metrics(train_dataloader.num_workers)
@@ -291,7 +289,9 @@ def train(
 
     swa_model, min_num_steps, min_epoch = init_swa_model(config, model)
 
-    if getattr(train_dataloader.dataset, "shard_by_rank", False):
+    # A sharded dataset already split the record stream by rank; handing the
+    # loader to accelerate as well would shard it a second time.
+    if getattr(train_dataloader.dataset, "shard", False):
         model, optimizer, scheduler = accelerator.prepare(model, optimizer, scheduler)
     else:
         model, optimizer, scheduler, train_dataloader = accelerator.prepare(
@@ -316,11 +316,11 @@ def train(
 
     if shard_metrics_enabled:
         scan_sec = reduce_max_duration(
-            float(getattr(train_dataset, "_scan_duration_sec", 0.0)),
+            float(getattr(train_dataset, "scan_duration_sec", 0.0)),
             accelerator.device,
         )
         total_raw_rows = int(getattr(train_dataset, "total_length", 0))
-        file_counts = getattr(train_dataset, "_file_counts", None)
+        file_counts = getattr(train_dataset, "file_counts", None)
         total_valid_rows = int(file_counts.sum()) if file_counts is not None else 0
         dropped_tail_rows = (
             total_valid_rows % accelerator.num_processes
@@ -338,12 +338,12 @@ def train(
                 "shard/dropped_tail_rows": dropped_tail_rows,
                 "shard/parquet_file_count": len(train_dataset.files),
             }
-            if getattr(train_dataset, "_use_filter_cache", False):
+            if getattr(train_dataset, "uses_filter_cache", False):
                 initial_shard_metrics["shard/filter_cache_hit"] = float(
-                    getattr(train_dataset, "_filter_cache_hit", False)
+                    getattr(train_dataset, "filter_cache_hit", False)
                 )
                 initial_shard_metrics["shard/scan_rank_count"] = float(
-                    getattr(train_dataset, "_effective_scan_ranks", 0)
+                    getattr(train_dataset, "scan_rank_count", 0)
                 )
             accelerator.log(initial_shard_metrics, step=0)
 
@@ -700,7 +700,7 @@ def evaluation(
     model.eval()
     if distributed_evaluate:
         assert accelerator is not None
-        if getattr(valid_dataloader.dataset, "shard_by_rank", False):
+        if getattr(valid_dataloader.dataset, "shard", False):
             model = accelerator.prepare(model)
         else:
             model, valid_dataloader = accelerator.prepare(model, valid_dataloader)

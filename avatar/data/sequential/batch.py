@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
 
-from avatar.data.tabular_batch import move_to_device
+from avatar.data.base.batch import move_to_device
 
 
 class EventSequenceBatch:

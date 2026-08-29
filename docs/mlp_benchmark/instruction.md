@@ -75,7 +75,7 @@ accelerator:
 train_dataloader:
   _target_: torch.utils.data.DataLoader
   dataset:
-    _target_: avatar.data.dataset.TabularDataset
+    _target_: avatar.data.TabularDataset
     path: /home/datalab/nfs/avatar_fm/experiments/moshcharov/data/debug_cat_feature_mlpbench/debug_mlp_bench_cat_feat_debug/cc_response/train
     read_columns: ["seq_hidden_state", "target_attr_1", "target_attr_2", "target_attr_3", "epk_id", 'cat_features']
     shuffle_files: True
@@ -86,13 +86,13 @@ train_dataloader:
   drop_last: True
   num_workers: 8
   collate_fn:
-    _target_: avatar.data.dataset.collate_fn.TabularCollateFn
+    _target_: avatar.data.TabularCollateFn
     target_column: "target_attr_1"
     
 valid_dataloader:
   _target_: torch.utils.data.DataLoader
   dataset:
-    _target_: avatar.data.dataset.TabularDataset
+    _target_: avatar.data.TabularDataset
     path:  /home/datalab/nfs/avatar_fm/experiments/moshcharov/data/debug_cat_feature_mlpbench/debug_mlp_bench_cat_feat_debug/cc_response/valid
     read_columns: ["seq_hidden_state", "target_attr_1", "target_attr_2", "target_attr_3", "epk_id", 'cat_features']
     shuffle_files: false
@@ -103,13 +103,13 @@ valid_dataloader:
   drop_last: False
   num_workers: 8
   collate_fn:
-    _target_: avatar.data.dataset.collate_fn.TabularCollateFn
+    _target_: avatar.data.TabularCollateFn
     target_column: "target_attr_1"
     
 test_dataloader:
   _target_: torch.utils.data.DataLoader
   dataset:
-    _target_: avatar.data.dataset.TabularDataset
+    _target_: avatar.data.TabularDataset
     path:  /home/datalab/nfs/avatar_fm/experiments/moshcharov/data/debug_cat_feature_mlpbench/debug_mlp_bench_cat_feat_debug/cc_response/test
     read_columns: ["seq_hidden_state", "target_attr_1", "target_attr_2", "target_attr_3", "epk_id", 'cat_features']
     shuffle_files: false
@@ -120,7 +120,7 @@ test_dataloader:
   drop_last: false
   num_workers: 8
   collate_fn:
-    _target_: avatar.data.dataset.collate_fn.TabularCollateFn
+    _target_: avatar.data.TabularCollateFn
     target_column: "target_attr_1"    
 
 

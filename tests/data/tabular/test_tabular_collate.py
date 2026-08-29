@@ -7,7 +7,7 @@ import pyarrow.parquet as pq
 import pytest
 import torch
 
-from avatar.data.dataset.collate_fn import TabularCollateFn
+from avatar.data.tabular import TabularCollateFn
 
 
 @pytest.fixture

@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from avatar.data.event_seq_batch import EventSequenceBatch
+from avatar.data.sequential.batch import EventSequenceBatch
 
 
 class IntraFeatureAttention(nn.Module):

@@ -3,8 +3,7 @@ import pandas as pd
 import pytest
 import torch
 
-from avatar.data.dataset import EventSequenceDataset
-from avatar.data.dataset.collate_fn import EventSequenceCollateFn
+from avatar.data.sequential import EventSequenceCollateFn, EventSequenceDataset
 
 
 @pytest.fixture
