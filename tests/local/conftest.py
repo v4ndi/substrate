@@ -1,80 +1,20 @@
 """Fixtures for the local preprocessing backend tests.
 
 The pure-local tests need only pyarrow + numpy. The Spark-parity tests
-(``test_spark_parity.py``) are skipped automatically when a working Spark /
-JDK 17 environment is not available.
+(``test_spark_parity.py``) reuse the ``spark_session`` fixture from the root
+``tests/conftest.py`` and are skipped automatically when no Spark-compatible
+JDK is available.
 """
 
 from __future__ import annotations
 
 import datetime as dt
 import glob
-import os
 
 import numpy as np
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
-
-import glob as _glob
-import subprocess as _sp
-
-_JDK_CANDIDATES = [
-    os.environ.get("SPARK_JDK", ""),
-    "/home/jovyan/.sdkman/candidates/java/17.0.13-tem",
-    "/usr/lib/jvm/java-17-openjdk-amd64",
-    *_glob.glob("/home/jovyan/.sdkman/candidates/java/1[17]*"),
-    *_glob.glob("/usr/lib/jvm/*-1[17]-*"),
-    os.environ.get("JAVA_HOME", ""),
-]
-
-
-def _java_major(home: str) -> int | None:
-    java = os.path.join(home, "bin", "java")
-    if not os.path.exists(java):
-        return None
-    try:
-        out = _sp.run([java, "-version"], capture_output=True, text=True).stderr
-    except OSError:
-        return None
-    for tok in out.replace('"', " ").split():
-        if tok.startswith(("1.8", "8.", "11.", "17.")):
-            return 8 if tok.startswith(("1.8", "8.")) else int(tok.split(".")[0])
-    return None
-
-
-def _ensure_java() -> bool:
-    """Point JAVA_HOME at a Spark-compatible JDK (8/11/17). Spark 3.5 breaks on 21+."""
-    for home in _JDK_CANDIDATES:
-        if home and _java_major(home) in (8, 11, 17):
-            os.environ["JAVA_HOME"] = home
-            os.environ["PATH"] = f"{home}/bin:{os.environ['PATH']}"
-            return True
-    return False
-
-
-@pytest.fixture(scope="session")
-def spark_session():
-    if not _ensure_java():
-        pytest.skip("no JDK found for Spark parity tests")
-    try:
-        from pyspark.sql import SparkSession
-    except ImportError:  # pragma: no cover
-        pytest.skip("pyspark not installed")
-    try:
-        spark = (
-            SparkSession.builder.appName("local-parity")
-            .master("local[2]")
-            .config("spark.ui.enabled", "false")
-            .config("spark.sql.session.timeZone", "UTC")
-            .config("spark.sql.shuffle.partitions", "4")
-            .getOrCreate()
-        )
-    except Exception as exc:  # pragma: no cover
-        pytest.skip(f"could not start Spark: {exc}")
-    spark.sparkContext.setLogLevel("ERROR")
-    yield spark
-    spark.stop()
 
 
 @pytest.fixture

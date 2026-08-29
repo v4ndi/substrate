@@ -2,29 +2,20 @@ import numpy as np
 import pandas as pd
 import pytest
 import torch
-from pyspark.sql import SparkSession
 
 from avatar.data.dataset import EventSequenceDataset
 from avatar.data.dataset.collate_fn import EventSequenceCollateFn
-from avatar.synth import generate_sequence_dataset
-
-
-@pytest.fixture(scope="session")
-def spark():
-    return SparkSession.builder.appName("EventSequenceDataset").getOrCreate()
 
 
 @pytest.fixture
-def output_path(spark):
-    output_path = generate_sequence_dataset(
-        spark=spark,
+def output_path(synth_sequence_dataset):
+    return synth_sequence_dataset(
         num_records=100,
         num_output_partitions=8,
         num_events_range=(1, 100),
         target_column="classification",
         tabular_features=True,
     )
-    return output_path
 
 
 def test_min_max_length_and_types(output_path):
@@ -92,10 +83,9 @@ def test_has_tab_features(output_path):
     assert batch["tab_features"].num_features.shape == (10, 10)
 
 
-def test_slice_by_event_ids(spark):
+def test_slice_by_event_ids(synth_sequence_dataset):
     """Tests for min/max_length and sequence dtypes"""
-    output_path = generate_sequence_dataset(
-        spark=spark,
+    output_path = synth_sequence_dataset(
         num_records=100,
         num_output_partitions=8,
         num_events_range=(100, 100),

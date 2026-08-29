@@ -4,29 +4,18 @@ from unittest.mock import patch
 import pandas as pd
 import pytest
 import torch
-from pyspark.sql import SparkSession
 
 from avatar.data.dataset import ShardEventSequenceDataset
 from avatar.data.dataset.collate_fn import EventSequenceCollateFn
-from avatar.synth import generate_sequence_dataset
-
-
-@pytest.fixture(scope="session")
-def spark_session():
-    """Session-scoped Spark fixture"""
-    spark = SparkSession.builder.appName("SequencePreprocessorTests").getOrCreate()
-    yield spark
-    spark.stop()
 
 
 @pytest.fixture
-def data_sample(spark_session):
-    """Function-scoped data sample fixture"""
+def data_sample(synth_sequence_dataset):
+    """Function-scoped synthetic-data factory (pandas/pyarrow, no Spark)."""
 
     @lru_cache(maxsize=1_000)
     def _generate_data(num_records=128, num_output_partitions=8):
-        return generate_sequence_dataset(
-            spark=spark_session,
+        return synth_sequence_dataset(
             num_records=num_records,
             num_output_partitions=num_output_partitions,
             num_events_range=(1, 100),
