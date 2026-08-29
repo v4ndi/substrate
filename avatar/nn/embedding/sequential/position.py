@@ -4,20 +4,7 @@ import torch
 import torch.nn as nn
 
 from avatar.data.event_seq_batch import EventSequenceBatch
-
-
-class BaseTemporalEmbedding(nn.Module):
-    """Base class for temporal embedding
-    Args:
-        hidden_size: int - Dimensionality of the embeddings
-    """
-
-    def __init__(self, embedding_dim: int):
-        super().__init__()
-        self.embedding_dim = embedding_dim
-
-    def forward(self, features: EventSequenceBatch) -> torch.FloatTensor:
-        raise NotImplementedError("Forward method must be implemented by child classes")
+from avatar.nn.embedding.sequential.base import BaseTemporalEmbedding
 
 
 class TemporalPositionEncoding(BaseTemporalEmbedding):

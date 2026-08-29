@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 from avatar.data.tabular_batch import TabularBatch
-from avatar.nn.embedding.base_embedding import BaseTabularEmbedding
+from avatar.nn.embedding import BaseTabularEmbedding
 from avatar.nn.tabular import BaseTabularEncoder
 from avatar.nn.utils import get_aggregation_layer
 from avatar.nn.utils.ffn import FeedForwardNetwork

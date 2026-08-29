@@ -1,6 +1,67 @@
+"""Low-level embedding primitives shared by the sequential and tabular stacks."""
+
 import torch
 import torch.nn as nn
 import xxhash
+from torch import Tensor
+from torch.nn.parameter import Parameter
+
+
+def _check_input_shape(x: Tensor, expected_n_features: int) -> None:
+    if x.ndim < 1:
+        raise ValueError(
+            f"The input must have at least one dimension, however: {x.ndim=}"
+        )
+    if x.shape[-1] != expected_n_features:
+        raise ValueError(
+            "The last dimension of the input was expected to be"
+            f" {expected_n_features}, however, {x.shape[-1]=}"
+        )
+
+
+class LinearEmbeddings(nn.Module):
+    """Linear embeddings for continuous features.
+
+    Shape
+
+    - Input: `(*, n_features)`
+    - Output: `(*, n_features, d_embedding)`
+
+    Examples
+    >>> batch_size = 2
+    >>> n_cont_features = 3
+    >>> x = torch.randn(batch_size, n_cont_features)
+    >>> d_embedding = 4
+    >>> m = LinearEmbeddings(n_cont_features, d_embedding)
+    >>> m(x).shape
+    torch.Size([2, 3, 4])
+    """
+
+    def __init__(self, n_features: int, hidden_size: int) -> None:
+        """
+        Args:
+            n_features: the number of continuous features.
+            hidden_size: the embedding size.
+        """
+        if n_features <= 0:
+            raise ValueError(f"n_features must be positive, however: {n_features=}")
+        if hidden_size <= 0:
+            raise ValueError(f"d_embedding must be positive, however: {hidden_size=}")
+
+        super().__init__()
+        self.weight = Parameter(torch.empty(n_features, hidden_size))
+        self.bias = Parameter(torch.empty(n_features, hidden_size))
+        self.reset_parameters()
+
+    def reset_parameters(self) -> None:
+        d_rqsrt = self.weight.shape[1] ** -0.5
+        nn.init.uniform_(self.weight, -d_rqsrt, d_rqsrt)
+        nn.init.uniform_(self.bias, -d_rqsrt, d_rqsrt)
+
+    def forward(self, x: Tensor) -> Tensor:
+        """Do the forward pass."""
+        _check_input_shape(x, self.weight.shape[0])
+        return torch.addcmul(self.bias, self.weight, x[..., None])
 
 
 class HashEmbedding(nn.Module):

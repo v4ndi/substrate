@@ -4,9 +4,11 @@ import torch
 import torch.nn as nn
 
 from avatar.data.event_seq_batch import EventSequenceBatch
-from avatar.nn.embedding.base_embedding import BaseEventSequenceEmbedding
-from avatar.nn.embedding.embeddings import LinearEmbeddings
-from avatar.nn.embedding.position_embeddings import BaseTemporalEmbedding
+from avatar.nn.embedding import (
+    BaseEventSequenceEmbedding,
+    BaseTemporalEmbedding,
+    LinearEmbeddings,
+)
 
 
 class BaseSequenceFeatureEncoder(nn.Module):
