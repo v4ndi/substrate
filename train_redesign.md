@@ -35,10 +35,15 @@ Three questions from the ask:
 
 **Already pure `torch.distributed`** (no change needed, only the init contract):
 
-- `avatar/data/dataset/{tabular_dataset,sequence_dataset}.py` — `ShardTabularDataset` /
-  `ShardEventSequenceDataset` shard the record stream by `dist.get_rank()` /
-  `WORLD_SIZE`, do their own `dist.all_reduce` / `dist.barrier` for the filter
-  cache, and expose `set_epoch()` / `shard_by_rank`.
+- `avatar/data/` — `TabularDataset` / `EventSequenceDataset` shard the record
+  stream by `dist.get_rank()` / `WORLD_SIZE`, do their own `dist.all_reduce` /
+  `dist.barrier` for the filter cache, and expose `set_epoch()` / `shard`.
+  *(Updated 2026-08-30: this section originally described
+  `ShardTabularDataset` / `ShardEventSequenceDataset` in
+  `avatar/data/dataset/`, and claimed `avatar/data/**` needed no change. See
+  `data_redesign.md` — the module was restructured, the sequence dataset's
+  sharding was rewritten, and `train.py`'s `shard_by_rank` guards did have to
+  change.)*
 - `avatar/utils/performance_metrics.py` — `_reduce()` is already
   `dist.all_reduce`.
 
@@ -212,7 +217,10 @@ run on rank 0: `log_params` at start, `log_metrics(dict, step)` on log events,
 - `avatar/training_arguments.py` — `distributed_evaluate` field removed;
   `device_specific` (already dead) removed.
 - **No change** to `avatar/data/**` (already pure torch.distributed), metrics,
-  losses, pipelines.
+  losses, pipelines. *(Updated 2026-08-30: `avatar/data/**` was in fact
+  restructured first — see `data_redesign.md`. It is now pure
+  `torch.distributed` and needs nothing further from this rewrite, but the
+  `shard_by_rank` → `shard` rename already landed in `train.py`.)*
 - Tests: **there are none for `train.py`** — the rewrite must add a
   `torchrun --nproc_per_node=2` smoke test on tiny synthetic data (1 epoch,
   assert loss decreases + checkpoint round-trips). This is the single biggest
