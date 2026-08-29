@@ -60,10 +60,10 @@ markers = [
     "slow: long-running tests (many workers / large synthetic data); deselected by default",
 ]
 filterwarnings = [
-    "default",
     "ignore:The pynvml package is deprecated:FutureWarning",
     "ignore:.*PYARROW_IGNORE_TIMEZONE.*:UserWarning",
     "ignore:distutils Version classes are deprecated:DeprecationWarning",
+    "ignore:.*LooseVersion.*:DeprecationWarning",
 ]
 
 [tool.ruff]
