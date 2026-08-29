@@ -90,7 +90,7 @@ def test_fit_transform_frequency_encoder(sample_data):
     }
     for idx, row in enumerate(results):
         print(row, idx)
-        for col in cat_features + ["nf"]:
+        for col in [*cat_features, "nf"]:
             assert row.asDict()[col] == expected[col][idx]
 
 
@@ -226,5 +226,5 @@ def test_update(sample_data):
     }
     for idx, row in enumerate(results):
         print(row, idx)
-        for col in cat_features + ["nf"]:
+        for col in [*cat_features, "nf"]:
             assert row.asDict()[col] == expected[col][idx]

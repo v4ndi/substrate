@@ -19,7 +19,7 @@ class GroupDevidedMetricsWrapper(BaseMetric):
         self,
         metric_class,  # partial
         columns_to_devide: list[str],
-        columns_desc: list[str] = None,
+        columns_desc: list[str] | None = None,
     ):
         if columns_desc is None:
             columns_desc = columns_to_devide
@@ -30,7 +30,7 @@ class GroupDevidedMetricsWrapper(BaseMetric):
 
     def _get_mask(self, inputs, groups_tuple: tuple):
         mask = None
-        for column, value in zip(self.columns_to_devide, groups_tuple):
+        for column, value in zip(self.columns_to_devide, groups_tuple, strict=False):
             current_mask = np.array(inputs[column]) == value
             mask = mask & current_mask if mask is not None else current_mask
         return mask
@@ -64,14 +64,14 @@ class GroupDevidedMetricsWrapper(BaseMetric):
 
     def update(self, inputs, outputs):
         unique_combinations = set(
-            zip(*([inputs[column] for column in self.columns_to_devide]))
+            zip(*([inputs[column] for column in self.columns_to_devide]), strict=False)
         )
         for groups_tuple in unique_combinations:
             self._update_current_groups(inputs, outputs, groups_tuple)
 
     def _build_metric_name(self, groups_tuple, suff=""):
         name = ""
-        for column_desc, value in zip(self.columns_desc, groups_tuple):
+        for column_desc, value in zip(self.columns_desc, groups_tuple, strict=False):
             name += f"{column_desc}_{value}_"
         name = name + suff
         return name

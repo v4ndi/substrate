@@ -1,5 +1,3 @@
-from typing import Dict
-
 import numpy as np
 import pandas as pd
 import torch
@@ -49,23 +47,23 @@ def apply_calibration_calculate_metrics(
     c_roc_auc = roc_auc_score(y_true[treatment == 0], c_probs[treatment == 0])
     t_roc_auc = roc_auc_score(y_true[treatment == 1], t_probs[treatment == 1])
 
-    _t_probs = t_calibrator.predict(t_probs.reshape(-1, 1))
-    _c_probs = c_calibrator.predict(c_probs.reshape(-1, 1))
+    t_probs_ = t_calibrator.predict(t_probs.reshape(-1, 1))
+    c_probs_ = c_calibrator.predict(c_probs.reshape(-1, 1))
 
-    calib_c_roc_auc = roc_auc_score(y_true[treatment == 0], _c_probs[treatment == 0])
-    calib_t_roc_auc = roc_auc_score(y_true[treatment == 1], _t_probs[treatment == 1])
+    calib_c_roc_auc = roc_auc_score(y_true[treatment == 0], c_probs_[treatment == 0])
+    calib_t_roc_auc = roc_auc_score(y_true[treatment == 1], t_probs_[treatment == 1])
 
     assert abs(calib_c_roc_auc - c_roc_auc) < 0.01
     assert abs(calib_t_roc_auc - t_roc_auc) < 0.01
     if is_calib:
         assert (
-            abs(_c_probs[treatment == 0].mean() - y_true[treatment == 0].mean()) < 1e-03
+            abs(c_probs_[treatment == 0].mean() - y_true[treatment == 0].mean()) < 1e-03
         )
         assert (
-            abs(_t_probs[treatment == 1].mean() - y_true[treatment == 1].mean()) < 1e-03
+            abs(t_probs_[treatment == 1].mean() - y_true[treatment == 1].mean()) < 1e-03
         )
 
-    calibrated_uplift = _t_probs - _c_probs
+    calibrated_uplift = t_probs_ - c_probs_
 
     calib_metrics = calculate_uplift_metrics(
         y_true=y_true, uplift=calibrated_uplift, treatment=treatment, calibrated=True
@@ -98,7 +96,7 @@ class UpliftMetrics(BaseMetric):
     def __init__(
         self,
         require_calibration: bool = False,
-        save_submit_path: str = None,
+        save_submit_path: str | None = None,
         main_metric: str = "qini_auc_score",
     ):
         self.preds = []
@@ -155,7 +153,7 @@ class UpliftMetrics(BaseMetric):
             "t_probs": outputs.treatment_probs.detach().contiguous().cpu().numpy(),
         })
 
-    def compute(self) -> Dict[str, float]:
+    def compute(self) -> dict[str, float]:
         """Computes uplift and classification metrics."""
         merged_preds = {
             key: np.concatenate([p[key] for p in self.preds])
@@ -295,7 +293,7 @@ class UpliftMetrics(BaseMetric):
                     def task_name_prefix(scores, task_name):
                         return {
                             (
-                                f"task_{str(task_name)}_{key}"
+                                f"task_{task_name!s}_{key}"
                                 if len(str(task_name)) != 0
                                 else key
                             ): val

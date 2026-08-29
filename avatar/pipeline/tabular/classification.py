@@ -46,7 +46,7 @@ class TabularClassification(nn.Module):
         task_type: str = "classification",
         out_head_hidden_dim: int = 256,
         extra_hidden_dim: int = 0,
-        hidden_proj_dim: int = None,
+        hidden_proj_dim: int | None = None,
         output_head=None,
         l1_loss_weight: float = 0.0,
     ):

@@ -3,6 +3,6 @@ from avatar.pipeline.uplift.treatment_interaction import IgnoreTreatmentInteract
 from .s_learner import SLearner
 
 __all__ = [
-    "SLearner",
     "IgnoreTreatmentInteraction",
+    "SLearner",
 ]

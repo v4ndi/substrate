@@ -35,7 +35,10 @@ class StandardScaler(BasePreprocessor):
     """
 
     def __init__(
-        self, columns: list[str], fillna: bool = True, to_log_columns: list[str] = None
+        self,
+        columns: list[str],
+        fillna: bool = True,
+        to_log_columns: list[str] | None = None,
     ) -> None:
         assert len(columns) > 0, "Expected list of columns"
         self.columns = columns
@@ -69,7 +72,7 @@ class StandardScaler(BasePreprocessor):
         self,
         df: DataFrame,
         new_columns: list[str],
-        new_to_log_columns: list[str] = None,
+        new_to_log_columns: list[str] | None = None,
     ) -> None:
         """Add new columns to the scaler and compute their statistics.
 

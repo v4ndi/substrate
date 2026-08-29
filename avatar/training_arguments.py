@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass
@@ -35,12 +34,12 @@ class TrainingArguments:
     num_epochs: int = 1000
     seed: int = 42
     device_specific: bool = False  # deprecated, always False
-    start_epoch: Optional[int] = 0
-    clip_grad_norm: Optional[float] = None
-    max_saved_checkpoints: Optional[int] = None
-    checkpoint_state: Optional[str] = None
-    model_state: Optional[str] = None
-    steps_before_evaluation: Optional[int] = None
+    start_epoch: int | None = 0
+    clip_grad_norm: float | None = None
+    max_saved_checkpoints: int | None = None
+    checkpoint_state: str | None = None
+    model_state: str | None = None
+    steps_before_evaluation: int | None = None
     distributed_evaluate: bool = False
 
     def to_dict(self) -> dict[str, object]:

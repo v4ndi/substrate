@@ -22,9 +22,11 @@ class LabelEncoder(BasePreprocessor):
     def __init__(
         self,
         columns: list[str],
-        spec_tokens: dict[str, int] = {"unk": 0},
+        spec_tokens: dict[str, int] | None = None,
         frequency_encoder=False,
     ):
+        if spec_tokens is None:
+            spec_tokens = {"unk": 0}
         assert len(columns) > 0, "Expected list of columns"
         assert list(range(len(spec_tokens))) == sorted([
             val for val in spec_tokens.values()

@@ -1,4 +1,5 @@
-from typing import Any, Dict, Iterator, List, Optional
+from collections.abc import Iterator
+from typing import Any
 
 import numpy as np
 import pyarrow.dataset as ds
@@ -21,8 +22,8 @@ def parquet_num_rows(path: str) -> int:
 
 
 def read_parquet_file(
-    file: str, columns: Optional[List[str]] = None, shuffle: bool = True
-) -> Iterator[Dict[str, Any]]:
+    file: str, columns: list[str] | None = None, shuffle: bool = True
+) -> Iterator[dict[str, Any]]:
     """Reads a parquet file and yields records as dictionaries with optional shuffling.
 
     Args:
@@ -63,8 +64,8 @@ def read_parquet_file(
     for rb in table.to_batches():
         col_arrays = [rb.column(x) for x in columns]
         col_arrays = [x.to_numpy(zero_copy_only=False) for x in col_arrays]
-        for row in zip(*col_arrays):
+        for row in zip(*col_arrays, strict=False):
             record = {}
-            for col, arr in zip(columns, row):
+            for col, arr in zip(columns, row, strict=False):
                 record[col] = arr
             yield record

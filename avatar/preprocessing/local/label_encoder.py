@@ -7,8 +7,8 @@ backend can be loaded by the other.
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from copy import deepcopy
-from typing import Mapping, Sequence
 
 import pyarrow as pa
 
@@ -60,7 +60,7 @@ class LabelEncoder:
         self._mappers: dict[str, CategoricalMapper] | None = None
 
     # -- fit -------------------------------------------------------------
-    def fit(self, source: Source) -> "LabelEncoder":
+    def fit(self, source: Source) -> LabelEncoder:
         assert all(
             len(self.values_to_id[c]) == len(self.spec_tokens) for c in self.columns
         ), "Your encoder is already fitted"
@@ -84,8 +84,11 @@ class LabelEncoder:
         if self._mappers is None:
             self._mappers = {
                 col: CategoricalMapper(
-                    {k: v for k, v in self.values_to_id[col].items()
-                     if k not in self.spec_tokens},
+                    {
+                        k: v
+                        for k, v in self.values_to_id[col].items()
+                        if k not in self.spec_tokens
+                    },
                     unk_id=self.values_to_id[col]["unk"],
                 )
                 for col in self.columns
@@ -108,9 +111,7 @@ class LabelEncoder:
 
     def transform(self, source: Source, output_path: str | None = None):
         """Transform ``source``; write to ``output_path`` or return a ``pa.Table``."""
-        return _run_batches(
-            source, self.transform_batch, output_path, self.batch_rows
-        )
+        return _run_batches(source, self.transform_batch, output_path, self.batch_rows)
 
     def fit_transform(self, source: Source, output_path: str | None = None):
         self.fit(source)
@@ -127,7 +128,7 @@ class LabelEncoder:
         return deepcopy(state)
 
     @classmethod
-    def load(cls, attr_dict: dict) -> "LabelEncoder":
+    def load(cls, attr_dict: dict) -> LabelEncoder:
         attr_dict = deepcopy(attr_dict)
         inst = cls.__new__(cls)
         inst.columns = list(attr_dict["columns"])

@@ -14,7 +14,7 @@ class RocAucScore(BaseMetric):
         in this column and also averaged across groups
     """
 
-    def __init__(self, group_column: str = None):
+    def __init__(self, group_column: str | None = None):
         super().__init__()
         self.group_column = group_column
         self.preds = []

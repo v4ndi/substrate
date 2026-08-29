@@ -16,8 +16,8 @@ class GroupAverageMetricWrapper(BaseMetric):
     def __init__(
         self,
         metric: BaseMetric,
-        groups: dict[str, list[str]] = None,
-        avg_over_regulars: dict[str, list[str]] = None,
+        groups: dict[str, list[str]] | None = None,
+        avg_over_regulars: dict[str, list[str]] | None = None,
     ):
         super().__init__()
         self.metric = metric

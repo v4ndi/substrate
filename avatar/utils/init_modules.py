@@ -1,7 +1,7 @@
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Union
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -35,7 +35,7 @@ def get_params_group(model, named_params_to_group=None, need_logs=True):
 
 
 def init_optimizer(
-    config: Union[DictConfig, dict[str, Any]],
+    config: DictConfig | dict[str, Any],
     model: nn.Module,
 ) -> torch.optim.Optimizer:
     """Initializes and configures a PyTorch optimizer based on the provided configuration.
@@ -94,7 +94,7 @@ def init_profiler(mlflow_arguments):
 
 
 def init_scheduler(
-    config: Union[DictConfig, dict[str, Any]],
+    config: DictConfig | dict[str, Any],
     optimizer: torch.optim.Optimizer,
     train_dataloader: torch.utils.data.DataLoader,
 ) -> torch.optim.lr_scheduler._LRScheduler:
@@ -189,15 +189,15 @@ def init_exp_run_name(config: DictConfig):
     experiment_name = config["mlflow"]["experiment_name"]
     run_name = config["mlflow"]["run_name"]
     if run_name != "debug":
-        assert not os.path.exists(
-            f"best_models/{experiment_name}/{run_name}"
-        ), f"directory with run_name: {run_name} and experiment_name: \
+        assert not os.path.exists(f"best_models/{experiment_name}/{run_name}"), (
+            f"directory with run_name: {run_name} and experiment_name: \
             {experiment_name} already exists"
+        )
     return experiment_name, run_name
 
 
 def init_swa_model(
-    config: Union[DictConfig, dict[str, Any]],
+    config: DictConfig | dict[str, Any],
     model,
 ) -> torch.optim.swa_utils.AveragedModel:
     if "swa_model" not in config:

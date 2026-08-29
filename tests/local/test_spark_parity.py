@@ -11,7 +11,6 @@ local backend is always deterministically time-sorted.
 """
 
 import numpy as np
-import pytest
 
 CAT = ["cat_a", "cat_b"]
 NUM = ["num_1", "num_2", "num_3"]
@@ -81,7 +80,7 @@ def test_tabular_fit_and_cross_load(spark_session, write_parquet, tabular_table)
 def _canon(row, cols):
     order = sorted(
         range(len(row["timestamps"])),
-        key=lambda j: (row["timestamps"][j],) + tuple(row[c][j] for c in cols),
+        key=lambda j: (row["timestamps"][j], *tuple(row[c][j] for c in cols)),
     )
     return {c: [row[c][j] for j in order] for c in cols}
 
@@ -113,7 +112,9 @@ def test_sequence_fit_and_cross_load(spark_session, write_parquet, sequence_tabl
         )
     assert spark_pp.columns_meta == local_pp.columns_meta
 
-    sout = spark_pp.transform(sdf).toPandas().sort_values("epk_id").reset_index(drop=True)
+    sout = (
+        spark_pp.transform(sdf).toPandas().sort_values("epk_id").reset_index(drop=True)
+    )
     lout = (
         Local.load(spark_pp.dump())
         .transform(d)

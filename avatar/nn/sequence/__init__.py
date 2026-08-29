@@ -5,6 +5,6 @@ from .transformers_wrapper import TransformersWrapper
 __all__ = [
     "BaseSequenceBackbone",
     "BaseSequenceModel",
-    "TransformersWrapper",
     "ModelPruningWrapper",
+    "TransformersWrapper",
 ]

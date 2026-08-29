@@ -1,7 +1,6 @@
 import datetime
 import os
 import subprocess
-from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -18,7 +17,9 @@ except ImportError:
     HAS_CATBOOST = False
 
 
-def save_to_parquet(df: pd.DataFrame, path_to_save: str, prefix: str = None) -> str:
+def save_to_parquet(
+    df: pd.DataFrame, path_to_save: str, prefix: str | None = None
+) -> str:
     """
     Save a DataFrame as a parquet file in the specified directory.
 
@@ -72,9 +73,9 @@ class CollectEmbeddings(BaseMetric):
         self,
         path_to_save: str,
         save_steps: int,
-        prefix: Optional[str] = None,
-        additional_columns: list[str] = None,
-        month_part_value: str = None,
+        prefix: str | None = None,
+        additional_columns: list[str] | None = None,
+        month_part_value: str | None = None,
     ):
         """
         Initialize the CollectEmbeddings metric.
@@ -172,10 +173,10 @@ class CatboostCampaignBenchmark(CollectEmbeddings):
         catboost_params: dict[str, object],
         split: dict[str, str],
         repartition_by_product: bool = False,
-        channel_type: str = None,
-        control_flag: str = None,
-        additional_columns: list[str] = None,
-        prefix: Optional[str] = None,
+        channel_type: str | None = None,
+        control_flag: str | None = None,
+        additional_columns: list[str] | None = None,
+        prefix: str | None = None,
     ):
         """
         Initialize the CatboostCampaignBenchmark instance.
@@ -643,11 +644,13 @@ class MLPCampaignBenchmark(BaseMetric):
         save_steps: int,
         compute_contour: list[str],
         split: dict[str, str],
-        additional_columns: list[str] = [],
+        additional_columns: list[str] | None = None,
         contour_name_column="product_name",
         prefix=None,
         cat_feature=False,
     ):
+        if additional_columns is None:
+            additional_columns = []
         self.config_name = config_name
         self.path_to_config_dir = path_to_config_dir
         self.mlflow_run_name = mlflow_run_name
@@ -708,7 +711,7 @@ class MLPCampaignBenchmark(BaseMetric):
             predict["cat_features"] = [
                 [target_attr_2, target_attr_3]
                 for target_attr_2, target_attr_3 in zip(
-                    predict["target_attr_2"], predict["target_attr_3"]
+                    predict["target_attr_2"], predict["target_attr_3"], strict=False
                 )
             ]
         predict_df = pd.DataFrame().from_dict(predict)

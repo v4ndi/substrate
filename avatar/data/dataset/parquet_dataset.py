@@ -1,8 +1,9 @@
 import math
 import os
 import warnings
+from collections.abc import Iterator
 from glob import glob
-from typing import Any, Iterator, Optional
+from typing import Any
 
 import numpy as np
 import torch
@@ -32,7 +33,7 @@ class BaseIterDataset(torch.utils.data.IterableDataset):
     def __init__(
         self,
         path: str | list,
-        read_columns: Optional[list[str]] = None,
+        read_columns: list[str] | None = None,
         shuffle_files: bool = True,
         shuffle_pq: bool = True,
     ):
@@ -79,14 +80,15 @@ class BaseIterDataset(torch.utils.data.IterableDataset):
                     f"number of files ({len(self.files)}). Some workers will not "
                     "receive any work.",
                     RuntimeWarning,
+                    stacklevel=2,
                 )
 
         if worker_info is None:
             iter_start = 0
             iter_end = len(self.files)
         else:
-            per_worker = int(
-                math.ceil((len(self.files) - 0) / float(worker_info.num_workers))
+            per_worker = math.ceil(
+                (len(self.files) - 0) / float(worker_info.num_workers)
             )
             worker_id = worker_info.id
             iter_start = 0 + worker_id * per_worker
@@ -137,7 +139,7 @@ class IterDataset(BaseIterDataset):
     def __init__(
         self,
         path: str | list,
-        read_columns: Optional[list[str]] = None,
+        read_columns: list[str] | None = None,
         shuffle_files: bool = False,
         shuffle_pq: bool = True,
         sampler: BaseSampler = None,

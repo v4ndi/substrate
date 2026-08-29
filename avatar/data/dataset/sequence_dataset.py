@@ -3,7 +3,6 @@ import random
 import warnings
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
-from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -50,14 +49,14 @@ class EventSequenceDataset(IterDataset):
         self,
         path: str,
         sequence_columns: list[str],
-        event_time_column: Optional[str] = None,
-        event_ids_column: Optional[str] = None,
-        selected_event_ids: Optional[list[int]] = None,
+        event_time_column: str | None = None,
+        event_ids_column: str | None = None,
+        selected_event_ids: list[int] | None = None,
         min_length: int = 1,
         max_length: int = 512,
         random_slicing: bool = False,
         has_tabular: bool = False,
-        read_columns: Optional[list[str]] = None,
+        read_columns: list[str] | None = None,
         shuffle_files=False,
         shuffle_pq=True,
         lazy_process: bool = False,
@@ -126,7 +125,7 @@ class EventSequenceDataset(IterDataset):
 
     def _modalities_mask(
         self, record: dict, start: int, end: int
-    ) -> Optional[torch.Tensor]:
+    ) -> torch.Tensor | None:
         """Creates and applies a modality mask based on selected event IDs.
 
         Processes event IDs by:
@@ -318,14 +317,14 @@ class ShardEventSequenceDataset(EventSequenceDataset):
         self,
         path: str,
         sequence_columns: list[str],
-        event_time_column: Optional[str] = None,
-        event_ids_column: Optional[str] = None,
-        selected_event_ids: Optional[list[int]] = None,
+        event_time_column: str | None = None,
+        event_ids_column: str | None = None,
+        selected_event_ids: list[int] | None = None,
         min_length: int = 1,
         max_length: int = 512,
         random_slicing: bool = False,
         has_tabular: bool = False,
-        read_columns: Optional[list[str]] = None,
+        read_columns: list[str] | None = None,
         shuffle_files: bool = False,
         shuffle_pq: bool = True,
         lazy_process: bool = False,
@@ -376,7 +375,8 @@ class ShardEventSequenceDataset(EventSequenceDataset):
         )
         if len(self.files) != source_len_files:
             warnings.warn(
-                f"Filtered {source_len_files - len(self.files)} files from {source_len_files}."
+                f"Filtered {source_len_files - len(self.files)} files from {source_len_files}.",
+                stacklevel=2,
             )
 
     def __len__(self):
@@ -463,7 +463,8 @@ class ShardEventSequenceDataset(EventSequenceDataset):
         max_rows = stats_df["valid_rows"].max()
 
         warnings.warn(
-            f"\nmean_rows: {mean_rows}, std_rows: {std_rows}, min_rows: {min_rows}, max_rows: {max_rows}\n"
+            f"\nmean_rows: {mean_rows}, std_rows: {std_rows}, min_rows: {min_rows}, max_rows: {max_rows}\n",
+            stacklevel=2,
         )
 
         return stats_df["file_path"].tolist(), stats_df["valid_rows"].min()

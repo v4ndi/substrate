@@ -12,10 +12,10 @@ from .tabular_collate_fn import (
 __all__ = [
     "BaseCollateFn",
     "EventSequenceCollateFn",
+    "FixedHorizonCollateFn",
+    "MultiTaskSupervisedCollateFn",
+    "MultiTaskUpliftCollateFn",
+    "SupervisedCollateFn",
     "TabularCollateFn",
     "UpliftCollateFn",
-    "FixedHorizonCollateFn",
-    "SupervisedCollateFn",
-    "MultiTaskUpliftCollateFn",
-    "MultiTaskSupervisedCollateFn",
 ]

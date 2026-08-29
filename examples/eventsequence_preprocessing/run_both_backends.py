@@ -78,7 +78,7 @@ def _maybe_spark():
 def _canon(row):
     order = sorted(
         range(len(row["timestamps"])),
-        key=lambda j: (row["timestamps"][j],) + tuple(row[c][j] for c in LIST_COLS),
+        key=lambda j: (row["timestamps"][j], *tuple(row[c][j] for c in LIST_COLS)),
     )
     return {c: [row[c][j] for j in order] for c in LIST_COLS}
 
@@ -91,11 +91,12 @@ def compare(sout, lout, label: str) -> None:
     for i in range(len(sout)):
         assert sout["epk_id"].iloc[i] == lout["epk_id"].iloc[i]
         ca, cb = _canon(sout.iloc[i]), _canon(lout.iloc[i])
-        for c in CAT + ["event_ids"]:
+        for c in [*CAT, "event_ids"]:
             assert ca[c] == cb[c], (label, c, i)
-        for c in NUM + ["timestamps"]:
-            assert np.allclose(np.asarray(ca[c], np.float32),
-                               np.asarray(cb[c], np.float32), atol=1e-4), (label, c, i)
+        for c in [*NUM, "timestamps"]:
+            assert np.allclose(
+                np.asarray(ca[c], np.float32), np.asarray(cb[c], np.float32), atol=1e-4
+            ), (label, c, i)
         if np.all(np.diff(np.asarray(lout["timestamps"].iloc[i])) >= 0):
             mono += 1
     print(f"  OK  {label}  ({len(sout)} users, local time-sorted {mono}/{len(sout)})")
@@ -116,10 +117,15 @@ def main() -> None:
         tbl = generate_data.build_table(args.users)
         step = -(-tbl.num_rows // 6)
         for i, s in enumerate(range(0, tbl.num_rows, step)):
-            pq.write_table(tbl.slice(s, step), os.path.join(args.data, f"part-{i:03d}.parquet"))
+            pq.write_table(
+                tbl.slice(s, step), os.path.join(args.data, f"part-{i:03d}.parquet")
+            )
 
-    n_events = sum(pq.ParquetFile(f.path).metadata.num_rows
-                   for f in os.scandir(args.data) if f.name.endswith(".parquet"))
+    n_events = sum(
+        pq.ParquetFile(f.path).metadata.num_rows
+        for f in os.scandir(args.data)
+        if f.name.endswith(".parquet")
+    )
     print(f"events={n_events}")
 
     from avatar.preprocessing.local import EventSequencePreprocessor as LocalSeq
@@ -136,7 +142,9 @@ def main() -> None:
         print({c: list(np.asarray(row[c]))[:6] for c in LIST_COLS})
         return
 
-    from avatar.preprocessing.spark.pipeline import EventSequencePreprocessor as SparkSeq
+    from avatar.preprocessing.spark.pipeline import (
+        EventSequencePreprocessor as SparkSeq,
+    )
 
     sdf = spark.read.parquet(args.data)
     spark_pp = SparkSeq(**KW)
@@ -144,11 +152,17 @@ def main() -> None:
     spark_out = spark_pp.transform(sdf).toPandas()
 
     for c in CAT:
-        assert spark_pp.label_encoder.values_to_id[c] == local_pp.label_encoder.values_to_id[c]
+        assert (
+            spark_pp.label_encoder.values_to_id[c]
+            == local_pp.label_encoder.values_to_id[c]
+        )
     for c in NUM:
-        s, l = spark_pp.standard_scaler.mean_std[c], local_pp.standard_scaler.mean_std[c]
-        assert np.isclose(s["mean"], l["mean"], atol=1e-6, equal_nan=True)
-        assert np.isclose(s["std"], l["std"], atol=1e-6, equal_nan=True)
+        sp, lo = (
+            spark_pp.standard_scaler.mean_std[c],
+            local_pp.standard_scaler.mean_std[c],
+        )
+        assert np.isclose(sp["mean"], lo["mean"], atol=1e-6, equal_nan=True)
+        assert np.isclose(sp["std"], lo["std"], atol=1e-6, equal_nan=True)
     assert spark_pp.columns_meta == local_pp.columns_meta
     print("[fit] statistics + columns_meta identical across backends")
 
@@ -157,10 +171,16 @@ def main() -> None:
     spark_from_local = SparkSeq.load(local_pp.dump())
 
     compare(spark_out, local_out, "spark.fit          vs local.fit")
-    compare(spark_out, local_from_spark.transform(args.data).to_pandas(),
-            "spark.fit          vs local.load(spark.dump())")
-    compare(spark_from_local.transform(sdf).toPandas(), local_out,
-            "spark.load(local.dump()) vs local.fit")
+    compare(
+        spark_out,
+        local_from_spark.transform(args.data).to_pandas(),
+        "spark.fit          vs local.load(spark.dump())",
+    )
+    compare(
+        spark_from_local.transform(sdf).toPandas(),
+        local_out,
+        "spark.load(local.dump()) vs local.fit",
+    )
 
     # bucketed (bounded-memory) path must match the single-pass path
     big = local_from_spark.transform(args.data, n_buckets=8).to_pandas()

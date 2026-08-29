@@ -145,7 +145,7 @@ class TabBackboneExpert(nn.Module):
     def __init__(
         self,
         tabular_encoder: BaseTabularEncoder,
-        hidden_size: int = None,
+        hidden_size: int | None = None,
         pre_norm: bool = False,
         residual: bool = False,
     ):
@@ -166,12 +166,12 @@ class TaskHead(nn.Module):
         self,
         dropout_head: float = 0.15,
         out_head: nn.Module = None,
-        loss_fn: nn.Module = nn.BCEWithLogitsLoss(),
+        loss_fn: nn.Module | None = None,
     ):
         super().__init__()
         self.dropout_head = dropout_head
         self.out_head = out_head
-        self.loss_fn = loss_fn
+        self.loss_fn = loss_fn if loss_fn is not None else nn.BCEWithLogitsLoss()
 
     def init_head(
         self,
@@ -220,18 +220,20 @@ class MMoEBackbone(nn.Module):
     def __init__(
         self,
         num_tasks: int,
-        experts: list[nn.Module] = None,
-        expert_cls: type[nn.Module] = None,
-        expert_kwargs: dict = None,
-        num_experts: int = None,
+        experts: list[nn.Module] | None = None,
+        expert_cls: type[nn.Module] | None = None,
+        expert_kwargs: dict | None = None,
+        num_experts: int | None = None,
         shared_tabular_encoder: BaseTabularEncoder = None,
-        aggregation_config={"name": "mean"},
-        hidden_state_dim: int = None,
-        proj_hiddens_to_dim: int = None,
-        normalize_hidden_states: dict[str, int] = None,
-        gate_hidden_dim: int = None,
+        aggregation_config=None,
+        hidden_state_dim: int | None = None,
+        proj_hiddens_to_dim: int | None = None,
+        normalize_hidden_states: dict[str, int] | None = None,
+        gate_hidden_dim: int | None = None,
         gate_dropout_p: float = 0.0,
     ):
+        if aggregation_config is None:
+            aggregation_config = {"name": "mean"}
         super().__init__()
 
         self.tasks = [str(x) for x in range(num_tasks)]
@@ -324,7 +326,7 @@ class MMoEBackbone(nn.Module):
         self,
         embeddings: torch.FloatTensor,
         hidden_state: torch.FloatTensor = None,
-        task_name: int | str = None,
+        task_name: int | str | None = None,
         **kwargs,
     ):
         task_name = (
@@ -368,7 +370,7 @@ class MMoE(nn.Module):
         tabular_encoder: MMoEBackbone,
         heads: dict[str, nn.Module],
         multi_task_loss: nn.Module,
-        n_groups: int = None,
+        n_groups: int | None = None,
         add_treatment_feature: bool = False,
         group_interaction: BaseTreatmentInteraction = None,
         gate_entropy_loss_coef: float = 0.0,
@@ -540,10 +542,10 @@ class PLEBackbone(MMoEBackbone):
     def __init__(
         self,
         num_tasks: int,
-        shared_expert_cls: type[nn.Module] = None,
-        shared_expert_kwargs: dict = None,
-        task_expert_cls: type[nn.Module] = None,
-        task_expert_kwargs: dict = None,
+        shared_expert_cls: type[nn.Module] | None = None,
+        shared_expert_kwargs: dict | None = None,
+        task_expert_cls: type[nn.Module] | None = None,
+        task_expert_kwargs: dict | None = None,
         num_shared_experts: int = 2,
         num_specific_experts: int = 1,
         **kwargs,
@@ -601,7 +603,7 @@ class PLEBackbone(MMoEBackbone):
         self,
         embeddings: torch.FloatTensor,
         hidden_state: torch.FloatTensor = None,
-        task_name: int | str = None,
+        task_name: int | str | None = None,
         **kwargs,
     ):
         task_name = (

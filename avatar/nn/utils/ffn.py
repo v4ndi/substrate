@@ -1,5 +1,3 @@
-from typing import Optional, Union
-
 import torch
 from torch import nn
 
@@ -32,11 +30,11 @@ class FeedForwardNetwork(nn.Module):
     def __init__(
         self,
         input_dim: int,
-        output_dim: int = None,
-        hidden_dim: int = None,
+        output_dim: int | None = None,
+        hidden_dim: int | None = None,
         dropout_p: int = 0.15,
-        activation: Optional[Union[str, nn.Module]] = nn.SELU,
-        normalization: Optional[Union[str, nn.Module]] = nn.LayerNorm,
+        activation: str | nn.Module | None = nn.SELU,
+        normalization: str | nn.Module | None = nn.LayerNorm,
         end_normalization: bool = False,
         embedding_processor=None,
         dropout_first: bool = False,

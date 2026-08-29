@@ -8,7 +8,7 @@ from accelerate import InitProcessGroupKwargs
 
 
 def init_accelerate(
-    accelerate_arguments: dict[str, Any], mlflow_arguments: dict[str, Any] = None
+    accelerate_arguments: dict[str, Any], mlflow_arguments: dict[str, Any] | None = None
 ) -> accelerate.Accelerator:
     """Initialize and configure the Hugging Face Accelerator with optional MLflow tracking.
 

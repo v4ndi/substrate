@@ -7,9 +7,9 @@ from .ste_modeling import (
 )
 
 __all__ = [
-    "STEv2",
-    "STEv2Block",
-    "MoESTEv2",
     "CrossAttentionEncoderBlock",
     "EncoderBlock",
+    "MoESTEv2",
+    "STEv2",
+    "STEv2Block",
 ]

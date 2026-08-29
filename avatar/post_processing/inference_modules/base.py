@@ -16,7 +16,10 @@ class BaseInference(abc.ABC):
     """
 
     def __init__(
-        self, path_to_save: str, prefix: str = None, output_format: str = "parquet"
+        self,
+        path_to_save: str,
+        prefix: str | None = None,
+        output_format: str = "parquet",
     ):
         self.path_to_save = path_to_save
         assert output_format in ["csv", "parquet"], "Wrong output format"

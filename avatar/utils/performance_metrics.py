@@ -6,8 +6,9 @@ import math
 import os
 import time
 import warnings
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, Mapping, Optional
+from typing import Any
 
 import torch
 import torch.distributed as dist
@@ -23,7 +24,7 @@ except ImportError:  # pragma: no cover - depends on deployment extras
     pynvml = None
 
 
-def infer_batch_size(batch: Any) -> Optional[int]:
+def infer_batch_size(batch: Any) -> int | None:
     """Find a batch dimension without depending on a specific collate class."""
     if isinstance(batch, torch.Tensor):
         return int(batch.shape[0]) if batch.ndim > 0 else None
@@ -33,7 +34,7 @@ def infer_batch_size(batch: Any) -> Optional[int]:
             if size is not None:
                 return size
         return None
-    if isinstance(batch, (tuple, list)):
+    if isinstance(batch, tuple | list):
         for value in batch:
             size = infer_batch_size(value)
             if size is not None:
@@ -270,7 +271,7 @@ def reduce_epoch_performance(
     epoch_wall_sec: float,
     local_samples: int,
     local_batches: int,
-    shard_stats: Optional[dict[str, float]] = None,
+    shard_stats: dict[str, float] | None = None,
     total_raw_rows: int = 0,
     total_parquet_bytes: int = 0,
 ) -> dict[str, float]:

@@ -4,7 +4,7 @@ from .tabular_pipe import TabularPreprocessor
 
 __all__ = [
     "BaseDataPipeline",
-    "NumCatPipeline",
     "EventSequencePreprocessor",
+    "NumCatPipeline",
     "TabularPreprocessor",
 ]

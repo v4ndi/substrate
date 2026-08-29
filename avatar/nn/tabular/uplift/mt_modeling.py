@@ -74,8 +74,8 @@ class MultiTreatmentSTE(nn.Module):
         hidden_size: int,
         tabular_encoder: BaseTabularEncoder,
         treatment_encoder: BaseTabularEncoder,
-        aggregation_config: dict = {"name": "mean"},
-        hidden_state_dim: int = None,
+        aggregation_config: dict | None = None,
+        hidden_state_dim: int | None = None,
         embedding_processor=None,
     ):
         """
@@ -86,6 +86,8 @@ class MultiTreatmentSTE(nn.Module):
             attn_dropout: float = 0.15 - attention dropout
             need_weights: bool = False - return attn_scores or not
         """
+        if aggregation_config is None:
+            aggregation_config = {"name": "mean"}
         super().__init__()
         self.feature_encoder = tabular_encoder
         self.treatment_encoder = treatment_encoder

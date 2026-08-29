@@ -3,10 +3,9 @@ import json
 import os
 import time
 import warnings
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import partial
-from typing import Iterator, List, Optional, Union
 
 import numpy as np
 import pyarrow.dataset as ds
@@ -47,11 +46,11 @@ class TabularDataset(IterDataset):
     def __init__(
         self,
         path: str | list,
-        read_columns: Optional[List[str]] = None,
+        read_columns: list[str] | None = None,
         shuffle_files: bool = False,
         shuffle_pq: bool = True,
-        hidden_state_column: str = None,
-        hidden_state_columns: Optional[Union[str, List[str]]] = None,
+        hidden_state_column: str | None = None,
+        hidden_state_columns: str | list[str] | None = None,
         lazy_process: bool = False,
         sampler: BaseSampler = None,
         **kwargs,
@@ -95,7 +94,7 @@ class TabularDataset(IterDataset):
             return False
 
     @staticmethod
-    def process_tabular(record, hidden_state_columns: Optional[list[str]] = None):
+    def process_tabular(record, hidden_state_columns: list[str] | None = None):
         """Process tabular features to torch.tensor"""
         tabular_features = {
             "cat_features": None,
@@ -177,20 +176,20 @@ class ShardTabularDataset(IterDataset):
     def __init__(
         self,
         path: str | list,
-        read_columns: Optional[List[str]] = None,
+        read_columns: list[str] | None = None,
         shuffle_files: bool = False,
         shuffle_pq: bool = True,
-        hidden_state_column: str = None,
-        hidden_state_columns: Optional[Union[str, List[str]]] = None,
+        hidden_state_column: str | None = None,
+        hidden_state_columns: str | list[str] | None = None,
         lazy_process: bool = False,
         sampler: BaseSampler = None,
         shard_by_rank: bool = False,
         drop_tail: bool = True,
         rotate_tail: bool = False,
         scan_workers: int = 4,
-        scan_ranks: Optional[int] = None,
+        scan_ranks: int | None = None,
         filter_cache: bool = True,
-        filter_cache_dir: Optional[str] = None,
+        filter_cache_dir: str | None = None,
         filter_cache_timeout_sec: float = 3600.0,
         **kwargs,
     ):
@@ -246,19 +245,19 @@ class ShardTabularDataset(IterDataset):
                 *self.read_columns,
                 *sorted(self._source_only_columns),
             ]
-        self._file_counts: Optional[np.ndarray] = None
+        self._file_counts: np.ndarray | None = None
         self._file_to_index = {file: index for index, file in enumerate(self.files)}
-        self._filter_cache_path: Optional[str] = None
-        self._filter_manifest_path: Optional[str] = None
+        self._filter_cache_path: str | None = None
+        self._filter_manifest_path: str | None = None
         self._filter_index_paths: list[str] = []
-        self._filter_manifest: Optional[dict] = None
+        self._filter_manifest: dict | None = None
         self._filter_cache_hit = False
         self._epoch_state = torch.zeros(1, dtype=torch.int64)
         if self.rotate_tail:
             # Make set_epoch() visible to persistent DataLoader workers.
             self._epoch_state.share_memory_()
         self._scan_duration_sec = 0.0
-        self._epoch_metric_counters: Optional[torch.Tensor] = None
+        self._epoch_metric_counters: torch.Tensor | None = None
         self.total_parquet_bytes = sum(os.path.getsize(file) for file in self.files)
         self._world_size, self._rank = self._resolve_dist_info()
         self._effective_scan_ranks = min(
@@ -318,18 +317,18 @@ class ShardTabularDataset(IterDataset):
                 str(key): cls._cache_json_value(item)
                 for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))
             }
-        if isinstance(value, (set, frozenset)):
+        if isinstance(value, set | frozenset):
             normalized = [cls._cache_json_value(item) for item in value]
             return sorted(normalized, key=repr)
-        if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+        if isinstance(value, Sequence) and not isinstance(value, str | bytes):
             return [cls._cache_json_value(item) for item in value]
         if isinstance(value, np.ndarray):
             return [cls._cache_json_value(item) for item in value.tolist()]
         if isinstance(value, np.generic):
-            if isinstance(value, (np.datetime64, np.timedelta64)):
+            if isinstance(value, np.datetime64 | np.timedelta64):
                 return {"numpy_type": type(value).__name__, "value": str(value)}
             return value.item()
-        if value is None or isinstance(value, (bool, int, float, str)):
+        if value is None or isinstance(value, bool | int | float | str):
             return value
         return {"python_type": type(value).__qualname__, "value": repr(value)}
 
@@ -402,7 +401,7 @@ class ShardTabularDataset(IterDataset):
                 os.unlink(temporary_path)
 
     def _validate_index_file(
-        self, path: str, physical_rows: int, valid_rows: Optional[int] = None
+        self, path: str, physical_rows: int, valid_rows: int | None = None
     ) -> int:
         try:
             indexes = np.load(path, mmap_mode="r", allow_pickle=False)
@@ -429,7 +428,7 @@ class ShardTabularDataset(IterDataset):
 
     def _load_filter_manifest(
         self, payload: dict, cache_key: str
-    ) -> tuple[Optional[dict], Optional[str]]:
+    ) -> tuple[dict | None, str | None]:
         if not os.path.exists(self._filter_manifest_path):
             return None, "manifest is missing"
         try:
@@ -442,7 +441,9 @@ class ShardTabularDataset(IterDataset):
             entries = manifest.get("files")
             if not isinstance(entries, list) or len(entries) != len(self.files):
                 raise ValueError("manifest file list does not match the dataset")
-            for index, (entry, identity) in enumerate(zip(entries, payload["files"])):
+            for index, (entry, identity) in enumerate(
+                zip(entries, payload["files"], strict=False)
+            ):
                 valid_rows = entry.get("valid_rows")
                 if not isinstance(valid_rows, int) or valid_rows < 0:
                     raise ValueError(f"file {index} has an invalid valid_rows value")
@@ -1001,7 +1002,7 @@ class ShardTabularDataset(IterDataset):
             return False
 
     @staticmethod
-    def process_tabular(record, hidden_state_columns: Optional[list[str]] = None):
+    def process_tabular(record, hidden_state_columns: list[str] | None = None):
         """Process tabular features to torch.tensor"""
         tabular_features = {
             "cat_features": None,

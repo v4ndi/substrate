@@ -4,9 +4,9 @@ from .tabular_dataset import ShardTabularDataset, TabularDataset
 
 __all__ = [
     "BaseIterDataset",
-    "IterDataset",
-    "TabularDataset",
-    "ShardTabularDataset",
     "EventSequenceDataset",
+    "IterDataset",
     "ShardEventSequenceDataset",
+    "ShardTabularDataset",
+    "TabularDataset",
 ]

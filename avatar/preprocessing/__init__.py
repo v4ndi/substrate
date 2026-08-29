@@ -11,7 +11,7 @@ Artifacts produced by ``dump()`` are compatible across backends.
 
 import importlib
 
-__all__ = ["spark", "local"]
+__all__ = ["local", "spark"]  # noqa: F822 -- provided lazily by __getattr__
 
 
 def __getattr__(name):

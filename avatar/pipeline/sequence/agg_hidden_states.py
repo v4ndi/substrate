@@ -18,10 +18,12 @@ class SequenceModelWithAggregation(nn.Module):
     def __init__(
         self,
         sequence_model: BaseSequenceModel,
-        model_weights: str = None,
+        model_weights: str | None = None,
         freeze_backbone: bool = False,
-        aggregation_config: dict[str, any] = {"name": "mean"},
+        aggregation_config: dict[str, any] | None = None,
     ):
+        if aggregation_config is None:
+            aggregation_config = {"name": "mean"}
         super().__init__()
         self.model = sequence_model
         self.aggregation_layer = get_aggregation_layer(**aggregation_config)

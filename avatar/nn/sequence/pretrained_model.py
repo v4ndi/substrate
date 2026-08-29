@@ -15,7 +15,7 @@ class ModelPruningWrapper(BaseSequenceBackbone):
     def __init__(
         self,
         path_to_model: str,
-        pruning_config: dict = None,
+        pruning_config: dict | None = None,
         original_weight: bool = True,
     ):
         """Initializes the ModelPruningWrapper with a pre-trained model and optional pruning configuration.

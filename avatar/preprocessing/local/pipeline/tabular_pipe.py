@@ -9,8 +9,8 @@ of packing (for dataset-level / GPU preprocessing).
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from copy import deepcopy
-from typing import Optional, Sequence
 
 import numpy as np
 import pyarrow as pa
@@ -18,6 +18,7 @@ import pyarrow.parquet as pq
 
 from avatar.preprocessing.base.io import Source, iter_record_batches
 from avatar.preprocessing.base.offsets import build_offset_map
+
 from .base_pipe import NumCatPipeline
 
 
@@ -33,13 +34,15 @@ class TabularPreprocessor(NumCatPipeline):
         self,
         categorical_columns: Sequence[str] | None = None,
         numeric_columns: Sequence[str] | None = None,
-        spec_tokens: Optional[dict] = {"pad": 0},
+        spec_tokens: dict | None = None,
         label_encoder=None,
         standard_scaler=None,
         label_encoder_kwargs=None,
         standard_scaler_kwargs=None,
         batch_rows: int = 250_000,
     ):
+        if spec_tokens is None:
+            spec_tokens = {"pad": 0}
         super().__init__(
             categorical_columns=categorical_columns,
             numeric_columns=numeric_columns,
@@ -54,16 +57,21 @@ class TabularPreprocessor(NumCatPipeline):
         self.vocab_size = len(self.spec_tokens) if self.cat_cols is not None else 0
 
     # -- fit -------------------------------------------------------------
-    def fit(self, source: Source, create_offset_only: bool = False) -> "TabularPreprocessor":
+    def fit(
+        self, source: Source, create_offset_only: bool = False
+    ) -> TabularPreprocessor:
         if not create_offset_only:
             super().fit(source)
         self.offset_map, self.vocab_size = build_offset_map(
-            self.cat_cols, self.label_encoder.values_to_id if self.cat_cols else {},
+            self.cat_cols,
+            self.label_encoder.values_to_id if self.cat_cols else {},
             self.spec_tokens,
         )
         return self
 
-    def fit_transform(self, source, output_path=None, identity_cols=None, output="packed"):
+    def fit_transform(
+        self, source, output_path=None, identity_cols=None, output="packed"
+    ):
         self.fit(source)
         return self.transform(source, output_path, identity_cols, output)
 
@@ -118,12 +126,16 @@ class TabularPreprocessor(NumCatPipeline):
 
         return pa.table(out)
 
-    def transform(self, source: Source, output_path=None, identity_cols=None, output="packed"):
+    def transform(
+        self, source: Source, output_path=None, identity_cols=None, output="packed"
+    ):
         if output not in ("packed", "wide"):
             raise ValueError("output must be 'packed' or 'wide'")
         writer = None
         tables = []
-        for batch in iter_record_batches(source, columns=None, batch_rows=self.batch_rows):
+        for batch in iter_record_batches(
+            source, columns=None, batch_rows=self.batch_rows
+        ):
             tbl = self._transform_batch(batch, identity_cols, output)
             if output_path is None:
                 tables.append(tbl)
@@ -149,7 +161,7 @@ class TabularPreprocessor(NumCatPipeline):
         return deepcopy(state)
 
     @classmethod
-    def load(cls, attr_dict: dict) -> "TabularPreprocessor":
+    def load(cls, attr_dict: dict) -> TabularPreprocessor:
         attr_dict = deepcopy(attr_dict)
         attr_dict.pop("_backend", None)
         attr_dict.pop("_version", None)

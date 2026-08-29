@@ -1,5 +1,3 @@
-from typing import Optional, Union
-
 import torch
 from torch import nn
 
@@ -87,7 +85,7 @@ class EncoderBlock(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
-        key_padding_mask: Optional[torch.Tensor] = None,
+        key_padding_mask: torch.Tensor | None = None,
         need_weights: bool = False,
     ) -> torch.Tensor:
         x = self.input_sublayer(
@@ -213,7 +211,7 @@ class STEv2(BaseTabularBackbone):
             need_weights=need_weights,
         )
 
-    def forward(self, tab_features: Union[TabularBatch, torch.FloatTensor]):
+    def forward(self, tab_features: TabularBatch | torch.FloatTensor):
         """
         Args:
             tab_features: TabularBatch
@@ -248,8 +246,10 @@ class MoEEncoderBlock(nn.Module):
         num_experts: int,
         num_active_experts: int,
         attn_dropout: float = 0.15,
-        aggregation_config: dict[str, any] = {"name": "mean"},
+        aggregation_config: dict[str, any] | None = None,
     ):
+        if aggregation_config is None:
+            aggregation_config = {"name": "mean"}
         super().__init__()
         self.multi_head_attn = nn.MultiheadAttention(
             embed_dim=emb_dim,
@@ -307,10 +307,12 @@ class MoESTEv2(STEv2):
         num_layers: int,
         num_experts: int,
         num_active_experts: int,
-        aggregation_config: dict[str, any] = {"name": "mean"},
+        aggregation_config: dict[str, any] | None = None,
         attn_dropout: float = 0.15,
         return_tensor=False,
     ):
+        if aggregation_config is None:
+            aggregation_config = {"name": "mean"}
         super().__init__(
             embedding=embedding,
             num_heads=num_heads,

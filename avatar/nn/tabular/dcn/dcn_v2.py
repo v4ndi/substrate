@@ -6,7 +6,7 @@ from avatar.nn.utils import FeedForwardNetwork
 
 class CrossNetV2(nn.Module):
     def __init__(self, input_dim, num_layers):
-        super(CrossNetV2, self).__init__()
+        super().__init__()
         self.num_layers = num_layers
         self.cross_layers = nn.ModuleList(
             nn.Linear(input_dim, input_dim) for _ in range(self.num_layers)
@@ -24,7 +24,7 @@ class DCNv2(nn.Module):
         self,
         hidden_dim: int,
         num_layers: int,
-        output_dim: int = None,
+        output_dim: int | None = None,
         dropout_p: float = 0.15,
     ):
         super().__init__()

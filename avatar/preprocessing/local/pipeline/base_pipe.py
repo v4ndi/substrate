@@ -7,8 +7,9 @@ that order -- matching Spark ``NumCatPipeline.transform``).
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from copy import deepcopy
-from typing import Any, Dict, Sequence
+from typing import Any
 
 import numpy as np
 import pyarrow as pa
@@ -17,8 +18,9 @@ from avatar.preprocessing.base.accumulators import (
     MeanStdAccumulator,
     ValueCountAccumulator,
 )
-from avatar.preprocessing.base.encode import EPS, CategoricalMapper, signed_log1p
+from avatar.preprocessing.base.encode import EPS, signed_log1p
 from avatar.preprocessing.base.io import Source, iter_record_batches
+
 from ..label_encoder import LabelEncoder, _run_batches
 from ..standard_scaler import StandardScaler
 
@@ -30,8 +32,8 @@ class NumCatPipeline:
         numeric_columns: Sequence[str] | None,
         label_encoder: LabelEncoder | None = None,
         standard_scaler: StandardScaler | None = None,
-        label_encoder_kwargs: Dict[str, Any] | None = None,
-        standard_scaler_kwargs: Dict[str, Any] | None = None,
+        label_encoder_kwargs: dict[str, Any] | None = None,
+        standard_scaler_kwargs: dict[str, Any] | None = None,
         batch_rows: int = 250_000,
     ):
         assert categorical_columns is not None or numeric_columns is not None, (
@@ -60,7 +62,7 @@ class NumCatPipeline:
             self.standard_scaler = None
 
     # -- fit -------------------------------------------------------------
-    def fit(self, source: Source) -> "NumCatPipeline":
+    def fit(self, source: Source) -> NumCatPipeline:
         if self.num_cols is not None:
             assert sorted(self.num_cols) == sorted(self.standard_scaler.columns), (
                 "numeric_columns differ from StandardScaler.columns"
@@ -104,12 +106,10 @@ class NumCatPipeline:
         return self
 
     # -- transform -----------------------------------------------------------
-    def _encode_batch(self, batch: pa.RecordBatch) -> "dict[str, pa.Array]":
+    def _encode_batch(self, batch: pa.RecordBatch) -> dict[str, pa.Array]:
         """``{column: array}`` -- categorical -> int64 ids, numeric -> float64 scaled."""
         out: dict[str, pa.Array] = {}
-        mappers = (
-            self.label_encoder._get_mappers() if self.cat_cols else {}
-        )
+        mappers = self.label_encoder._get_mappers() if self.cat_cols else {}
         cat_set = set(self.cat_cols or [])
         num_set = set(self.num_cols or [])
         log_set = set(self.standard_scaler.to_log_columns) if self.num_cols else set()
@@ -138,9 +138,7 @@ class NumCatPipeline:
         return out
 
     def transform(self, source: Source, output_path: str | None = None):
-        return _run_batches(
-            source, self._encode_batch, output_path, self.batch_rows
-        )
+        return _run_batches(source, self._encode_batch, output_path, self.batch_rows)
 
     def fit_transform(self, source: Source, output_path: str | None = None):
         self.fit(source)
@@ -148,8 +146,11 @@ class NumCatPipeline:
 
     # -- (de)serialization -------------------------------------------------
     def dump(self) -> dict:
-        state = deepcopy({k: v for k, v in self.__dict__.items()
-                          if k not in ("label_encoder", "standard_scaler")})
+        state = deepcopy({
+            k: v
+            for k, v in self.__dict__.items()
+            if k not in ("label_encoder", "standard_scaler")
+        })
         state["label_encoder"] = (
             self.label_encoder.dump() if self.label_encoder is not None else None
         )
@@ -159,7 +160,7 @@ class NumCatPipeline:
         return deepcopy(state)
 
     @classmethod
-    def load(cls, attr_dict: dict) -> "NumCatPipeline":
+    def load(cls, attr_dict: dict) -> NumCatPipeline:
         attr_dict = deepcopy(attr_dict)
         inst = cls.__new__(cls)
         le = attr_dict.pop("label_encoder", None)

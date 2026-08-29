@@ -23,9 +23,11 @@ class TabularWithAggregatedStates(nn.Module):
     def __init__(
         self,
         backbone: BaseTabularBackbone,
-        aggregation_config={"name": "mean"},
-        late_fusion_hidden_state_dim: int = None,
+        aggregation_config=None,
+        late_fusion_hidden_state_dim: int | None = None,
     ):
+        if aggregation_config is None:
+            aggregation_config = {"name": "mean"}
         super().__init__()
         self.backbone = backbone
         self.agg_layer = get_aggregation_layer(**aggregation_config)

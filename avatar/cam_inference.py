@@ -85,7 +85,7 @@ def inference(accelerator, config, model, test_dataloader):
                     batch["group"] = channel_type
                 if "is_treat" not in batch:
                     batch["is_treat"] = (
-                        torch.ones((len(batch["epk_id"])))
+                        torch.ones(len(batch["epk_id"]))
                         .to(batch["tab_features"].cat_features.device)
                         .long()
                     )
@@ -107,4 +107,4 @@ def inference(accelerator, config, model, test_dataloader):
 
 
 if __name__ == "__main__":
-    main()  # noqa
+    main()

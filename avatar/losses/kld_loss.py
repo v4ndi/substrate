@@ -105,7 +105,7 @@ class GradNormLossBalancer(nn.Module):
         weights = torch.exp(self.log_weights)
         if self.renormilize_weights:
             weights = weights * (self.num_losses / weights.sum())
-        weighted_loss = [w * loss for w, loss in zip(weights, losses)]
+        weighted_loss = [w * loss for w, loss in zip(weights, losses, strict=False)]
         total_loss = sum(weighted_loss)
 
         grad_norms = []

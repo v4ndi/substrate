@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from copy import deepcopy
-from typing import Any, Dict, Union
+from typing import Any
 
 from pyspark.sql import DataFrame
 
@@ -76,12 +76,12 @@ class NumCatPipeline(BaseDataPipeline):
 
     def __init__(
         self,
-        categorical_columns: Union[list[str], None],
-        numeric_columns: Union[list[str], None],
-        label_encoder: Union[None, LabelEncoder] = None,
-        standard_scaler: Union[None, StandardScaler] = None,
-        label_encoder_kwargs: Dict[str, Any] = None,
-        standard_scaler_kwargs: Dict[str, Any] = None,
+        categorical_columns: list[str] | None,
+        numeric_columns: list[str] | None,
+        label_encoder: LabelEncoder | None = None,
+        standard_scaler: StandardScaler | None = None,
+        label_encoder_kwargs: dict[str, Any] | None = None,
+        standard_scaler_kwargs: dict[str, Any] | None = None,
     ):
         assert categorical_columns is not None or numeric_columns is not None
         self.cat_cols = categorical_columns

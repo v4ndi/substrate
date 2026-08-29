@@ -1,5 +1,3 @@
-from typing import Optional, Union
-
 import torch
 import torch.nn.functional as F
 
@@ -47,10 +45,10 @@ class EventSequenceBatch:
     def __init__(
         self,
         events: dict[str, torch.Tensor],
-        timestamps: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
-        event_ids: Optional[torch.LongTensor] = None,
-        targets: Optional[torch.LongTensor] = None,
+        timestamps: torch.FloatTensor | None = None,
+        attention_mask: torch.LongTensor | None = None,
+        event_ids: torch.LongTensor | None = None,
+        targets: torch.LongTensor | None = None,
     ):
         """Initializes the EventSequenceBatch.
 
@@ -95,12 +93,12 @@ class EventSequenceBatch:
             raise KeyError(f"Event type '{key}' not found in the batch.")
 
     @property
-    def timestamps(self) -> Optional[torch.FloatTensor]:
+    def timestamps(self) -> torch.FloatTensor | None:
         """Returns the timestamp tensor if available."""
         return self._timestamps
 
     @property
-    def attention_mask(self) -> Optional[torch.LongTensor]:
+    def attention_mask(self) -> torch.LongTensor | None:
         """Returns the attention mask tensor if available."""
         return self._attention_mask
 
@@ -114,12 +112,12 @@ class EventSequenceBatch:
         return self.attention_mask.sum(dim=1)
 
     @property
-    def event_ids(self) -> Optional[torch.LongTensor]:
+    def event_ids(self) -> torch.LongTensor | None:
         """Returns the event type identifiers if available."""
         return self._event_ids
 
     @property
-    def targets(self) -> Optional[torch.LongTensor]:
+    def targets(self) -> torch.LongTensor | None:
         """Returns targets for each sequence in the batch."""
         return self._targets
 
@@ -151,7 +149,7 @@ class EventSequenceBatch:
         return time_deltas
 
     def event_attn_mask(
-        self, event_id: Union[int, list[int]] = None
+        self, event_id: int | list[int] | None = None
     ) -> torch.LongTensor:
         """Creates attention mask filtered by event type(s).
 
@@ -177,7 +175,7 @@ class EventSequenceBatch:
         else:
             return self._attention_mask
 
-    def num_items(self, event_id: int = None) -> int:
+    def num_items(self, event_id: int | None = None) -> int:
         """Counts occurrences of specific event type(s).
 
         Args:

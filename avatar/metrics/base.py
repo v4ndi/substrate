@@ -84,7 +84,10 @@ class BaseInferenceMetric(BaseMetric):
     """
 
     def __init__(
-        self, path_to_save: str, prefix: str = None, output_format: str = "parquet"
+        self,
+        path_to_save: str,
+        prefix: str | None = None,
+        output_format: str = "parquet",
     ):
         self.path_to_save = path_to_save
         assert output_format in ["csv", "parquet"], "Wrong output format"
@@ -121,7 +124,7 @@ class ClassificationInferenceMetrics(BaseInferenceMetric):
         input_columns_to_save: list[str],
         path_to_save: str,
         classification_type: str = "binary",
-        prefix: str = None,
+        prefix: str | None = None,
         output_format: str = "parquet",
     ):
         super().__init__(

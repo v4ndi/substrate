@@ -1,6 +1,5 @@
 """Local-only tests for ``avatar.preprocessing.local.TabularPreprocessor``."""
 
-import numpy as np
 import pyarrow as pa
 import pytest
 import yaml
@@ -27,7 +26,13 @@ def test_fit_shapes(write_parquet, tabular_table):
     )
     assert pp.offset_map["cat_a"] == 1
     out = pp.transform(d, identity_cols=["cat_b"])
-    assert set(out.column_names) == {"epk_id", "target", "cat_features", "num_features", "cat_b"}
+    assert set(out.column_names) == {
+        "epk_id",
+        "target",
+        "cat_features",
+        "num_features",
+        "cat_b",
+    }
     assert out.num_rows == tabular_table.num_rows
     assert len(out["cat_features"][0]) == 2
     assert len(out["num_features"][0]) == 3
@@ -103,7 +108,9 @@ def test_only_numeric_or_only_categorical(write_parquet, tabular_table):
         categorical_columns=CAT, numeric_columns=None, spec_tokens={"pad": 0}
     ).fit(d)
     out2 = only_cat.transform(d)
-    assert "cat_features" in out2.column_names and "num_features" not in out2.column_names
+    assert (
+        "cat_features" in out2.column_names and "num_features" not in out2.column_names
+    )
 
 
 def test_transform_writes_parquet(write_parquet, tabular_table, tmp_path):

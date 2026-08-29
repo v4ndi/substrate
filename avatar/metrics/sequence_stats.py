@@ -127,7 +127,9 @@ class HiddensNorm(BaseMetric):
         l2_norm = hidden_state.norm(p=2, dim=-1).mean()
         l_inf_norm = hidden_state.abs().max(dim=-1).values.mean()
         for metric_name, value in zip(
-            ["l1_norm", "l2_norm", "l_inf_norm"], [l1_norm, l2_norm, l_inf_norm]
+            ["l1_norm", "l2_norm", "l_inf_norm"],
+            [l1_norm, l2_norm, l_inf_norm],
+            strict=False,
         ):
             self._update_metric(metric_name, value.detach().cpu().item())
 

@@ -58,9 +58,13 @@ def main() -> None:
     os.makedirs(args.out, exist_ok=True)
     step = -(-table.num_rows // args.files)
     for i, start in enumerate(range(0, table.num_rows, step)):
-        pq.write_table(table.slice(start, step), os.path.join(args.out, f"part-{i:03d}.parquet"))
-    print(f"wrote {table.num_rows} events for {args.users} users "
-          f"to {args.files} files in {args.out}")
+        pq.write_table(
+            table.slice(start, step), os.path.join(args.out, f"part-{i:03d}.parquet")
+        )
+    print(
+        f"wrote {table.num_rows} events for {args.users} users "
+        f"to {args.files} files in {args.out}"
+    )
 
 
 if __name__ == "__main__":

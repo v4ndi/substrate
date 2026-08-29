@@ -11,10 +11,10 @@ from .agg import (
 
 __all__ = [
     "BaseAggregation",
+    "FeedForwardNetwork",
     "LastHiddenState",
     "LinearAggregation",
     "MeanHiddenState",
     "SumLayerNorm",
     "get_aggregation_layer",
-    "FeedForwardNetwork",
 ]

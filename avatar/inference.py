@@ -33,7 +33,7 @@ def main(config: DictConfig):
         model_state = torch.load(load_state)
         model.load_state_dict(model_state, strict=True)
     else:
-        warnings.warn("\n\nNo load_state provided\n\n")
+        warnings.warn("\n\nNo load_state provided\n\n", stacklevel=2)
 
     print(model)
 

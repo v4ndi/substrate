@@ -1,5 +1,5 @@
 from copy import deepcopy
-from typing import Any, Dict
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -57,7 +57,7 @@ class BaseEventSequenceEmbedding(BaseEmbedding):
         ValueError: If columns_meta is invalid or columns have inconsistent metadata
     """
 
-    def __init__(self, hidden_size: int, columns_meta: Dict[str, Dict[str, Any]]):
+    def __init__(self, hidden_size: int, columns_meta: dict[str, dict[str, Any]]):
         super().__init__(hidden_size=hidden_size)
         assert BaseEventSequenceEmbedding._check_columns_meta(columns_meta), (
             "Invalid columns_meta"

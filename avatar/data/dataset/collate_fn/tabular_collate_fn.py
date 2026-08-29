@@ -1,5 +1,5 @@
 from functools import partial
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import torch
 
@@ -7,7 +7,7 @@ from avatar.data.dataset.collate_fn.base_collate_fn import BaseCollateFn
 from avatar.data.tabular_batch import TabularBatch
 
 
-def check_columns_to_tensor(columns_to_tensor: Optional[Dict[str, str]]):
+def check_columns_to_tensor(columns_to_tensor: dict[str, str] | None):
     """Check columns types for conversion to tensor"""
     if columns_to_tensor is None:
         return True
@@ -29,7 +29,7 @@ class TabularCollateFn(BaseCollateFn):
 
     def __init__(
         self,
-        target_column: Optional[str] = None,
+        target_column: str | None = None,
         is_regression: bool = False,
     ):
         self.target_column = target_column
@@ -75,7 +75,7 @@ class TabularCollateFn(BaseCollateFn):
             hidden_states=hidden_states,
         )
 
-    def __call__(self, batch: List[Dict[str, Any]]):
+    def __call__(self, batch: list[dict[str, Any]]):
         """
         Processes the batch and converts it into a suitable format for model input.
 
@@ -119,8 +119,8 @@ class UpliftCollateFn(TabularCollateFn):
     def __init__(
         self,
         treatment_column: str,
-        target_column: Optional[str] = None,
-        group_column: Optional[str] = None,
+        target_column: str | None = None,
+        group_column: str | None = None,
         inverse_treatment: bool = False,
     ):
         """
@@ -137,7 +137,7 @@ class UpliftCollateFn(TabularCollateFn):
         self.group_column = group_column
         self.inverse_treatment = inverse_treatment
 
-    def __call__(self, batch: List[Dict[str, Any]]):
+    def __call__(self, batch: list[dict[str, Any]]):
         """
         Processes the batch and converts it into a suitable format for model input.
 
@@ -172,9 +172,9 @@ class MultiTaskUpliftCollateFn(UpliftCollateFn):
         self,
         treatment_column: str,
         task_name_column: str,
-        task_mapping: Dict[str, int],
-        target_column: Optional[str] = None,
-        group_column: Optional[str] = None,
+        task_mapping: dict[str, int],
+        target_column: str | None = None,
+        group_column: str | None = None,
         inverse_treatment: bool = False,
     ):
         """
@@ -195,7 +195,7 @@ class MultiTaskUpliftCollateFn(UpliftCollateFn):
         self.task_name_column = task_name_column
         self.task_mapping = task_mapping
 
-    def __call__(self, batch: List[Dict[str, Any]]):
+    def __call__(self, batch: list[dict[str, Any]]):
         """
         Processes the batch and converts it into a suitable format for model input.
 
@@ -217,14 +217,16 @@ class MultiTaskUpliftCollateFn(UpliftCollateFn):
 class SupervisedCollateFn(TabularCollateFn):
     def __init__(
         self,
-        target_column: Optional[str] = None,
+        target_column: str | None = None,
         is_regression: bool = False,
-        add_extra_columns: Optional[Dict[str, str]] = {},
+        add_extra_columns: dict[str, str] | None = None,
     ):
+        if add_extra_columns is None:
+            add_extra_columns = {}
         super().__init__(target_column=target_column, is_regression=is_regression)
         self.add_extra_columns = add_extra_columns
 
-    def __call__(self, batch: List[Dict[str, Any]]):
+    def __call__(self, batch: list[dict[str, Any]]):
         processed_batch = super().__call__(batch=batch)
         if self.add_extra_columns is None:
             return processed_batch
@@ -239,10 +241,10 @@ class MultiTaskSupervisedCollateFn(SupervisedCollateFn):
     def __init__(
         self,
         task_name_column: str,
-        task_mapping: Dict[str, int],
-        target_column: Optional[str] = None,
+        task_mapping: dict[str, int],
+        target_column: str | None = None,
         is_regression: bool = False,
-        add_extra_columns: Optional[Dict[str, str]] = {},
+        add_extra_columns: dict[str, str] | None = None,
     ):
         """
         Initializes the UpliftCollateFn class.
@@ -253,6 +255,8 @@ class MultiTaskSupervisedCollateFn(SupervisedCollateFn):
             target_column (Optional[str], optional): The column name to use as the
                 target labels. Defaults to None.
         """
+        if add_extra_columns is None:
+            add_extra_columns = {}
         super().__init__(
             target_column=target_column,
             is_regression=is_regression,
@@ -261,7 +265,7 @@ class MultiTaskSupervisedCollateFn(SupervisedCollateFn):
         self.task_name_column = task_name_column
         self.task_mapping = task_mapping
 
-    def __call__(self, batch: List[Dict[str, Any]]):
+    def __call__(self, batch: list[dict[str, Any]]):
         """
         Processes the batch and converts it into a suitable format for model input.
 

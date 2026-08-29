@@ -1,5 +1,5 @@
 from collections.abc import Mapping, Sequence
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import numpy as np
 from omegaconf import OmegaConf
@@ -97,7 +97,7 @@ class ColumnFilterSampler(BaseSampler):
 
 
 class ColumnsFilterSampler(BaseSampler):
-    def __init__(self, filters: Dict[str, List[Optional[Any]]]):
+    def __init__(self, filters: dict[str, list[Any | None]]):
         """Filter samples by a column with optional min/max inclusive bounds.
         Args:
             filters: dict where
@@ -146,7 +146,7 @@ class MultiTaskColumnsFilterSampler(BaseSampler):
     def __init__(
         self,
         task_name_column: str,
-        filters: Dict[str, Dict[str, Any]],
+        filters: dict[str, dict[str, Any]],
     ):
         """Filter samples using task-specific column rules.
 
@@ -198,7 +198,7 @@ class MultiTaskColumnsFilterSampler(BaseSampler):
             min_value = rule.get("min")
             max_value = rule.get("max")
         elif (isinstance(rule, Sequence) or OmegaConf.is_list(rule)) and not isinstance(
-            rule, (str, bytes)
+            rule, str | bytes
         ):
             if len(rule) != 2:
                 raise ValueError("legacy range filters must contain [min, max]")
@@ -277,7 +277,7 @@ class MultiTaskColumnsFilterSampler(BaseSampler):
             accepted[task_rows] = task_accepted[task_rows]
         return accepted
 
-    def accepts(self, data: Dict[str, Any]) -> bool:
+    def accepts(self, data: dict[str, Any]) -> bool:
         """Return whether a row belongs to the sampler's logical dataset."""
         task_filters = (
             None

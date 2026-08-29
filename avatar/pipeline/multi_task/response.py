@@ -21,7 +21,7 @@ class MultiTaskResponse(nn.Module):
         tabular_encoder: nn.Module | dict[str, nn.Module],
         heads: dict[str, nn.Module],
         multi_task_loss: nn.Module,
-        n_groups: int = None,
+        n_groups: int | None = None,
         group_interaction: BaseTreatmentInteraction = None,
         share_side_embeddings: bool = False,
     ):
@@ -85,7 +85,9 @@ class MultiTaskResponse(nn.Module):
                     embedding_dim=(
                         self.embedding.hidden_size
                         if type(self.embedding) is not nn.ModuleDict
-                        else self.embedding[list(self.embedding.keys())[0]].hidden_size
+                        else self.embedding[
+                            next(iter(self.embedding.keys()))
+                        ].hidden_size
                     ),
                 )
             else:
@@ -259,11 +261,13 @@ class MultiTaskBackbone(nn.Module):
     def __init__(
         self,
         tabular_encoder: BaseTabularEncoder,
-        aggregation_config={"name": "mean"},
-        hidden_state_dim: int = None,
-        proj_hiddens_to_dim: int = None,
-        normalize_hidden_states: dict[str, int] = None,
+        aggregation_config=None,
+        hidden_state_dim: int | None = None,
+        proj_hiddens_to_dim: int | None = None,
+        normalize_hidden_states: dict[str, int] | None = None,
     ):
+        if aggregation_config is None:
+            aggregation_config = {"name": "mean"}
         super().__init__()
         self.tabular_backbone = tabular_encoder
 
@@ -332,12 +336,12 @@ class MultiTaskHead(nn.Module):
         dropout_head: float = 0.15,
         separate_heads: bool = False,
         out_head: nn.Module = None,
-        loss_fn: nn.Module = nn.BCEWithLogitsLoss(),
+        loss_fn: nn.Module | None = None,
     ):
         super().__init__()
         self.dropout_head = dropout_head
         self.out_head = out_head
-        self.loss_fn = loss_fn
+        self.loss_fn = loss_fn if loss_fn is not None else nn.BCEWithLogitsLoss()
 
     def init_head(
         self,

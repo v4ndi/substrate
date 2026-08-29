@@ -12,8 +12,8 @@ class UniversalEmbedding(nn.Module):
         self,
         attr_type: str,
         hidden_size: int,
-        n_classes: int = None,
-        one_hot_size: int = None,
+        n_classes: int | None = None,
+        one_hot_size: int | None = None,
     ):
         super().__init__()
         self.hidden_size = hidden_size

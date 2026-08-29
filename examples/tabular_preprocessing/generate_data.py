@@ -54,9 +54,13 @@ def main() -> None:
     os.makedirs(args.out, exist_ok=True)
     step = -(-table.num_rows // args.files)
     for i, start in enumerate(range(0, table.num_rows, step)):
-        pq.write_table(table.slice(start, step), os.path.join(args.out, f"part-{i:03d}.parquet"))
-    print(f"wrote {table.num_rows} rows x {table.num_columns} cols "
-          f"to {args.files} files in {args.out}")
+        pq.write_table(
+            table.slice(start, step), os.path.join(args.out, f"part-{i:03d}.parquet")
+        )
+    print(
+        f"wrote {table.num_rows} rows x {table.num_columns} cols "
+        f"to {args.files} files in {args.out}"
+    )
     cat_cols = [c for c in table.column_names if c.startswith("cat_")]
     num_cols = [c for c in table.column_names if c.startswith("num_")]
     print("categorical_columns =", cat_cols)

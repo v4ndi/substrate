@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any, Dict, Optional, Union
+from typing import Any
 
 from pyspark.sql import functions as F
 from pyspark.sql import types as T
@@ -45,14 +45,16 @@ class TabularPreprocessor(NumCatPipeline):
 
     def __init__(
         self,
-        categorical_columns: Union[list[str], None] = None,
-        numeric_columns: Union[list[str], None] = None,
-        spec_tokens: Union[None, dict[str, int]] = {"pad": 0},
-        label_encoder: Union[None, LabelEncoder] = None,
-        standard_scaler: Union[None, StandardScaler] = None,
-        label_encoder_kwargs: Dict[str, Any] = None,
-        standard_scaler_kwargs: Dict[str, Any] = None,
+        categorical_columns: list[str] | None = None,
+        numeric_columns: list[str] | None = None,
+        spec_tokens: dict[str, int] | None = None,
+        label_encoder: LabelEncoder | None = None,
+        standard_scaler: StandardScaler | None = None,
+        label_encoder_kwargs: dict[str, Any] | None = None,
+        standard_scaler_kwargs: dict[str, Any] | None = None,
     ):
+        if spec_tokens is None:
+            spec_tokens = {"pad": 0}
         super().__init__(
             categorical_columns=categorical_columns,
             numeric_columns=numeric_columns,
@@ -71,7 +73,7 @@ class TabularPreprocessor(NumCatPipeline):
         else:
             self.vocab_size = 0
 
-    def transform(self, df, identity_cols: Optional[list[str]] = None):
+    def transform(self, df, identity_cols: list[str] | None = None):
         """Transform the input DataFrame into processed features.
 
         Converts categorical columns to encoded indices and numerical columns to scaled values,

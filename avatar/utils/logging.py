@@ -1,6 +1,5 @@
 import os
 import time
-from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -26,7 +25,7 @@ def log_time(accelerator, begin_time: int, metric_name: str, step: int):
 
 
 def print_trainable_layers(
-    accelerator, model: torch.nn.Module, indent: int = 0, max_depth: int = None
+    accelerator, model: torch.nn.Module, indent: int = 0, max_depth: int | None = None
 ):
     """
     Recursively prints the hierarchical structure of a PyTorch model with trainable status.
@@ -68,8 +67,8 @@ def print_train_info(
     accelerator,
     model: nn.Module,
     train_dataloader: DataLoader,
-    valid_dataloader: Optional[DataLoader] = None,
-    test_dataloader: Optional[DataLoader] = None,
+    valid_dataloader: DataLoader | None = None,
+    test_dataloader: DataLoader | None = None,
 ):
     local_rank = os.environ.get("LOCAL_RANK")
     if local_rank is None or int(local_rank) == 0:

@@ -14,9 +14,9 @@ from .pipeline import (
 from .standard_scaler import StandardScaler
 
 __all__ = [
-    "LabelEncoder",
-    "StandardScaler",
-    "NumCatPipeline",
-    "TabularPreprocessor",
     "EventSequencePreprocessor",
+    "LabelEncoder",
+    "NumCatPipeline",
+    "StandardScaler",
+    "TabularPreprocessor",
 ]

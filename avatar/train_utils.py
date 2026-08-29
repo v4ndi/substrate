@@ -2,7 +2,7 @@ import os
 import shutil
 from datetime import timedelta
 from glob import glob
-from typing import Any, Optional, Union
+from typing import Any
 
 import accelerate
 import hydra
@@ -18,7 +18,7 @@ from avatar.metrics import BaseMetric
 
 
 def init_accelerate(
-    accelerate_arguments: dict[str, Any], mlflow_arguments: dict[str, Any] = None
+    accelerate_arguments: dict[str, Any], mlflow_arguments: dict[str, Any] | None = None
 ) -> accelerate.Accelerator:
     """Initialize and configure the Hugging Face Accelerator with optional MLflow tracking.
 
@@ -159,7 +159,7 @@ def save_checkpoint(
     accelerator: accelerate.Accelerator,
     path: str,
     num_step: int,
-    max_checkpoints: int = None,
+    max_checkpoints: int | None = None,
 ):
     """Saves a training checkpoint using the Accelerator and manages checkpoint rotation.
 
@@ -203,7 +203,7 @@ def save_model(
     model: torch.nn.Module,
     path: str,
     num_step: int,
-    max_checkpoints: int = None,
+    max_checkpoints: int | None = None,
 ):
     """Saves a PyTorch model to disk and manages checkpoints.
 
@@ -244,11 +244,11 @@ def save_model(
 
 
 def flatten_dict(
-    params_dict: Union[dict[str, Any], DictConfig],
+    params_dict: dict[str, Any] | DictConfig,
     parent_key: str = "",
     sep: str = "_",
-    ignore_keys: Optional[Union[set[str], list]] = None,
-    preserve_keys: Optional[Union[set[str], list]] = None,
+    ignore_keys: set[str] | list | None = None,
+    preserve_keys: set[str] | list | None = None,
 ) -> dict[str, Any]:
     """Recursively flatten a nested dictionary or DictConfig into a single-level dictionary.
 
@@ -321,7 +321,7 @@ def normalize_log_param(value: Any) -> Any:
     """
     if OmegaConf.is_config(value):
         value = OmegaConf.to_container(value, resolve=True)
-    if isinstance(value, (np.datetime64, np.timedelta64)):
+    if isinstance(value, np.datetime64 | np.timedelta64):
         return str(value)
     if isinstance(value, np.ndarray):
         return [normalize_log_param(item) for item in value.tolist()]
@@ -329,11 +329,11 @@ def normalize_log_param(value: Any) -> Any:
         return normalize_log_param(value.item())
     if isinstance(value, dict):
         return {str(key): normalize_log_param(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
+    if isinstance(value, list | tuple):
         return [normalize_log_param(item) for item in value]
-    if isinstance(value, (set, frozenset)):
+    if isinstance(value, set | frozenset):
         return sorted((normalize_log_param(item) for item in value), key=repr)
-    if value is None or isinstance(value, (bool, int, float, str)):
+    if value is None or isinstance(value, bool | int | float | str):
         return value
     return str(value)
 
@@ -436,7 +436,7 @@ def calculate_output_loss(output, accelerator, distributed: bool = True):
     return loss / len(num_items_in_batch)
 
 
-def set_root_dir(path: Union[str, bytes]) -> None:
+def set_root_dir(path: str | bytes) -> None:
     """Change the current working directory to the specified path.
 
     This function wraps `os.chdir()` to set the root directory for the script.
@@ -456,9 +456,9 @@ def set_root_dir(path: Union[str, bytes]) -> None:
 
 def log_metrics(
     accelerator: accelerate.Accelerator,
-    metrics: dict[str, Union[float, int]],
+    metrics: dict[str, float | int],
     num_step: int,
-    prefix: Optional[str] = None,
+    prefix: str | None = None,
 ) -> None:
     """Log training/evaluation metrics through the Accelerator's logging interface.
 
@@ -485,9 +485,9 @@ def log_metrics(
 
 
 def move_to_device(
-    data: Union[torch.Tensor, dict[str, Any], list[Any], tuple[Any]],
-    device: Union[str, torch.device],
-) -> Union[torch.Tensor, dict[str, Any], list[Any], tuple[Any]]:
+    data: torch.Tensor | dict[str, Any] | list[Any] | tuple[Any],
+    device: str | torch.device,
+) -> torch.Tensor | dict[str, Any] | list[Any] | tuple[Any]:
     """Recursively move data and all nested contents to the specified device.
 
     This function handles multiple data types including:
@@ -516,7 +516,7 @@ def move_to_device(
         return data.to(device)
     elif isinstance(data, dict):
         return {key: move_to_device(value, device) for key, value in data.items()}
-    elif isinstance(data, (list, tuple)):
+    elif isinstance(data, list | tuple):
         return [move_to_device(item, device) for item in data]
     else:
         return data

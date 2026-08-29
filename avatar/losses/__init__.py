@@ -11,12 +11,12 @@ from .kld_loss import (
 )
 
 __all__ = [
-    "GoldFishLoss",
+    "ContrastiveLoss",
     "DirectUpliftLoss",
+    "GoldFishLoss",
+    "KLDLoss",
+    "KLDxContrastiveGridLoss",
+    "KLDxContrastiveLoss",
     "L1RegularizationLoss",
     "ResearchLosses",
-    "KLDLoss",
-    "ContrastiveLoss",
-    "KLDxContrastiveLoss",
-    "KLDxContrastiveGridLoss",
 ]

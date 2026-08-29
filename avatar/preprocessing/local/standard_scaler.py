@@ -10,8 +10,8 @@ Mirrors :class:`avatar.preprocessing.spark.StandardScaler`:
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from copy import deepcopy
-from typing import Sequence
 
 import numpy as np
 import pyarrow as pa
@@ -19,6 +19,7 @@ import pyarrow as pa
 from avatar.preprocessing.base.accumulators import MeanStdAccumulator
 from avatar.preprocessing.base.encode import EPS, signed_log1p
 from avatar.preprocessing.base.io import Source, iter_record_batches
+
 from .label_encoder import _run_batches
 
 
@@ -33,14 +34,12 @@ class StandardScaler:
         assert len(columns) > 0, "Expected list of columns"
         self.columns = list(columns)
         self.fillna = fillna
-        self.to_log_columns = (
-            list(to_log_columns) if to_log_columns is not None else []
-        )
+        self.to_log_columns = list(to_log_columns) if to_log_columns is not None else []
         self.batch_rows = batch_rows
         self.mean_std = {c: {"mean": 0.0, "std": 0.0} for c in self.columns}
 
     # -- fit ---------------------------------------------------------------
-    def fit(self, source: Source) -> "StandardScaler":
+    def fit(self, source: Source) -> StandardScaler:
         acc = MeanStdAccumulator(self.columns, self.to_log_columns)
         for batch in iter_record_batches(
             source, columns=self.columns, batch_rows=self.batch_rows
@@ -72,9 +71,7 @@ class StandardScaler:
         return out
 
     def transform(self, source: Source, output_path: str | None = None):
-        return _run_batches(
-            source, self.transform_batch, output_path, self.batch_rows
-        )
+        return _run_batches(source, self.transform_batch, output_path, self.batch_rows)
 
     def fit_transform(self, source: Source, output_path: str | None = None):
         self.fit(source)
@@ -90,7 +87,7 @@ class StandardScaler:
         })
 
     @classmethod
-    def load(cls, attr_dict: dict) -> "StandardScaler":
+    def load(cls, attr_dict: dict) -> StandardScaler:
         attr_dict = deepcopy(attr_dict)
         inst = cls.__new__(cls)
         inst.columns = list(attr_dict["columns"])

@@ -62,7 +62,7 @@ def test_standard_scaler_transform(sample_df):
 
     actual_data = transformed_df.collect()
 
-    for expected, actual in zip(expected_data, actual_data):
+    for expected, actual in zip(expected_data, actual_data, strict=False):
         assert actual[0] == pytest.approx(expected[0], rel=1e-6)
         assert actual[1] == pytest.approx(expected[1], rel=1e-6)
         assert actual[2] == expected[2]
@@ -83,17 +83,19 @@ def test_standard_scaler_fit_transform(sample_df):
 
     actual_data = transformed_df.collect()
 
-    for expected, actual in zip(expected_data, actual_data):
+    for expected, actual in zip(expected_data, actual_data, strict=False):
         assert actual[0] == pytest.approx(expected[0], rel=1e-6)
         assert actual[1] == pytest.approx(expected[1], rel=1e-6)
         assert actual[2] == expected[2]
 
 
 def test_standard_scaler_non_existent_column(sample_df):
+    from pyspark.errors import AnalysisException
+
     columns = ["col1", "non_existent_col"]
     scaler = StandardScaler(columns)
 
-    with pytest.raises(Exception):
+    with pytest.raises(AnalysisException):
         scaler.fit(sample_df)
 
 
@@ -155,7 +157,7 @@ def test_transform_applies_log_then_scales(spark_session):
     mean = scaler.mean_std["x"]["mean"]
     std = scaler.mean_std["x"]["std"] + 1e-8
     xs_scaled_expected = [(v - mean) / std for v in xs_logged]
-    for a, b in zip(xs_scaled, xs_scaled_expected):
+    for a, b in zip(xs_scaled, xs_scaled_expected, strict=False):
         assert approx(a, b, 1e-6)
 
 

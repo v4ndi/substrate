@@ -1,5 +1,3 @@
-from typing import Tuple
-
 import torch
 import torch.nn as nn
 
@@ -20,7 +18,7 @@ class GoldFishLoss(nn.Module):
         Returns:
             The target with the mask applied and the indices of the dropped tokens.
         """
-        super(GoldFishLoss, self).__init__()
+        super().__init__()
         assert strategy in ["static", "seeded_random"], (
             f"{strategy} goldfish strategy is not implemented. Try 'static' instead."
         )
@@ -34,7 +32,7 @@ class GoldFishLoss(nn.Module):
         self,
         input_tensor: torch.Tensor,
         targets: torch.Tensor,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         if not self.training:
             return self.loss(input_tensor, targets)
 

@@ -1,4 +1,4 @@
-from typing import Any, List, Optional
+from typing import Any
 
 import torch
 
@@ -18,14 +18,18 @@ class FixedHorizonCollateFn(EventSequenceCollateFn):
 
     def __init__(
         self,
-        sequence_columns: List[str],
+        sequence_columns: list[str],
         create_attention_mask: bool = True,
-        target_column: Optional[str] = None,
+        target_column: str | None = None,
         is_regression: bool = False,
         has_tabular: bool = False,
-        ctx_columns: List[str] = [],
-        target_columns: List[str] = [],
+        ctx_columns: list[str] | None = None,
+        target_columns: list[str] | None = None,
     ) -> None:
+        if target_columns is None:
+            target_columns = []
+        if ctx_columns is None:
+            ctx_columns = []
         super().__init__(
             sequence_columns=sequence_columns,
             create_attention_mask=create_attention_mask,
@@ -36,7 +40,7 @@ class FixedHorizonCollateFn(EventSequenceCollateFn):
         self.ctx_columns = ctx_columns
         self.target_columns = target_columns
 
-    def __call__(self, batch: List[dict[str, Any]]) -> dict[str, Any]:
+    def __call__(self, batch: list[dict[str, Any]]) -> dict[str, Any]:
         seq_batch = []
         if len(self.target_columns) > 0:
             timestamps_columns = ["_timestamps", "ctx_timestamps", "targets_timestamps"]
@@ -69,11 +73,14 @@ class FixedHorizonCollateFn(EventSequenceCollateFn):
                 key
                 for key in batch[0].keys()
                 if key
-                not in self.sequence_columns
-                + ["event_ids", "evt_dttm"]
-                + timestamps_columns
-                + self.ctx_columns
-                + self.target_columns
+                not in [
+                    *self.sequence_columns,
+                    "event_ids",
+                    "evt_dttm",
+                    *timestamps_columns,
+                    *self.ctx_columns,
+                    *self.target_columns,
+                ]
             ]
         for key in self.not_sequence_columns:
             if key not in self.sequence_columns:

@@ -1,5 +1,4 @@
 from copy import deepcopy
-from typing import Dict
 
 import torch
 import torch.nn as nn
@@ -16,10 +15,10 @@ class NextKTokensPrediction(nn.Module):
         model: BaseSequenceModel,
         horizon: int = 1,
         horizion_loss_weight: float = 1,
-        feature_loss_weights: Dict[str, float] = None,
-        aggregation_config: dict[str, any] = {"name": "mean"},
-        numeric_loss=nn.L1Loss(reduction="none"),
-        categorical_loss=nn.CrossEntropyLoss(reduction="sum"),
+        feature_loss_weights: dict[str, float] | None = None,
+        aggregation_config: dict[str, any] | None = None,
+        numeric_loss=None,
+        categorical_loss=None,
         enable_event_id_prediction: bool = False,
     ):
         """
@@ -38,6 +37,8 @@ class NextKTokensPrediction(nn.Module):
 
             loss(horizon_i, horizon_loss_coef) = loss_i / horizon_i ** horizon_loss_coef
         """
+        if aggregation_config is None:
+            aggregation_config = {"name": "mean"}
         assert horizion_loss_weight >= 0.0, "horizon_loss_coef should be >= 0.0"
         super().__init__()
         self.model = model
@@ -97,8 +98,14 @@ class NextKTokensPrediction(nn.Module):
         self.horizon = horizon
         self.horizion_loss_weight = horizion_loss_weight
         self.coefs = [(coef + 1) ** horizion_loss_weight for coef in range(horizon)]
-        self.numeric_loss = numeric_loss
-        self.categorical_loss = categorical_loss
+        self.numeric_loss = (
+            numeric_loss if numeric_loss is not None else nn.L1Loss(reduction="none")
+        )
+        self.categorical_loss = (
+            categorical_loss
+            if categorical_loss is not None
+            else nn.CrossEntropyLoss(reduction="sum")
+        )
 
         self.aggregation_layer = get_aggregation_layer(**aggregation_config)
 

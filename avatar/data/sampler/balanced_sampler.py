@@ -295,8 +295,7 @@ class ScheduleConversionSampler(StreamingBalancedSampler):
             )
 
     def _get_default_iter(self):
-        for data in self.dataset_iterator:
-            yield data
+        yield from self.dataset_iterator
 
     def __iter__(self):
         self._set_conversion()

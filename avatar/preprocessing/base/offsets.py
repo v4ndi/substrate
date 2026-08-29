@@ -7,7 +7,7 @@ in disjoint contiguous id ranges inside ``[0, vocab_size)`` so one
 
 from __future__ import annotations
 
-from typing import Mapping, Sequence
+from collections.abc import Mapping, Sequence
 
 
 def build_offset_map(

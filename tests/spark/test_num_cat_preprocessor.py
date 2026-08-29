@@ -187,8 +187,11 @@ def test_fit_and_transform_with_kwargs(spark_session):
     std2 = pipe.standard_scaler.mean_std["n2"]["std"] + 1e-8
     xs1 = [0.0, 1.0, 3.0]
     xs2_logged = [signed_log1p_py(v) for v in [10.0, 20.0, 40.0]]
-    exp = [((x1 - mean1) / std1, (z - mean2) / std2) for x1, z in zip(xs1, xs2_logged)]
-    for (a1, a2), (e1, e2) in zip(rows, exp):
+    exp = [
+        ((x1 - mean1) / std1, (z - mean2) / std2)
+        for x1, z in zip(xs1, xs2_logged, strict=False)
+    ]
+    for (a1, a2), (e1, e2) in zip(rows, exp, strict=False):
         assert abs(a1 - e1) < 1e-6
         assert abs(a2 - e2) < 1e-6
 
@@ -266,7 +269,7 @@ def test_fit_transform_roundtrip_and_dump_load(spark_session, tmp_path):
     r2 = collect2list(out2, ["c", "n"])
     assert pipe.label_encoder.values_to_id["c"]["a"] == 1
     assert len(r1) == len(r2)
-    for (c1, n1), (c2, n2) in zip(r1, r2):
+    for (c1, n1), (c2, n2) in zip(r1, r2, strict=False):
         assert c1 == c2
         assert abs(n1 - n2) < 1e-8
 

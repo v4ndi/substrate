@@ -131,12 +131,12 @@ def generate_sequence_dataset(
         if target_column == "classification":
             row["target"] = int(rng.integers(0, 2))
         if tabular_features:
-            row["cat_features"] = (
-                rng.integers(epk_id * 5 - 4, epk_id * 5 + 1, 10).tolist()
+            row["cat_features"] = rng.integers(
+                epk_id * 5 - 4, epk_id * 5 + 1, 10
+            ).tolist()
+            row["num_features"] = (
+                np.round(rng.uniform(1.0, 1000.0, 10), 2).astype("float32").tolist()
             )
-            row["num_features"] = np.round(
-                rng.uniform(1.0, 1000.0, 10), 2
-            ).astype("float32").tolist()
         rows.append(row)
 
     df = pd.DataFrame(rows)

@@ -34,11 +34,13 @@ class UniversalGate(nn.Module):
         dropout_p: float,
         hidden_size: int,
         num_experts: int,
-        aggregation_config: dict[str, any] = {"name": "mean"},
+        aggregation_config: dict[str, any] | None = None,
     ):
         """
         backbone: nn.Module: [bs, seq_len, hidden_size] -> [bs, seq_len, hidden_size]
         """
+        if aggregation_config is None:
+            aggregation_config = {"name": "mean"}
         super().__init__()
         self.backbone = backbone
         self.aggregateion_layer = get_aggregation_layer(**aggregation_config)
@@ -62,8 +64,10 @@ class GateTopK(nn.Module):
         hidden_size: int,
         num_active_experts: int = 2,
         dropout_p: float = 0.15,
-        aggregation_config: dict[str, any] = {"name": "mean"},
+        aggregation_config: dict[str, any] | None = None,
     ):
+        if aggregation_config is None:
+            aggregation_config = {"name": "mean"}
         super().__init__()
         self.num_active_experts = num_active_experts
         self.aggregateion_layer = get_aggregation_layer(**aggregation_config)
@@ -108,8 +112,10 @@ class MLPGate(UniversalGate):
         dropout_p: float,
         hidden_size: int,
         scale=4,
-        aggregation_config: dict[str, any] = {"name": "mean"},
+        aggregation_config: dict[str, any] | None = None,
     ):
+        if aggregation_config is None:
+            aggregation_config = {"name": "mean"}
         inner_hidden = hidden_size * scale
         mlp = nn.Sequential(
             nn.Linear(hidden_size, inner_hidden),

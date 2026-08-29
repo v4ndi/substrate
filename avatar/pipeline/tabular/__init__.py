@@ -2,4 +2,4 @@ from .classification import TabularClassification
 from .supervised import SupervisedLearner
 from .tabular_aggregation import TabularWithAggregatedStates
 
-__all__ = ["TabularClassification", "TabularWithAggregatedStates", "SupervisedLearner"]
+__all__ = ["SupervisedLearner", "TabularClassification", "TabularWithAggregatedStates"]

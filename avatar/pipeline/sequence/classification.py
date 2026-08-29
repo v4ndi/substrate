@@ -1,5 +1,3 @@
-from typing import List, Optional
-
 import torch
 import torch.nn as nn
 
@@ -45,12 +43,16 @@ class SequenceClassification(nn.Module):
         sequence_model: BaseSequenceModel,
         hidden_size: int,
         num_classes: int = 2,
-        model_weights: Optional[str] = None,
+        model_weights: str | None = None,
         dropout_p: float = 0.15,
-        aggregation_layer: dict[str, any] = {"name": "mean"},
+        aggregation_layer: dict[str, any] | None = None,
         freeze_backbone: bool = False,
-        unfreeze_params: List = [],
+        unfreeze_params: list | None = None,
     ):
+        if unfreeze_params is None:
+            unfreeze_params = []
+        if aggregation_layer is None:
+            aggregation_layer = {"name": "mean"}
         super().__init__()
         self.model = sequence_model
         self.aggregation_layer = get_aggregation_layer(**aggregation_layer)

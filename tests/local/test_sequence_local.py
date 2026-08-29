@@ -35,8 +35,18 @@ def test_output_structure_and_time_sorted(write_parquet, sequence_table):
 def test_bucketing_invariance(write_parquet, sequence_table, n_buckets):
     d = write_parquet(sequence_table)
     pp = EventSequencePreprocessor(**KW, batch_rows=500).fit(d)
-    ref = pp.transform(d, n_buckets=1).to_pandas().sort_values("epk_id").reset_index(drop=True)
-    got = pp.transform(d, n_buckets=n_buckets).to_pandas().sort_values("epk_id").reset_index(drop=True)
+    ref = (
+        pp.transform(d, n_buckets=1)
+        .to_pandas()
+        .sort_values("epk_id")
+        .reset_index(drop=True)
+    )
+    got = (
+        pp.transform(d, n_buckets=n_buckets)
+        .to_pandas()
+        .sort_values("epk_id")
+        .reset_index(drop=True)
+    )
     assert list(ref["epk_id"]) == list(got["epk_id"])
     for c in ["mcc", "price", "timestamps", "event_ids"]:
         for i in range(len(ref)):

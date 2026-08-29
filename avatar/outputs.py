@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 import torch
 
@@ -16,8 +16,8 @@ class BaseSequenceOutput:
     """
 
     last_hidden_state: torch.FloatTensor = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    router_logits: Optional[tuple[torch.FloatTensor, ...]] = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    router_logits: tuple[torch.FloatTensor, ...] | None = None
 
 
 @dataclass
@@ -32,7 +32,7 @@ class BaseTabularOutput:
     """
 
     last_hidden_state: torch.FloatTensor = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
 
 
 @dataclass
@@ -65,11 +65,11 @@ class SequenceOutput(BaseSequenceOutput):
             Shape: (batch_size, hidden_size)
     """
 
-    logits: Optional[torch.FloatTensor] = None
-    loss: Optional[torch.Tensor] = None
-    losses: Optional[dict[str, torch.FloatTensor]] = None
-    num_items: Optional[int] = None
-    aggregated_hidden_state: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    losses: dict[str, torch.FloatTensor] | None = None
+    num_items: int | None = None
+    aggregated_hidden_state: torch.FloatTensor | None = None
 
 
 @dataclass
@@ -85,7 +85,7 @@ class TabularOutput(BaseTabularOutput):
 
     loss: torch.Tensor = None
     logits: torch.FloatTensor = None
-    auxilary_loss: Optional[torch.FloatTensor] = None
+    auxilary_loss: torch.FloatTensor | None = None
 
 
 @dataclass
@@ -126,7 +126,7 @@ class BaseUpliftOutput:
     """
 
     loss: torch.FloatTensor = None
-    uplift_loss: Optional[torch.FloatTensor] = None
+    uplift_loss: torch.FloatTensor | None = None
     conversion: torch.LongTensor = None
     treatment: torch.LongTensor = None
     treatment_probs: torch.FloatTensor = None
@@ -143,7 +143,7 @@ class MultiGroupUpliftOutput(BaseUpliftOutput):
             Shape: (batch_size,)
     """
 
-    group: Optional[torch.LongTensor] = None
+    group: torch.LongTensor | None = None
 
 
 @dataclass
@@ -155,8 +155,8 @@ class MultiTaskxGroupUpliftOutput(MultiGroupUpliftOutput):
             Shape: (batch_size,)
     """
 
-    task_name: Optional[torch.LongTensor] = None
-    task_losses: Optional[torch.FloatTensor] = None
+    task_name: torch.LongTensor | None = None
+    task_losses: torch.FloatTensor | None = None
 
 
 @dataclass
@@ -169,9 +169,9 @@ class MultiTaskxGroupResponseOutput(TabularOutput):
     """
 
     conversion: torch.LongTensor = None
-    group: Optional[torch.LongTensor] = None
-    task_name: Optional[torch.LongTensor] = None
-    task_losses: Optional[torch.FloatTensor] = None
+    group: torch.LongTensor | None = None
+    task_name: torch.LongTensor | None = None
+    task_losses: torch.FloatTensor | None = None
 
 
 @dataclass
@@ -191,6 +191,6 @@ class MMoeUpliftOutput(MultiGroupUpliftOutput):
             Shape: (batch_size, num_tasks, num_experts)
     """
 
-    task_name: Optional[list[str]] = None
-    logits: Optional[torch.FloatTensor] = None
-    task_gated_weights: Optional[torch.FloatTensor] = None
+    task_name: list[str] | None = None
+    logits: torch.FloatTensor | None = None
+    task_gated_weights: torch.FloatTensor | None = None

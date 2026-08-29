@@ -58,10 +58,16 @@ def test_value_counts_frequency_order_deterministic(chunk):
     t = pa.table({"c": ["B", "B", "B", "A", "A", None, "C"]})
     vc = _feed(ValueCountAccumulator(["c"]), t, chunk)
     assert vc.finalize({"unk": 0}, frequency_encoder=True)["c"] == {
-        "unk": 0, "B": 1, "A": 2, "C": 3,
+        "unk": 0,
+        "B": 1,
+        "A": 2,
+        "C": 3,
     }
     assert vc.finalize({"unk": 0}, order="sorted")["c"] == {
-        "unk": 0, "A": 1, "B": 2, "C": 3,
+        "unk": 0,
+        "A": 1,
+        "B": 2,
+        "C": 3,
     }
 
 
@@ -70,8 +76,11 @@ def test_value_counts_cardinality_guard():
     vc = ValueCountAccumulator(["c"], max_cardinality=10)
     with pytest.raises(CardinalityError):
         _feed(vc, t, 8)
-    vc2 = _feed(ValueCountAccumulator(["c"], max_cardinality=10, on_overflow="topk"),
-                pa.table({"c": [1, 1, 1, 2, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]}), 4)
+    vc2 = _feed(
+        ValueCountAccumulator(["c"], max_cardinality=10, on_overflow="topk"),
+        pa.table({"c": [1, 1, 1, 2, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]}),
+        4,
+    )
     kept = vc2.finalize({"unk": 0}, order="count_desc")["c"]
     assert len(kept) == 11 and kept[1] == 1  # most frequent gets id 1
 

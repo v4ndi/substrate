@@ -172,7 +172,7 @@ def test_dump_and_load(sample_data):
     original_data = original_transformed.collect()
     loaded_data = loaded_transformed.collect()
 
-    for orig, loaded in zip(original_data, loaded_data):
+    for orig, loaded in zip(original_data, loaded_data, strict=False):
         assert orig["cat_features"] == loaded["cat_features"]
         assert orig["num_features"] == loaded["num_features"]
 

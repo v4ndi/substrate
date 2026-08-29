@@ -39,9 +39,9 @@ class SLearner(nn.Module):
         self,
         embedding: BaseTabularEmbedding,
         tabular_encoder: BaseTabularEncoder,
-        aggregation_config={"name": "mean"},
-        n_groups: int = None,
-        hidden_state_dim: int = None,
+        aggregation_config=None,
+        n_groups: int | None = None,
+        hidden_state_dim: int | None = None,
         dropout_head: float = 0.15,
         separate_heads: bool = False,
         treatment_interaction: BaseTreatmentInteraction = None,
@@ -49,10 +49,12 @@ class SLearner(nn.Module):
         calculate_train_uplift: bool = False,
         exchange_treatment_group: bool = False,
         out_head: nn.Module = None,
-        proj_hiddens_to_dim: int = None,
-        normalize_hidden_states: dict[str, int] = None,  # добавить в докстринг
-        loss_fn: nn.Module = nn.CrossEntropyLoss(),
+        proj_hiddens_to_dim: int | None = None,
+        normalize_hidden_states: dict[str, int] | None = None,  # добавить в докстринг
+        loss_fn: nn.Module | None = None,
     ):
+        if aggregation_config is None:
+            aggregation_config = {"name": "mean"}
         super().__init__()
         self.calculate_train_metrics = calculate_train_uplift
 
@@ -80,7 +82,7 @@ class SLearner(nn.Module):
         else:
             self.proj = None
 
-        self.loss_fn = loss_fn
+        self.loss_fn = loss_fn if loss_fn is not None else nn.CrossEntropyLoss()
 
         self.embedding = embedding
         self.tabular_backbone = tabular_encoder

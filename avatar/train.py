@@ -1,7 +1,7 @@
 import datetime
 import os
 import time
-from typing import Any, Optional, Union
+from typing import Any
 
 import accelerate
 import hydra
@@ -192,8 +192,8 @@ def main(config: DictConfig) -> None:
 
 
 def train(
-    accelerate_arguments: Union[dict[str, Any], DictConfig],
-    mlflow_arguments: Union[dict[str, Any], DictConfig],
+    accelerate_arguments: dict[str, Any] | DictConfig,
+    mlflow_arguments: dict[str, Any] | DictConfig,
     training_arguments: TrainingArguments,
     model: torch.nn.Module,
     optimizer,
@@ -201,14 +201,14 @@ def train(
     config,
     checkpoint_dir: str,
     train_dataloader: DataLoader,
-    train_metrics: Union[BaseMetric, list[BaseMetric]] = None,
-    valid_metrics: Union[BaseMetric, list[BaseMetric]] = None,
-    test_metrics: Union[BaseMetric, list[BaseMetric]] = None,
-    valid_dataloader: Optional[DataLoader] = None,
-    test_dataloader: Optional[DataLoader] = None,
-    early_stopping: Optional[EarlyStopping] = None,
-    logging_info: Optional[dict[str, Any]] = None,
-    startup_begin_time: Optional[float] = None,
+    train_metrics: BaseMetric | list[BaseMetric] = None,
+    valid_metrics: BaseMetric | list[BaseMetric] = None,
+    test_metrics: BaseMetric | list[BaseMetric] = None,
+    valid_dataloader: DataLoader | None = None,
+    test_dataloader: DataLoader | None = None,
+    early_stopping: EarlyStopping | None = None,
+    logging_info: dict[str, Any] | None = None,
+    startup_begin_time: float | None = None,
 ) -> dict[str, Any]:
     """Execute the complete training pipeline with logging, checkpointing and evaluation.
 
@@ -628,7 +628,7 @@ def apply_evaluation(
     accelerator: accelerate.Accelerator,
     model: torch.nn.Module,
     training_arguments: TrainingArguments,
-    valid_metrics: Union[BaseMetric, list[BaseMetric]],
+    valid_metrics: BaseMetric | list[BaseMetric],
     valid_dataloader: DataLoader,
     early_stopping,
     num_steps: int,
@@ -670,9 +670,9 @@ def apply_evaluation(
 @torch.inference_mode()
 def evaluation(
     model: Module,
-    device: Union[str, torch.device],
+    device: str | torch.device,
     valid_dataloader: DataLoader,
-    valid_metrics: Union[BaseMetric, list[BaseMetric]] = None,
+    valid_metrics: BaseMetric | list[BaseMetric] = None,
     accelerator=None,
     distributed_evaluate: bool = False,
 ) -> dict[str, Any]:

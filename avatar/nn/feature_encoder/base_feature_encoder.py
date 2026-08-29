@@ -1,4 +1,4 @@
-from typing import Literal, Optional
+from typing import Literal
 
 import torch
 import torch.nn as nn
@@ -31,7 +31,7 @@ class BaseSequenceFeatureEncoder(nn.Module):
         self,
         embedding: BaseEventSequenceEmbedding,
         pos_embedding: BaseTemporalEmbedding = None,
-        time_encoding: Optional[Literal["absolute", "delta"]] = None,
+        time_encoding: Literal["absolute", "delta"] | None = None,
         log_time_values: bool = False,
     ):
         super().__init__()
@@ -40,7 +40,7 @@ class BaseSequenceFeatureEncoder(nn.Module):
         self.log_time_values = log_time_values
         self._set_time_encoding(time_encoding)
 
-    def _set_time_encoding(self, time_encoding: Optional[Literal["absolute", "delta"]]):
+    def _set_time_encoding(self, time_encoding: Literal["absolute", "delta"] | None):
         self.time_encoding = time_encoding
         if self.time_encoding is None:
             self.time_encoding = "delta"

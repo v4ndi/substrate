@@ -34,16 +34,18 @@ class SupervisedLearner(nn.Module):
         self,
         embedding: BaseTabularEmbedding,
         tabular_encoder: BaseTabularEncoder,
-        aggregation_config={"name": "mean"},
-        n_groups: int = None,
-        hidden_state_dim: int = None,
+        aggregation_config=None,
+        n_groups: int | None = None,
+        hidden_state_dim: int | None = None,
         dropout_head: float = 0.15,
         group_interaction: BaseTreatmentInteraction = None,
         out_head: nn.Module = None,
-        proj_hiddens_to_dim: int = None,
-        normalize_hidden_states: dict[str, int] = None,
-        loss_fn: nn.Module = nn.BCEWithLogitsLoss(),
+        proj_hiddens_to_dim: int | None = None,
+        normalize_hidden_states: dict[str, int] | None = None,
+        loss_fn: nn.Module | None = None,
     ):
+        if aggregation_config is None:
+            aggregation_config = {"name": "mean"}
         super().__init__()
 
         if normalize_hidden_states is not None:
@@ -70,7 +72,7 @@ class SupervisedLearner(nn.Module):
         else:
             self.proj = None
 
-        self.loss_fn = loss_fn
+        self.loss_fn = loss_fn if loss_fn is not None else nn.BCEWithLogitsLoss()
 
         self.embedding = embedding
         self.tabular_backbone = tabular_encoder

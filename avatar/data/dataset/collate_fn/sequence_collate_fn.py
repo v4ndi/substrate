@@ -1,6 +1,6 @@
 from functools import partial, reduce
 from operator import iadd
-from typing import Any, List, Optional
+from typing import Any
 
 import torch
 import torch.nn.functional as F
@@ -23,12 +23,12 @@ class EventSequenceCollateFn(BaseCollateFn):
 
     def __init__(
         self,
-        sequence_columns: List[str],
+        sequence_columns: list[str],
         create_attention_mask: bool = True,
-        target_column: Optional[str] = None,
+        target_column: str | None = None,
         is_regression: bool = False,
         has_tabular: bool = False,
-        length_to_pad: Optional[int] = None,
+        length_to_pad: int | None = None,
     ) -> None:
         self.sequence_columns = sequence_columns
         self.create_attention_mask = create_attention_mask
@@ -44,9 +44,9 @@ class EventSequenceCollateFn(BaseCollateFn):
         batch,
         pad_token: int,
         create_attention_mask: bool,
-        sequence_columns: List[str],
+        sequence_columns: list[str],
         timestamps_column: str = "_timestamps",
-        length_to_pad: Optional[int] = None,
+        length_to_pad: int | None = None,
     ):
         events = {}
 
@@ -111,14 +111,14 @@ class EventSequenceCollateFn(BaseCollateFn):
         dummy_tensor = torch.full(
             (max_length,), padding_value, dtype=sequences[0].dtype
         )
-        seq_with_dummy = sequences + [dummy_tensor]
+        seq_with_dummy = [*sequences, dummy_tensor]
         padded = pad_sequence(
             seq_with_dummy, batch_first=True, padding_value=padding_value
         )
 
         return padded[:-1]
 
-    def __call__(self, batch: List[dict[str, Any]]) -> dict[str, Any]:
+    def __call__(self, batch: list[dict[str, Any]]) -> dict[str, Any]:
         if isinstance(batch[0], partial):
             batch = [process_func() for process_func in batch]
         seq_batch = EventSequenceCollateFn.collate_sequence(
@@ -133,7 +133,7 @@ class EventSequenceCollateFn(BaseCollateFn):
             self.not_sequence_columns = [
                 key
                 for key in batch[0].keys()
-                if key not in self.sequence_columns + ["_event_ids", "_timestamps"]
+                if key not in [*self.sequence_columns, "_event_ids", "_timestamps"]
             ]
         for key in self.not_sequence_columns:
             if key not in self.sequence_columns:

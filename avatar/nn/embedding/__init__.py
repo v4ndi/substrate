@@ -7,14 +7,14 @@ from .hidden_state_agg import LayerNormConcatenate, LayerNormSum
 from .position_embeddings import TemporalPositionEncoding
 
 __all__ = [
-    "UniversalEventEmbedding",
     "BaseEmbedding",
     "BaseEventSequenceEmbedding",
     "EventSequenceEmbedding",
-    "TemporalPositionEncoding",
-    "TabularEmbedding",
+    "HashEmbedding",
     "LayerNormConcatenate",
     "LayerNormSum",
     "PLEEmbedding",
-    "HashEmbedding",
+    "TabularEmbedding",
+    "TemporalPositionEncoding",
+    "UniversalEventEmbedding",
 ]

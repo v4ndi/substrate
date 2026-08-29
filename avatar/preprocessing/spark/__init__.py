@@ -17,11 +17,11 @@ from .pipeline import (
 from .standard_scaler import StandardScaler
 
 __all__ = [
-    "BasePreprocessor",
-    "LabelEncoder",
-    "StandardScaler",
     "BaseDataPipeline",
-    "NumCatPipeline",
-    "TabularPreprocessor",
+    "BasePreprocessor",
     "EventSequencePreprocessor",
+    "LabelEncoder",
+    "NumCatPipeline",
+    "StandardScaler",
+    "TabularPreprocessor",
 ]

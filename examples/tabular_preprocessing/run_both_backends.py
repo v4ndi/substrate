@@ -33,9 +33,9 @@ DATA = os.path.join(HERE, "data")
 
 
 def _load_columns(path: str):
-    names = pq.read_schema(sorted(
-        f.path for f in os.scandir(path) if f.name.endswith(".parquet")
-    )[0]).names
+    names = pq.read_schema(
+        sorted(f.path for f in os.scandir(path) if f.name.endswith(".parquet"))[0]
+    ).names
     cat = [c for c in names if c.startswith("cat_")]
     num = [c for c in names if c.startswith("num_")]
     return cat, num
@@ -72,9 +72,16 @@ def _maybe_spark():
 def compare(a, b, label: str) -> None:
     a = a.sort_values("epk_id").reset_index(drop=True)
     b = b.sort_values("epk_id").reset_index(drop=True)
-    assert sorted(a.columns) == sorted(b.columns), (label, sorted(a.columns), sorted(b.columns))
+    assert sorted(a.columns) == sorted(b.columns), (
+        label,
+        sorted(a.columns),
+        sorted(b.columns),
+    )
     for i in range(len(a)):
-        assert list(a["cat_features"].iloc[i]) == list(b["cat_features"].iloc[i]), (label, i)
+        assert list(a["cat_features"].iloc[i]) == list(b["cat_features"].iloc[i]), (
+            label,
+            i,
+        )
         na = np.asarray(a["num_features"].iloc[i], dtype=np.float32)
         nb = np.asarray(b["num_features"].iloc[i], dtype=np.float32)
         assert np.allclose(na, nb, atol=1e-4, equal_nan=True), (label, i)
@@ -96,12 +103,16 @@ def main() -> None:
         tbl = generate_data.build_table()
         step = -(-tbl.num_rows // 6)
         for i, s in enumerate(range(0, tbl.num_rows, step)):
-            pq.write_table(tbl.slice(s, step), os.path.join(args.data, f"part-{i:03d}.parquet"))
+            pq.write_table(
+                tbl.slice(s, step), os.path.join(args.data, f"part-{i:03d}.parquet")
+            )
 
     cat_cols, num_cols = _load_columns(args.data)
     log_cols = num_cols[::4]  # matches generate_data's heavy-tailed columns
-    print(f"categorical={len(cat_cols)}  numeric={len(num_cols)}  "
-          f"to_log={log_cols}  identity={args.identity}")
+    print(
+        f"categorical={len(cat_cols)}  numeric={len(num_cols)}  "
+        f"to_log={log_cols}  identity={args.identity}"
+    )
 
     kw = dict(
         categorical_columns=cat_cols,
@@ -117,7 +128,9 @@ def main() -> None:
     local_pp = LocalTab(**kw, batch_rows=50_000)
     local_pp.fit(args.data)
     local_out = local_pp.transform(args.data, identity_cols=args.identity).to_pandas()
-    print(f"\n[local] vocab_size={local_pp.vocab_size}  offset_map={local_pp.offset_map}")
+    print(
+        f"\n[local] vocab_size={local_pp.vocab_size}  offset_map={local_pp.offset_map}"
+    )
 
     spark = _maybe_spark()
     if spark is None:
@@ -138,11 +151,17 @@ def main() -> None:
     assert spark_pp.vocab_size == local_pp.vocab_size
     assert spark_pp.offset_map == local_pp.offset_map
     for c in cat_cols:
-        assert spark_pp.label_encoder.values_to_id[c] == local_pp.label_encoder.values_to_id[c]
+        assert (
+            spark_pp.label_encoder.values_to_id[c]
+            == local_pp.label_encoder.values_to_id[c]
+        )
     for c in num_cols:
-        s, l = spark_pp.standard_scaler.mean_std[c], local_pp.standard_scaler.mean_std[c]
-        assert np.isclose(s["mean"], l["mean"], atol=1e-6, equal_nan=True)
-        assert np.isclose(s["std"], l["std"], atol=1e-6, equal_nan=True)
+        sp, lo = (
+            spark_pp.standard_scaler.mean_std[c],
+            local_pp.standard_scaler.mean_std[c],
+        )
+        assert np.isclose(sp["mean"], lo["mean"], atol=1e-6, equal_nan=True)
+        assert np.isclose(sp["std"], lo["std"], atol=1e-6, equal_nan=True)
     print("\n[fit] statistics identical across backends")
 
     # ---- cross-load ----------------------------------------------------
@@ -151,12 +170,16 @@ def main() -> None:
     spark_from_local = SparkTab.load(local_pp.dump())
 
     compare(spark_out, local_out, "spark.fit          vs local.fit")
-    compare(spark_out,
-            local_from_spark.transform(args.data, identity_cols=args.identity).to_pandas(),
-            "spark.fit          vs local.load(spark.dump())")
-    compare(spark_from_local.transform(sdf, identity_cols=args.identity).toPandas(),
-            local_out,
-            "spark.load(local.dump()) vs local.fit")
+    compare(
+        spark_out,
+        local_from_spark.transform(args.data, identity_cols=args.identity).to_pandas(),
+        "spark.fit          vs local.load(spark.dump())",
+    )
+    compare(
+        spark_from_local.transform(sdf, identity_cols=args.identity).toPandas(),
+        local_out,
+        "spark.load(local.dump()) vs local.fit",
+    )
 
     print("\nAll backends and cross-loaded artifacts produce identical output.")
     spark.stop()

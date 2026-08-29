@@ -8,10 +8,10 @@ from .moe_modeling import (
 )
 
 __all__ = [
-    "UniversalGate",
-    "MoE",
     "ExpertsWrapper",
+    "GateTopK",
     "MLPExperts",
     "MLPGate",
-    "GateTopK",
+    "MoE",
+    "UniversalGate",
 ]

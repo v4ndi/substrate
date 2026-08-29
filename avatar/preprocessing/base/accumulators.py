@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import warnings
 from collections import OrderedDict
-from typing import Mapping, Sequence
+from collections.abc import Mapping, Sequence
 
 import numpy as np
 import pyarrow as pa
@@ -108,9 +108,7 @@ class ValueCountAccumulator:
         self.columns = list(columns)
         self.max_cardinality = int(max_cardinality)
         self.on_overflow = on_overflow
-        self._counts: dict[str, "OrderedDict"] = {
-            c: OrderedDict() for c in self.columns
-        }
+        self._counts: dict[str, OrderedDict] = {c: OrderedDict() for c in self.columns}
 
     def update(self, batch: pa.RecordBatch) -> None:
         for col in self.columns:
@@ -122,15 +120,12 @@ class ValueCountAccumulator:
             values = vc.field("values").to_pylist()
             counts = vc.field("counts").to_pylist()
             bucket = self._counts[col]
-            for v, c in zip(values, counts):
+            for v, c in zip(values, counts, strict=False):
                 if v is None:
                     continue
                 v = _normalize_key(v)
                 bucket[v] = bucket.get(v, 0) + int(c)
-            if (
-                self.on_overflow == "raise"
-                and len(bucket) > self.max_cardinality
-            ):
+            if self.on_overflow == "raise" and len(bucket) > self.max_cardinality:
                 raise CardinalityError(
                     f"Categorical column {col!r} exceeded max_cardinality="
                     f"{self.max_cardinality} during fit (seen {len(bucket)} "
@@ -202,4 +197,4 @@ def _normalize_key(v):
 
 
 def _sort_key(v):
-    return (0, v) if isinstance(v, (int, float)) else (1, str(v))
+    return (0, v) if isinstance(v, int | float) else (1, str(v))

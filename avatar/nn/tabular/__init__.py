@@ -8,18 +8,18 @@ from .ste.ste_modeling import EncoderBlock
 from .uplift import MultiTreatmentSTE, TreatmentCrossAttnEncoder
 
 __all__ = [
-    "STEv2",
     "BaseTabularBackbone",
+    "BaseTabularEncoder",
+    "DCNv2",
     "EncoderBlock",
-    "STEv2Block",
-    "UniversalGate",
-    "MoE",
     "ExpertsWrapper",
     "GateTopK",
-    "MoESTEv2",
-    "BaseTabularEncoder",
-    "MultiTreatmentSTE",
-    "TreatmentCrossAttnEncoder",
-    "DCNv2",
     "MLPEmbedding",
+    "MoE",
+    "MoESTEv2",
+    "MultiTreatmentSTE",
+    "STEv2",
+    "STEv2Block",
+    "TreatmentCrossAttnEncoder",
+    "UniversalGate",
 ]

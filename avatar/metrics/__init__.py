@@ -13,26 +13,26 @@ from .utils import GroupAverageMetricWrapper, GroupDevidedMetricsWrapper
 __all__ = [
     # Base classes
     "BaseMetric",
+    "CatboostCampaignBenchmark",
     "ClassificationInferenceMetrics",
-    # Core metrics
-    "MultiLossMetric",
-    "Entropy",
-    "Importance",
-    # Specialized metrics
-    "UpliftMetrics",
-    "ResponseMetrics",
-    "RegressionMetrics",
     # Campaign tools
     "CollectEmbeddings",
-    "CatboostCampaignBenchmark",
-    "MLPCampaignBenchmark",
+    "Entropy",
+    "ExpertsWorkload",
     # Wrappers
     "GroupAverageMetricWrapper",
     "GroupDevidedMetricsWrapper",
-    "SequenceStats",
-    "ExpertsWorkload",
-    "RocAucScore",
     "HiddensNorm",
+    "Importance",
+    "MLPCampaignBenchmark",
+    # Core metrics
+    "MultiLossMetric",
+    "RegressionMetrics",
+    "ResponseMetrics",
+    "RocAucScore",
+    "SequenceStats",
     # log all losses from outputs
     "UniversalLossesMetric",
+    # Specialized metrics
+    "UpliftMetrics",
 ]

@@ -23,5 +23,4 @@ class AccumulateSampler:
 
         while self.continue_iter_flag:
             self._fill_buffers()
-            for elem in self.buff:
-                yield elem
+            yield from self.buff

@@ -1,6 +1,6 @@
 import os
 from datetime import datetime
-from typing import Dict, Literal, Optional
+from typing import Literal
 
 import numpy as np
 import pandas as pd
@@ -65,7 +65,9 @@ def apply_calculate_metrics(
     return metrics
 
 
-def save_to_parquet(df: pd.DataFrame, path_to_save: str, prefix: str = None) -> str:
+def save_to_parquet(
+    df: pd.DataFrame, path_to_save: str, prefix: str | None = None
+) -> str:
     """
     Save a DataFrame as a parquet file in the specified directory.
 
@@ -112,8 +114,8 @@ class ResponseMetrics(BaseMetric):
 
     def __init__(
         self,
-        save_submit_path: Optional[str] = None,
-        main_metric: Optional[str] = "roc_auc_score",
+        save_submit_path: str | None = None,
+        main_metric: str | None = "roc_auc_score",
     ):
         self.preds = []
         self.save_submit = save_submit_path
@@ -153,7 +155,7 @@ class ResponseMetrics(BaseMetric):
             "split_type": inputs["split_type"] if "split_type" in inputs else None,
         })
 
-    def compute(self) -> Dict[str, float]:
+    def compute(self) -> dict[str, float]:
         """Computes metrics."""
         merged_preds = {
             key: np.concatenate([p[key] for p in self.preds])
@@ -239,7 +241,7 @@ class ResponseMetrics(BaseMetric):
                     def task_name_prefix(scores, task_name):
                         return {
                             (
-                                f"task_{str(task_name)}_{key}"
+                                f"task_{task_name!s}_{key}"
                                 if len(str(task_name)) != 0
                                 else key
                             ): val
@@ -289,8 +291,8 @@ class RegressionMetrics(BaseMetric):
 
     def __init__(
         self,
-        save_submit_path: Optional[str] = None,
-        main_metric: Optional[str] = "mae",
+        save_submit_path: str | None = None,
+        main_metric: str | None = "mae",
     ):
         self.preds = []
         self.save_submit = save_submit_path
@@ -323,7 +325,7 @@ class RegressionMetrics(BaseMetric):
             "split_type": inputs["split_type"] if "split_type" in inputs else None,
         })
 
-    def compute(self) -> Dict[str, float]:
+    def compute(self) -> dict[str, float]:
         """Computes metrics."""
         merged_preds = {
             key: np.concatenate([p[key] for p in self.preds])
@@ -554,9 +556,9 @@ class MMoEResponseMetrics(ResponseMetrics):
 
     def __init__(
         self,
-        save_submit_path: Optional[str] = None,
-        main_metric: Optional[str] = "roc_auc_score",
-        num_experts: int = None,
+        save_submit_path: str | None = None,
+        main_metric: str | None = "roc_auc_score",
+        num_experts: int | None = None,
     ):
         super().__init__(
             save_submit_path=save_submit_path,
@@ -676,7 +678,7 @@ class MMoEResponseMetrics(ResponseMetrics):
                 add_gate_states(f"{split}_gate_task_{product_name}", mask)
         return result
 
-    def compute(self) -> Dict[str, float]:
+    def compute(self) -> dict[str, float]:
         result = super().compute()
         result.update(self._compute_gate_metrics())
         return result
@@ -705,8 +707,8 @@ class PLEResponseMetrics(MMoEResponseMetrics):
         self,
         num_shared_experts: int,
         num_specific_experts: int,
-        save_submit_path: Optional[str] = None,
-        main_metric: Optional[str] = "roc_auc_score",
+        save_submit_path: str | None = None,
+        main_metric: str | None = "roc_auc_score",
     ):
         # The gate for each task will output (num_shared + num_specific) values
         num_experts_per_task = num_shared_experts + num_specific_experts

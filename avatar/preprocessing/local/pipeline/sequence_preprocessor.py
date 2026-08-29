@@ -15,7 +15,7 @@ import os
 import shutil
 import tempfile
 from copy import deepcopy
-from typing import Any, Dict, List, Optional, Sequence, Union
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -23,6 +23,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 from avatar.preprocessing.base.io import Source, dataset_num_rows, iter_record_batches
+
 from .base_pipe import NumCatPipeline
 
 _CONVERSION_FACTORS = {"days": 86400, "weeks": 604800, "months": 2629800}
@@ -38,8 +39,8 @@ def date_to_scaled_unix(values: pa.Array, time_unit: str = "days") -> np.ndarray
     factor = _CONVERSION_FACTORS.get(time_unit.lower())
     if factor is None:
         raise ValueError(f"Invalid time_unit: {time_unit}")
-    secs = values.cast(pa.timestamp("s")).cast(pa.int64()).to_numpy(
-        zero_copy_only=False
+    secs = (
+        values.cast(pa.timestamp("s")).cast(pa.int64()).to_numpy(zero_copy_only=False)
     )
     return (np.asarray(secs, dtype=np.float64) / factor).astype(np.float32)
 
@@ -47,17 +48,17 @@ def date_to_scaled_unix(values: pa.Array, time_unit: str = "days") -> np.ndarray
 class EventSequencePreprocessor(NumCatPipeline):
     def __init__(
         self,
-        categorical_columns: List[str],
-        numeric_columns: Union[List[str], None],
+        categorical_columns: list[str],
+        numeric_columns: list[str] | None,
         event_time_column: str = "evt_dttm",
         time_unit: str = "days",
         event_type_ids_column: str = "event_ids",
         id_column: str = "epk_id",
-        groupby_columns: Optional[List[str]] = None,
+        groupby_columns: list[str] | None = None,
         label_encoder=None,
         standard_scaler=None,
-        label_encoder_kwargs: Dict[str, Any] | None = None,
-        standard_scaler_kwargs: Dict[str, Any] | None = None,
+        label_encoder_kwargs: dict[str, Any] | None = None,
+        standard_scaler_kwargs: dict[str, Any] | None = None,
         batch_rows: int = 250_000,
     ):
         super().__init__(
@@ -83,11 +84,11 @@ class EventSequencePreprocessor(NumCatPipeline):
 
     # -- meta ----------------------------------------------------------------
     @property
-    def columns(self) -> List[str]:
+    def columns(self) -> list[str]:
         return self.cat_cols + self.num_cols if self.num_cols else list(self.cat_cols)
 
     @property
-    def sequence_columns(self) -> List[str]:
+    def sequence_columns(self) -> list[str]:
         return (
             [self.event_type_ids_columns, self.event_time_column]
             + (self.num_cols or [])
@@ -95,8 +96,8 @@ class EventSequencePreprocessor(NumCatPipeline):
         )
 
     @property
-    def columns_meta(self) -> Dict[str, Dict[str, Any]]:
-        meta: Dict[str, Dict[str, Any]] = {}
+    def columns_meta(self) -> dict[str, dict[str, Any]]:
+        meta: dict[str, dict[str, Any]] = {}
         for column in self.columns:
             if self.num_cols and column in self.num_cols:
                 meta[column] = {"type": "numeric", "n_classes": 1}
@@ -123,9 +124,7 @@ class EventSequencePreprocessor(NumCatPipeline):
             vals[null_mask] = 0.0
             data[c] = vals
         for c in self.cat_cols:
-            data[c] = np.asarray(
-                enc[c].to_numpy(zero_copy_only=False), dtype=np.int64
-            )
+            data[c] = np.asarray(enc[c].to_numpy(zero_copy_only=False), dtype=np.int64)
         time_col = batch.column(batch.schema.get_field_index(self.event_time_column))
         data[self.event_time_column] = date_to_scaled_unix(time_col, self.time_unit)
         # Spark sorts on the raw timestamp *before* scaling; keep a full-precision
@@ -142,7 +141,7 @@ class EventSequencePreprocessor(NumCatPipeline):
         return pd.DataFrame(data)
 
     def _aggregate_frame(self, df: pd.DataFrame) -> pd.DataFrame:
-        keys = [self.id_column] + self.groupby_columns
+        keys = [self.id_column, *self.groupby_columns]
         df = df.sort_values([self.id_column, "__sort_key__"], kind="stable")
         list_cols = (
             (self.num_cols or [])
@@ -155,7 +154,7 @@ class EventSequencePreprocessor(NumCatPipeline):
 
     def _frame_to_table(self, agg: pd.DataFrame) -> pa.Table:
         arrays, names = [], []
-        for k in [self.id_column] + self.groupby_columns:
+        for k in [self.id_column, *self.groupby_columns]:
             vals = [
                 None if (isinstance(v, float) and np.isnan(v)) else v
                 for v in agg[k].tolist()
@@ -207,13 +206,17 @@ class EventSequencePreprocessor(NumCatPipeline):
         work = tempfile.mkdtemp(prefix="avatar_seq_", dir=tmp_dir)
         try:
             writers: dict[int, pq.ParquetWriter] = {}
-            paths = {k: os.path.join(work, f"b{k:05d}.parquet") for k in range(n_buckets)}
+            paths = {
+                k: os.path.join(work, f"b{k:05d}.parquet") for k in range(n_buckets)
+            }
             for batch in iter_record_batches(
                 source, columns=None, batch_rows=self.batch_rows
             ):
                 df = self._prep_batch(batch)
                 bucket = (
-                    pd.util.hash_pandas_object(df[self.id_column], index=False).to_numpy()
+                    pd.util.hash_pandas_object(
+                        df[self.id_column], index=False
+                    ).to_numpy()
                     % n_buckets
                 )
                 for k in np.unique(bucket):
@@ -265,7 +268,7 @@ class EventSequencePreprocessor(NumCatPipeline):
         return deepcopy(state)
 
     @classmethod
-    def load(cls, attr_dict: dict) -> "EventSequencePreprocessor":
+    def load(cls, attr_dict: dict) -> EventSequencePreprocessor:
         attr_dict = deepcopy(attr_dict)
         attr_dict.pop("_backend", None)
         attr_dict.pop("_version", None)

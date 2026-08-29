@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -95,7 +95,7 @@ class PLEEmbedding(nn.Module):
             raise ValueError(f"d_embedding must be positive, however: {hidden_size=}")
 
         super().__init__()
-        with open(bins_path, "r") as f:
+        with open(bins_path) as f:
             bins = yaml.safe_load(f)
         bins = [torch.Tensor(lst) for _, lst in bins.items()]
 
@@ -185,16 +185,18 @@ class TabularEmbedding(BaseTabularEmbedding):
 
     def __init__(
         self,
-        num_numerical_features: Optional[int],
-        vocab_size: Optional[int],
+        num_numerical_features: int | None,
+        vocab_size: int | None,
         hidden_size: int,
-        std_noise: Optional[float] = None,
-        nn_embedding_config: dict[str, any] = {},
-        hidden_state_aggregator: Optional[BaseHiddenStateAggregator] = None,
+        std_noise: float | None = None,
+        nn_embedding_config: dict[str, any] | None = None,
+        hidden_state_aggregator: BaseHiddenStateAggregator | None = None,
         numerical_embedding=None,
         num_embedding=None,
         use_null_embedding=True,
     ):
+        if nn_embedding_config is None:
+            nn_embedding_config = {}
         super().__init__(hidden_size=hidden_size)
 
         if num_numerical_features is not None:
@@ -306,7 +308,7 @@ class EventSequenceEmbedding(BaseEventSequenceEmbedding):
         self,
         hidden_size: int,
         columns_meta: dict[str, dict[str, Any]],
-        std_noise: float = None,
+        std_noise: float | None = None,
     ):
         super().__init__(hidden_size=hidden_size, columns_meta=columns_meta)
 

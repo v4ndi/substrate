@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 from pyspark.sql import functions as F
 from pyspark.sql import types as T
@@ -32,17 +32,17 @@ class EventSequencePreprocessor(NumCatPipeline):
 
     def __init__(
         self,
-        categorical_columns: List[str],
-        numeric_columns: Union[List[str], None],
+        categorical_columns: list[str],
+        numeric_columns: list[str] | None,
         event_time_column: str = "evt_dttm",
         time_unit: str = "days",
         event_type_ids_column: str = "event_ids",
         id_column: str = "epk_id",
-        groupby_columns: Optional[List[str]] = None,
-        label_encoder: Union[None, LabelEncoder] = None,
-        standard_scaler: Union[None, StandardScaler] = None,
-        label_encoder_kwargs: Dict[str, Any] = None,
-        standard_scaler_kwargs: Dict[str, Any] = None,
+        groupby_columns: list[str] | None = None,
+        label_encoder: LabelEncoder | None = None,
+        standard_scaler: StandardScaler | None = None,
+        label_encoder_kwargs: dict[str, Any] | None = None,
+        standard_scaler_kwargs: dict[str, Any] | None = None,
     ):
         super().__init__(
             categorical_columns=categorical_columns,

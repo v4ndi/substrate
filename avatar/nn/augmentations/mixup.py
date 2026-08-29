@@ -15,7 +15,7 @@ class MixupEmbeddingProcessor:
     - Handles both embeddings and target labels properly
 
     Args:
-        alpha: Parameter for Beta distribution (Beta(α, α)).
+        alpha: Parameter for Beta distribution (Beta(alpha, alpha)).
                Higher values make the mixup coefficients more concentrated around 0.5.
                Default: 1.0
         augmentation_ratio: Fraction of batch samples to augment.

@@ -1,4 +1,4 @@
-from typing import Literal, Optional
+from typing import Literal
 
 import torch
 import torch.nn as nn
@@ -263,7 +263,7 @@ class FeatureEncoder(BaseSequenceFeatureEncoder):
         embedding: BaseEventSequenceEmbedding,
         dropout_p: float = 0.1,
         pos_embedding: BaseTemporalEmbedding = None,
-        time_encoding: Optional[Literal["absolute", "delta"]] = None,
+        time_encoding: Literal["absolute", "delta"] | None = None,
         log_time_values: bool = False,
         id_embedding: nn.Module = None,
         aggregation_mode: str = "attention",

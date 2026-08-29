@@ -11,7 +11,7 @@ The Spark implementations these mirror:
 
 from __future__ import annotations
 
-from typing import Mapping
+from collections.abc import Mapping
 
 import numpy as np
 
@@ -62,7 +62,7 @@ class CategoricalMapper:
         self.mapping = dict(mapping)
         keys = list(self.mapping.keys())
         self._int_path = len(keys) > 0 and all(
-            isinstance(k, (int, np.integer)) and not isinstance(k, bool) for k in keys
+            isinstance(k, int | np.integer) and not isinstance(k, bool) for k in keys
         )
         if self._int_path:
             order = np.argsort(np.array(keys, dtype=np.int64))
@@ -77,16 +77,13 @@ class CategoricalMapper:
         if n == 0:
             return out
         if self._int_path:
-            arr = np.asarray(
-                [v if v is not None else np.iinfo(np.int64).min for v in values]
-            )
+            arr = np.asarray([
+                v if v is not None else np.iinfo(np.int64).min for v in values
+            ])
             if arr.dtype.kind not in "iu":
                 # object array with None already replaced; coerce
                 arr = np.array(
-                    [
-                        np.iinfo(np.int64).min if v is None else int(v)
-                        for v in values
-                    ],
+                    [np.iinfo(np.int64).min if v is None else int(v) for v in values],
                     dtype=np.int64,
                 )
             pos = np.searchsorted(self._sorted_keys, arr)

@@ -4,17 +4,17 @@ from __future__ import annotations
 
 import glob
 import os
-from typing import Iterator, Optional, Sequence, Union
+from collections.abc import Iterator, Sequence
 
 import pyarrow as pa
 import pyarrow.dataset as ds
 import pyarrow.parquet as pq
 
-PathLike = Union[str, "os.PathLike[str]"]
-Source = Union[PathLike, Sequence[PathLike], ds.Dataset]
+PathLike = str | os.PathLike
+Source = PathLike | Sequence[PathLike] | ds.Dataset
 
 
-def _resolve_files(source: Union[PathLike, Sequence[PathLike]]) -> list[str]:
+def _resolve_files(source: PathLike | Sequence[PathLike]) -> list[str]:
     """Expand a path / glob / directory / list into a sorted list of parquet files."""
 
     def _one(path: str) -> list[str]:
@@ -27,7 +27,7 @@ def _resolve_files(source: Union[PathLike, Sequence[PathLike]]) -> list[str]:
             found = [path]
         return found
 
-    if isinstance(source, (str, os.PathLike)):
+    if isinstance(source, str | os.PathLike):
         files = _one(source)
     else:
         files = []
@@ -39,7 +39,7 @@ def _resolve_files(source: Union[PathLike, Sequence[PathLike]]) -> list[str]:
     return files
 
 
-def as_dataset(source: Source, columns: Optional[Sequence[str]] = None) -> ds.Dataset:
+def as_dataset(source: Source, columns: Sequence[str] | None = None) -> ds.Dataset:
     """Return a :class:`pyarrow.dataset.Dataset` for ``source``.
 
     ``source`` may be a path, a glob, a directory, a list of any of those, or an
@@ -61,7 +61,7 @@ def dataset_num_rows(source: Source) -> int:
 
 def iter_record_batches(
     source: Source,
-    columns: Optional[Sequence[str]] = None,
+    columns: Sequence[str] | None = None,
     batch_rows: int = 250_000,
 ) -> Iterator[pa.RecordBatch]:
     """Yield :class:`pyarrow.RecordBatch` chunks of at most ``batch_rows`` rows.

@@ -1,12 +1,11 @@
 import random
-from typing import Dict
 
 import torch
 import torch.nn as nn
 
 
 class WeightLossBalancer(nn.Module):
-    def __init__(self, loss_weights: Dict[str, float]):
+    def __init__(self, loss_weights: dict[str, float]):
         super().__init__()
         self.loss_weights = nn.ParameterDict({
             name: nn.Parameter(
@@ -17,7 +16,7 @@ class WeightLossBalancer(nn.Module):
 
     def forward(self, losses_name, losses_value):
         total_loss = 0.0
-        for loss_name, loss_value in zip(losses_name, losses_value):
+        for loss_name, loss_value in zip(losses_name, losses_value, strict=False):
             if loss_name not in self.loss_weights:
                 raise ValueError(f"Loss {loss_name} not found in weights")
             total_loss += self.loss_weights[loss_name] * loss_value
@@ -62,7 +61,7 @@ class GradNormLossBalancer(nn.Module):
         weights = torch.exp(self.log_weights)
         if self.renormilize_weights:
             weights = weights * (self.num_losses / weights.sum())
-        weighted_loss = [w * loss for w, loss in zip(weights, losses)]
+        weighted_loss = [w * loss for w, loss in zip(weights, losses, strict=False)]
         total_loss = sum(weighted_loss)
 
         if not torch.is_grad_enabled():
@@ -141,7 +140,7 @@ class PCGradBalancer(nn.Module):
             g_shared = []
             g_excluded = []
 
-            for i, (g, p) in enumerate(zip(grads, params)):
+            for i, (g, p) in enumerate(zip(grads, params, strict=False)):
                 if g is None:
                     g = torch.zeros_like(p)
 
@@ -215,7 +214,7 @@ class MultiTaskLoss(nn.Module):
     def __init__(
         self,
         loss_balancer: nn.Module,
-        main_loss: str = None,
+        main_loss: str | None = None,
     ):
         super().__init__()
         self.loss_balancer = loss_balancer
@@ -223,15 +222,13 @@ class MultiTaskLoss(nn.Module):
 
     def forward(
         self,
-        losses: Dict[str, torch.FloatTensor],
+        losses: dict[str, torch.FloatTensor],
         dist: torch.FloatTensor,
         params=None,
         is_excluded=None,
         **kwargs,
     ):
-        if isinstance(
-            self.loss_balancer, (WeightLossBalancer, UncertainlyLossBalancer)
-        ):
+        if isinstance(self.loss_balancer, WeightLossBalancer | UncertainlyLossBalancer):
             if self.main_loss:
                 main_loss_value = losses.pop(self.main_loss)
                 tasks_loss = self.loss_balancer(

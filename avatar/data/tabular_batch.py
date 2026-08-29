@@ -1,11 +1,11 @@
-from typing import Any, Optional, Union
+from typing import Any
 
 import torch
 
 
 def move_to_device(
-    data: Union[torch.Tensor, Any], device: torch.device
-) -> Optional[Union[torch.Tensor, Any]]:
+    data: torch.Tensor | Any, device: torch.device
+) -> torch.Tensor | Any | None:
     """Safely moves data to the specified torch device while handling None values.
 
     Args:
@@ -50,7 +50,7 @@ class TabularBatch:
         self,
         cat_features: torch.LongTensor = None,
         num_features: torch.FloatTensor = None,
-        hidden_states: dict[str, torch.Tensor] = None,
+        hidden_states: dict[str, torch.Tensor] | None = None,
     ):
         assert (
             cat_features is not None
@@ -169,7 +169,7 @@ class UpliftTabularBatch(TabularBatch):
         num_features: torch.FloatTensor,
         is_treatment: torch.LongTensor,
         channel_type: torch.LongTensor = None,
-        hidden_states: dict[str, torch.Tensor] = None,
+        hidden_states: dict[str, torch.Tensor] | None = None,
     ):
         super().__init__(
             cat_features=cat_features,
