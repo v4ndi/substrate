@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 from avatar.data.event_seq_batch import EventSequenceBatch
-from avatar.nn.sequence import BaseSequenceModel
+from avatar.nn.sequential import BaseSequenceModel
 from avatar.nn.utils.agg import get_aggregation_layer
 from avatar.outputs import SequenceOutput
 

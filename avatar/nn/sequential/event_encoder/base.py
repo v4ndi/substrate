@@ -11,7 +11,7 @@ from avatar.nn.embedding import (
 )
 
 
-class BaseSequenceFeatureEncoder(nn.Module):
+class BaseEventEncoder(nn.Module):
     """
     A class used to encode sequence features using embeddings and positional encoding.
 

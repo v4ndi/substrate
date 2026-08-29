@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 
 from avatar.data.event_seq_batch import EventSequenceBatch
-from avatar.nn.sequence import BaseSequenceModel
+from avatar.nn.sequential import BaseSequenceModel
 from avatar.nn.utils.agg import get_aggregation_layer
 from avatar.outputs import SequenceOutput
 
@@ -43,7 +43,7 @@ class NextKTokensPrediction(nn.Module):
         super().__init__()
         self.model = model
         self.model_columns_meta = deepcopy(
-            self.model.feature_encoder.embedding.columns_meta
+            self.model.event_encoder.embedding.columns_meta
         )
 
         self.event_id_embedding = None
@@ -61,13 +61,13 @@ class NextKTokensPrediction(nn.Module):
             self.num_event_ids = num_event_ids
             self.event_id_embedding = nn.Embedding(
                 num_embeddings=num_event_ids + 1,  # +1 for padding fake class
-                embedding_dim=model.feature_encoder.embedding.hidden_size,
+                embedding_dim=model.event_encoder.embedding.hidden_size,
             )
 
         self.lm_heads = nn.ModuleList([
             nn.ModuleDict({
                 key: nn.Linear(
-                    model.feature_encoder.embedding.hidden_size,
+                    model.event_encoder.embedding.hidden_size,
                     meta["n_classes"],
                 )
                 for key, meta in self.model_columns_meta.items()
@@ -77,7 +77,7 @@ class NextKTokensPrediction(nn.Module):
         if enable_event_id_prediction:
             for module_dict in self.lm_heads:
                 module_dict["event_id"] = nn.Linear(
-                    model.feature_encoder.embedding.hidden_size, num_event_ids
+                    model.event_encoder.embedding.hidden_size, num_event_ids
                 )
 
         self.feature_loss_weights = {key: 1.0 for key in self.model_columns_meta.keys()}
@@ -93,7 +93,7 @@ class NextKTokensPrediction(nn.Module):
         if self.feature_loss_weights["timedelta"] != 0.0:
             for horizon_module in self.lm_heads:
                 horizon_module["timedelta"] = nn.Linear(
-                    model.feature_encoder.embedding.hidden_size, 1
+                    model.event_encoder.embedding.hidden_size, 1
                 )
         self.horizon = horizon
         self.horizion_loss_weight = horizion_loss_weight

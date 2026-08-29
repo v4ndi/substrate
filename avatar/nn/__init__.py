@@ -1,3 +1,3 @@
-from . import embedding, sequence, tabular, utils
+from . import embedding, sequential, tabular, utils
 
-__all__ = ["embedding", "sequence", "tabular", "utils"]
+__all__ = ["embedding", "sequential", "tabular", "utils"]

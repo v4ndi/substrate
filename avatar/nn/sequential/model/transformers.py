@@ -3,8 +3,8 @@ import torch.nn.functional as F
 from transformers import PreTrainedModel
 
 from avatar.data.event_seq_batch import EventSequenceBatch
-from avatar.nn.feature_encoder import BaseSequenceFeatureEncoder
-from avatar.nn.sequence import BaseSequenceModel
+from avatar.nn.sequential.event_encoder.base import BaseEventEncoder
+from avatar.nn.sequential.model.base import BaseSequenceModel
 from avatar.outputs import BaseSequenceOutput
 
 
@@ -13,18 +13,18 @@ class TransformersWrapper(BaseSequenceModel):
     Wrapper for transformer backbones also compatibility with Huggingface's transformers.
 
     Args:
-        feature_encoder (avatar.nn.feature_encoder.BaseSequenceFeatureEncoder): The feature encoder.
+        event_encoder (avatar.nn.sequential.BaseEventEncoder): The event encoder.
         backbone (transformers.PreTrainedModel): The backbone model.
         output_hidden_states (bool): Whether to output hidden states. Defaults to False.
     """
 
     def __init__(
         self,
-        feature_encoder: BaseSequenceFeatureEncoder,
+        event_encoder: BaseEventEncoder,
         backbone: PreTrainedModel,
         output_hidden_states: bool = False,
     ):
-        super().__init__(feature_encoder=feature_encoder, backbone=backbone)
+        super().__init__(event_encoder=event_encoder, backbone=backbone)
         self.output_hidden_states = output_hidden_states
 
     def forward(self, seq_features: EventSequenceBatch):
@@ -36,7 +36,7 @@ class TransformersWrapper(BaseSequenceModel):
         Returns:
             BaseSequenceOutput: The output of the sequence model.
         """
-        inputs_embeds = self.feature_encoder(seq_features)
+        inputs_embeds = self.event_encoder(seq_features)
         attention_mask = seq_features.attention_mask
         if attention_mask.shape[:2] != inputs_embeds.shape[:2]:
             attention_mask = F.pad(

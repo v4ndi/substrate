@@ -81,9 +81,9 @@ model:
   aggregation_config:
     name: sum
   model:
-    _target_: avatar.nn.sequence.TransformersWrapper
-    feature_encoder:
-      _target_: avatar.nn.feature_encoder.FeatureAttentionEncoder
+    _target_: avatar.nn.sequential.TransformersWrapper
+    event_encoder:
+      _target_: avatar.nn.sequential.EventEncoder
       dropout_p: 0.1
       time_encoding: delta
       embedding:
@@ -152,7 +152,7 @@ model:
         _target_: transformers.GPT2Config
         n_positions: 512
         vocab_size: 0 # может быть любое значение, так как nn.Embedding gpt мы не используем
-        n_embd: ${model.model.feature_encoder.embedding.hidden_size}
+        n_embd: ${model.model.event_encoder.embedding.hidden_size}
         n_layer: 6
         n_head: 4
         pad_token_id: 0

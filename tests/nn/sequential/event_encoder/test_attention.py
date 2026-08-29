@@ -1,6 +1,6 @@
 import torch
 
-from avatar.nn.feature_encoder.attention_encoder import IntraFeatureAttention
+from avatar.nn.sequential.event_encoder.attention import IntraFeatureAttention
 
 
 def test_compute_scores():

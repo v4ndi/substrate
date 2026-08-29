@@ -1,19 +1,18 @@
 import torch
 
 from avatar.nn.embedding import BaseEmbedding
-from avatar.nn.feature_encoder import BaseSequenceFeatureEncoder
-from avatar.nn.sequence import BaseSequenceBackbone, BaseSequenceModel
+from avatar.nn.sequential import BaseBackbone, BaseEventEncoder, BaseSequenceModel
 from avatar.pipeline.sequence import NextKTokensPrediction
 
-feature_encoder = BaseSequenceFeatureEncoder(embedding=BaseEmbedding(hidden_size=128))
-feature_encoder.embedding.columns_meta = {
+event_encoder = BaseEventEncoder(embedding=BaseEmbedding(hidden_size=128))
+event_encoder.embedding.columns_meta = {
     "pos_geo_evt_attr_1": {"n_classes": 87, "type": "categorical"},
     "txn_evt_attr_15": {"n_classes": 1, "type": "numeric"},
 }
 
 model = NextKTokensPrediction(
     model=BaseSequenceModel(
-        feature_encoder=feature_encoder, backbone=BaseSequenceBackbone()
+        event_encoder=event_encoder, backbone=BaseBackbone()
     ),
     horizon=3,
 )
