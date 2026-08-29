@@ -5,7 +5,6 @@ from typing import Optional
 
 import numpy as np
 import pandas as pd
-import polars as pl
 import torch
 from sklearn.metrics import roc_auc_score
 
@@ -323,25 +322,23 @@ class CatboostCampaignBenchmark(CollectEmbeddings):
 
         for contour in self.compute_contour:
             if self.repartition_by_product:
-                contour_df = pl.read_parquet(
-                    self.path_to_save + f"/product_name={contour}/*.parquet"
+                contour_df = pd.read_parquet(
+                    os.path.join(self.path_to_save, f"product_name={contour}")
                 )
             else:
-                contour_df = pl.read_parquet(self.path_to_save + "/*.parquet").filter(
-                    pl.col("product_name") == contour
-                )
-            train_contour_df = contour_df.filter(
-                pl.col("report_month")
-                <= datetime.datetime.strptime(self.split["train"], "%Y-%m-%d").date()
-            )
-            valid_contour_df = contour_df.filter(
-                pl.col("report_month")
-                == datetime.datetime.strptime(self.split["valid"], "%Y-%m-%d").date()
-            )
-            test_contour_df = contour_df.filter(
-                pl.col("report_month")
-                == datetime.datetime.strptime(self.split["test"], "%Y-%m-%d").date()
-            )
+                contour_df = pd.read_parquet(self.path_to_save)
+                contour_df = contour_df[contour_df["product_name"] == contour]
+
+            report_month = pd.to_datetime(contour_df["report_month"])
+            train_contour_df = contour_df[
+                report_month <= pd.to_datetime(self.split["train"])
+            ]
+            valid_contour_df = contour_df[
+                report_month == pd.to_datetime(self.split["valid"])
+            ]
+            test_contour_df = contour_df[
+                report_month == pd.to_datetime(self.split["test"])
+            ]
 
             valid_pred, test_pred = self.catboost_pipeline(
                 train_df=train_contour_df,
