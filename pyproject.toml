@@ -1,15 +1,91 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "avatar"
+dynamic = ["version"]
+description = "Foundation models for tabular and event-sequence customer data"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "Rusakov Nikita" }]
+license = { text = "Proprietary" }
+classifiers = [
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Private :: Do Not Upload",
+]
+
+dependencies = [
+    "accelerate==1.8.1",
+    "torch==2.9.0",
+    "numpy<2",
+    "pandas>=2",
+    "pyarrow>=14",
+    "hydra-core==1.3.5",
+    "omegaconf==2.3.1",
+    "transformers==5.16.1",
+    "mlflow==3.1.0",
+    "rtdl_num_embeddings==0.0.12",
+    "xxhash==4.0.1",
+    "scikit-uplift==0.5.1",
+    "betacal",
+    "torchinfo",
+    "nvidia-ml-py",
+]
+
+[project.optional-dependencies]
+# Spark preprocessing backend (avatar.preprocessing.spark). Needs a JDK 8/11/17.
+spark = ["pyspark==3.5.0"]
+# CatBoost campaign benchmark (avatar.metrics.campaign, optional import).
+catboost = ["catboost==1.2.10"]
+dev = [
+    "pytest==9.1.1",
+    "pytest-cov==7.1.0",
+    "pre-commit==4.2.0",
+    "ruff==0.8.6",
+]
+
+[tool.setuptools.dynamic]
+version = { attr = "avatar._version.__version__" }
+
+[tool.setuptools.packages.find]
+include = ["avatar*"]
+exclude = ["tests*", "experiments*", "examples*", "docs*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-m 'not slow' -ra"
+markers = [
+    "slow: long-running tests (many workers / large synthetic data); deselected by default",
+]
+filterwarnings = [
+    "default",
+    "ignore:The pynvml package is deprecated:FutureWarning",
+    "ignore:.*PYARROW_IGNORE_TIMEZONE.*:UserWarning",
+    "ignore:distutils Version classes are deprecated:DeprecationWarning",
+]
+
 [tool.ruff]
 line-length = 88
+preview = true
 exclude = [
     "experiments/*",
     "*.ipynb",
     "**/*.ipynb",
 ]
-preview = true
-lint.select = [
+
+[tool.ruff.lint]
+select = [
     "E",   # pycodestyle errors
     "F",   # pyflakes
     "I",   # isort
     "W",   # pycodestyle warnings
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+    "RUF", # ruff-specific
 ]
-lint.ignore = ["E501"]  # Ignore line length, handled by black or another formatter
+ignore = ["E501"]  # line length handled by the formatter
+
+[tool.ruff.format]
+preview = true

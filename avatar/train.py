@@ -27,7 +27,7 @@ from avatar.train_utils import (
     update_ema_weights,
     wrap_metrics,
 )
-from avatar.training_agruments import TrainingArguments
+from avatar.training_arguments import TrainingArguments
 from avatar.utils.init_modules import (
     init_dataloaders,
     init_early_stopping,
