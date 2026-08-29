@@ -13,8 +13,7 @@ tabular preprocessor:
 
 Both produce the **same artifact** (`dump()` / `load()`) and the **same output**:
 `cat_features` (`list<int64>`, cumulative-offset ids for a single shared
-embedding) and `num_features` (`list<float32>`, standardized). Design rationale
-and the full contract are in [`../../preprocessing.md`](../../preprocessing.md).
+embedding) and `num_features` (`list<float32>`, standardized).
 
 ## What the preprocessor does
 

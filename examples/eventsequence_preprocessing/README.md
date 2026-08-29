@@ -11,7 +11,7 @@ event-sequence preprocessor:
 | event order in output | best-effort (see below) | **deterministically time-sorted** |
 
 Both produce the **same artifact** (`dump()` / `load()`) and the same per-user
-lists. Design rationale is in [`../../preprocessing.md`](../../preprocessing.md).
+lists.
 
 ## What the preprocessor does
 
