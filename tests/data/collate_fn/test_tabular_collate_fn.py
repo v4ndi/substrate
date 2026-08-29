@@ -183,7 +183,7 @@ def test_tabular_collate_fn_hidden_state(create_parquet_file):
             "tab_features": {
                 "cat_features": torch.tensor([0, 1]),
                 "num_features": torch.tensor([0.1, 0.2]),
-                "_hidden_states": torch.FloatTensor([0.0, 0.0, 0.0]),
+                "_hidden_states": {"ext_emb": torch.FloatTensor([0.0, 0.0, 0.0])},
             },
         },
         {
@@ -194,7 +194,7 @@ def test_tabular_collate_fn_hidden_state(create_parquet_file):
             "tab_features": {
                 "cat_features": torch.tensor([2, 3]),
                 "num_features": torch.tensor([0.3, 0.4]),
-                "_hidden_states": torch.FloatTensor([1.0, 1.0, 1.0]),
+                "_hidden_states": {"ext_emb": torch.FloatTensor([1.0, 1.0, 1.0])},
             },
         },
     ]
@@ -206,11 +206,12 @@ def test_tabular_collate_fn_hidden_state(create_parquet_file):
     assert processed_batch["targets"].dtype == torch.long
     assert processed_batch["targets"].shape == torch.Size([2])
 
-    assert processed_batch["tab_features"].hidden_states.dtype == torch.float
-    assert processed_batch["tab_features"].hidden_states.shape == torch.Size([2, 3])
-    print(processed_batch["tab_features"].hidden_states)
+    hidden_states = processed_batch["tab_features"].hidden_states
+    assert set(hidden_states) == {"ext_emb"}
+    assert hidden_states["ext_emb"].dtype == torch.float
+    assert hidden_states["ext_emb"].shape == torch.Size([2, 3])
     assert torch.all(
-        processed_batch["tab_features"].hidden_states
+        hidden_states["ext_emb"]
         == torch.FloatTensor([[0.0, 0.0, 0.0], [1.0, 1.0, 1.0]])
     )
 
