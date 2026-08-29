@@ -1,4 +1,3 @@
-import torch  # noqa: F401
 import torch.nn.functional as F
 from transformers import PreTrainedModel
 
@@ -38,6 +37,10 @@ class TransformersWrapper(BaseSequenceModel):
         """
         inputs_embeds = self.event_encoder(seq_features)
         attention_mask = seq_features.attention_mask
+        # The event encoder may prepend leading tokens (e.g. EventEncoder with an
+        # id_embedding), making inputs_embeds longer than the raw attention_mask;
+        # left-pad the mask with 1s to match, and strip those positions back off
+        # the output below.
         if attention_mask.shape[:2] != inputs_embeds.shape[:2]:
             attention_mask = F.pad(
                 attention_mask,

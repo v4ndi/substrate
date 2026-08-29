@@ -30,6 +30,10 @@ class EventEncoder(BaseEventEncoder):
         time_encoding (Optional[Literal["absolute", "delta"]]): Optional time encoding.
             Check BaseEventEncoder for more details
         log_time_values (bool): Whether to log-transform time values (default: False)
+        id_embedding (nn.Module): Optional embedding for a per-sequence id column;
+            when given, its output is prepended as an extra leading token
+        id_column (str): Column in the batch holding the id for ``id_embedding``
+            (default: "epk_id")
 
     Input Shapes:
         - seq_features: EventSequenceBatch containing:
@@ -55,6 +59,7 @@ class EventEncoder(BaseEventEncoder):
         time_encoding: Literal["absolute", "delta"] | None = None,
         log_time_values: bool = False,
         id_embedding: nn.Module = None,
+        id_column: str = "epk_id",
         aggregation_mode: str = "attention",
     ):
         super().__init__(
@@ -73,6 +78,7 @@ class EventEncoder(BaseEventEncoder):
             aggregation_mode=aggregation_mode,
         )
         self.id_embedding = id_embedding
+        self.id_column = id_column
 
     def event_attention_mask(
         self, seq_features: EventSequenceBatch
@@ -95,7 +101,7 @@ class EventEncoder(BaseEventEncoder):
         )  # batch_size, seq_len, emb_dim
 
         if self.id_embedding is not None:
-            id_embed = self.id_embedding(seq_features["epk_id"]).unsqueeze(
+            id_embed = self.id_embedding(seq_features[self.id_column]).unsqueeze(
                 1
             )  # [bs, 1, emb_dim]
             # agg_embeds = agg_embeds + id_embed
