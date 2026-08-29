@@ -15,11 +15,15 @@
 → Переписать на актуальный `EventSequenceDataset` + `FixedHorizonCollateFn` **или**
 удалить файл (2 теста). Из-за ошибки сборки падает весь `pytest` без `--ignore`.
 
+**Комментарий:** удаляем все, что связанно с FixedHorizonDataset, hotpp benchmark из пайплайна
+
 ### 2. `tests/data/collate_fn/test_tabular_collate_fn.py::test_tabular_collate_fn_hidden_state` — FAILED
 `AttributeError: 'Tensor' object has no attribute 'keys'` в
 `avatar/data/dataset/collate_fn/tabular_collate_fn.py:65`. Код ожидает, что
 `tab_features[0]["_hidden_states"]` — это `dict`, тест передаёт `Tensor`.
-→ Определить, кто прав (контракт `_hidden_states`), починить код или фикстуру.
+→ Определить, кто прав (контракт `_hidden_states`), починить код или фикстуру. 
+
+**Комментарий:** действительно в моделях сделали поддержку мн-ва эмбеддингов за раз, поэтому надо подправить тест
 
 ### 3. `tests/spark/*` падают на дефолтном JDK, нет skip-guard
 5 файлов создают `SparkSession` на уровне фикстур без проверки Java. На этой машине
@@ -51,10 +55,13 @@
 Отдельные проблемы:
 - `pynvml==13.0.1` — deprecated, torch ругается → `nvidia-ml-py`.
 - `polars==0.20.10` — используется только в `avatar/metrics/campaign.py` (6 мест).
-  Либо обновить пин и задокументировать зачем, либо переписать на pandas/pyarrow и убрать.
+  Либо обновить пин и задокументировать зачем, либо переписать на pandas/pyarrow и убрать. 
+  **Комментарий:** Давай метрику перепишем с поларса, на пандас
+
 - Непоследовательные пины: почти всё `==`, а `pyarrow`/`pandas` — `>=`. Привести к одному стилю.
 - Блок комментариев про ручную установку `hotpp-benchmark` / `torch-linear-assignment`
   перенести в `docs/` или README, из `requirements.txt` убрать.
+  **Комментарий:** удаляем все связанное с hotpp & torch linear assignment
 
 ### 6. Единый источник версии
 `setup.py` → `0.0.2`; в `avatar/__init__.py` нет `__version__`.
@@ -64,7 +71,6 @@
 `agruments` → `arguments`. Импортируется в `avatar/__init__.py`.
 → Переименовать, оставить `training_agruments.py` как shim с
 `from .training_arguments import *` + `DeprecationWarning` на один релиз.
-
 ---
 
 ## P2 — гигиена тестов
@@ -85,6 +91,7 @@
 ### 10. `tests/metrics/test_t_map.py` — весь под `@pytest.mark.hotpp`
 Требует корпоративный пакет `hotpp`. → `pytest.importorskip("hotpp")` в модуле,
 чтобы прогон был зелёным без него.
+**Комментарий:** удаляем эту метрику и эти тесты
 
 ### 11. Нет `tests/conftest.py` / `tests/__init__.py`
 Общие фикстуры (JDK, генерация parquet, spark_session) дублируются между
@@ -152,6 +159,8 @@ README `examples/*_preprocessing/`. Синхронизировать с реше
 `import avatar.synth` / `avatar.metrics`. Сделать как в
 `avatar/preprocessing/__init__.py` (lazy `__getattr__`).
 
+**Комментарий:** модуль avatar/synth полностью удаляем из репозитория
+
 ### 22. Симметрия публичного API препроцессинга
 `avatar.preprocessing.local` экспортирует `LabelEncoder`/`StandardScaler` на верхнем
 уровне, а `spark` — только через `spark.label_encoder` / `spark.standard_scaler`.
@@ -161,3 +170,5 @@ README `examples/*_preprocessing/`. Синхронизировать с реше
 `avatar/data/dataset/tabular_dataset.py` (48K), `avatar/train.py` (36K),
 `avatar/metrics/supervised.py` (36K), `avatar/metrics/horizon_metric.py` (36K) —
 кандидаты на разбиение. Делать только точечно и под отдельную задачу.
+
+**Комментарий:** avatar/metrics/horizon_metrics.py - удаляем
