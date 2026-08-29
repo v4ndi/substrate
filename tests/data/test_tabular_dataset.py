@@ -81,14 +81,17 @@ def test_process_tabular_hidden_state(create_parquet_file):
         "hidden_state": np.array([0.1, 0.2, 0.12, 0.17, 0.25]),
     }
 
-    dataset.process_tabular(record=sample_record, hidden_state_column="hidden_state")
+    dataset.process_tabular(
+        record=sample_record, hidden_state_columns=["hidden_state"]
+    )
     # Check if the processed features are torch tensors and have correct types
     assert isinstance(sample_record["tab_features"]["cat_features"], torch.Tensor)
     assert isinstance(sample_record["tab_features"]["num_features"], torch.Tensor)
     assert sample_record["tab_features"]["cat_features"].dtype == torch.long
     assert sample_record["tab_features"]["num_features"].dtype == torch.float
-    assert isinstance(sample_record["tab_features"]["_hidden_states"], torch.Tensor)
-    assert sample_record["tab_features"]["_hidden_states"].dtype == torch.float
+    hidden_states = sample_record["tab_features"]["_hidden_states"]
+    assert set(hidden_states) == {"hidden_state"}
+    assert hidden_states["hidden_state"].dtype == torch.float
 
 
 def test_process(create_parquet_file):
