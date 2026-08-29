@@ -230,9 +230,5 @@ metrics:
       avg_calib_roc_auc_score: ['avg_test_control_group_roc_auc_score' , 'avg_test_target_group_roc_auc_score']
       
       avg_test_roc_auc_score: ['avg_test_control_group_roc_auc_score' , 'avg_test_target_group_roc_auc_score']
-  - _target_: avatar.post_processing.InferenceCampaign
-    path_to_save: ${PATH_TO_SAVE_PREDICT}
-    save_steps: 1000
-    prefix: null 
 ```
 
