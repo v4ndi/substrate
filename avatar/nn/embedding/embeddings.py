@@ -2,7 +2,6 @@ from typing import Any
 
 import torch
 import torch.nn as nn
-import yaml
 from torch import Tensor
 from torch.nn.parameter import Parameter
 
@@ -70,41 +69,6 @@ class LinearEmbeddings(nn.Module):
         """Do the forward pass."""
         _check_input_shape(x, self.weight.shape[0])
         return torch.addcmul(self.bias, self.weight, x[..., None])
-
-
-class PLEEmbedding(nn.Module):
-    """
-    PLE embeddings for continuous features.
-    Args:
-        bins_path: path to the yaml file containing the bins (list[list[float]])
-        hidden_size: the embedding size.
-        version: the version of the PLE embeddings from rtdl_num_embeddings.PiecewiseLinearEmbeddings
-        activation: whether to use activation function in rtdl_num_embeddings.PiecewiseLinearEmbeddings
-    """
-
-    def __init__(
-        self,
-        bins_path: str,
-        hidden_size: int,
-        version: str = "B",
-        activation: bool = False,
-    ) -> None:
-        import rtdl_num_embeddings
-
-        if hidden_size <= 0:
-            raise ValueError(f"d_embedding must be positive, however: {hidden_size=}")
-
-        super().__init__()
-        with open(bins_path) as f:
-            bins = yaml.safe_load(f)
-        bins = [torch.Tensor(lst) for _, lst in bins.items()]
-
-        self.embeds = rtdl_num_embeddings.PiecewiseLinearEmbeddings(
-            bins, d_embedding=hidden_size, activation=activation, version=version
-        )
-
-    def forward(self, x: Tensor) -> Tensor:
-        return self.embeds(x)
 
 
 class NumEmbedding(nn.Module):
