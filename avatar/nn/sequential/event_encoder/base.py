@@ -12,21 +12,22 @@ from avatar.nn.embedding import (
 
 
 class BaseEventEncoder(nn.Module):
-    """
-    A class used to encode sequence features using embeddings and positional encoding.
+    """Encode an event sequence into per-event embeddings.
 
-    ...
+    Applies ``embedding`` to the raw features, optionally adds a positional
+    embedding, and optionally appends a time-encoding channel.
 
     Attributes
     ----------
     embedding : BaseEventSequenceEmbedding
         The base event sequence embedding.
-    pos_embedding : TemporalPositionEncoding, optional
-        The temporal position encoding.
-    time_encoding : str, optional
-        The type of time encoding to use. Can be "absolute" or "delta".
-    log_time_values : bool, optional
-        Whether to log the time values.
+    pos_embedding : BaseTemporalEmbedding, optional
+        The temporal position encoding. ``None`` disables it.
+    time_encoding : {"delta", "absolute", None}
+        Time channel to append. ``"delta"`` uses inter-event time deltas,
+        ``"absolute"`` uses raw timestamps, ``None`` appends nothing.
+    log_time_values : bool
+        Whether to ``log1p`` the time values before encoding.
     """
 
     def __init__(
@@ -43,13 +44,12 @@ class BaseEventEncoder(nn.Module):
         self._set_time_encoding(time_encoding)
 
     def _set_time_encoding(self, time_encoding: Literal["absolute", "delta"] | None):
+        if time_encoding not in (None, "delta", "absolute"):
+            raise ValueError(
+                "time_encoding must be None, 'delta' or 'absolute', "
+                f"got {time_encoding!r}"
+            )
         self.time_encoding = time_encoding
-        if self.time_encoding is None:
-            self.time_encoding = "delta"
-            print("time encoding is set to delta")
-        assert self.time_encoding in ["delta", "absolute"], (
-            "supportds only delta and absolute time encoding"
-        )
         if self.time_encoding is not None:
             self.time_encoding_layer = LinearEmbeddings(
                 n_features=1, hidden_size=self.embedding.hidden_size
