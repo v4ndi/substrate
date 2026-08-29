@@ -89,24 +89,6 @@ class TabularOutput(BaseTabularOutput):
 
 
 @dataclass
-class MoeTabularOutput:
-    """Tabular output for Mixture-of-Experts models.
-
-    Attributes:
-        loss: Computed loss value
-            Shape: scalar
-        logits: Model predictions
-            Shape: (batch_size, num_classes)
-        task_gated_weights: Dictionary of gating weights per task
-            Each value shape: (batch_size, num_experts)
-    """
-
-    loss: torch.Tensor = None
-    logits: torch.FloatTensor = None
-    task_gated_weights: dict[str, torch.FloatTensor] = None
-
-
-@dataclass
 class BaseUpliftOutput:
     """Base output container for uplift modeling tasks.
 
