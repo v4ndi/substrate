@@ -76,7 +76,13 @@ def _as_dict(node: Any) -> dict[str, Any]:
 
 
 def _validate_amp(amp: Any) -> str:
-    amp = "no" if amp is None else str(amp)
+    # YAML resolves an unquoted `no` (and `off`, and `false`) to the boolean
+    # False, so `amp: no` — which is what every config in the repo writes —
+    # arrives here as a bool, not the string "no". Accept it. `True` is not
+    # accepted: it does not say whether fp16 or bf16 was meant.
+    if amp is None or amp is False:
+        return "no"
+    amp = str(amp)
     if amp not in AMP_CHOICES:
         raise ValueError(f"amp must be one of {AMP_CHOICES}, got {amp!r}")
     return amp

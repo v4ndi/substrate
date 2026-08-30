@@ -137,9 +137,14 @@ class TabularClassification(nn.Module):
         )
 
     def forward(self, tab_features, targets=None, **kwargs):
-        hidden_states = torch.where(
-            tab_features.hidden_states.isnan(), 0, tab_features.hidden_states
-        )
+        # ``TabularBatch.hidden_states`` is a dict of column name -> tensor, or
+        # None when no hidden-state column was configured. Concatenating the
+        # values in insertion order is the convention SLearner and
+        # SupervisedLearner already use.
+        hidden_states = tab_features.hidden_states
+        if hidden_states is not None:
+            hidden_states = torch.cat(tuple(hidden_states.values()), dim=1)
+            hidden_states = torch.where(hidden_states.isnan(), 0, hidden_states)
         output = (
             self.encoder(tab_features) if self.encoder is not None else hidden_states
         )

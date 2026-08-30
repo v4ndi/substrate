@@ -82,6 +82,11 @@ yaml.safe_dump(pp.dump(), open("artifacts/preprocessor.yaml", "w"))
 
 ## 3. Обучение
 
+Если хочется сначала увидеть работающее обучение, а не собирать конфиг с нуля,
+запустите [`examples/distributed_training`](../examples/distributed_training/):
+он генерирует синтетические данные и обучается на них за полминуты, в том числе
+на машине без GPU.
+
 Обучение полностью описывается одним YAML. Минимальный рабочий конфиг:
 
 ```yaml
@@ -236,4 +241,5 @@ python -m avatar.infer --config-dir=configs --config-name=inference
   `_target_`.
 * [configuration/distributed.md](configuration/distributed.md) — multi-GPU,
   несколько узлов, смешанная точность.
+* [guides/training.md](guides/training.md) — как устроен цикл обучения.
 * [../examples/README.md](../examples/README.md) — сквозные примеры.

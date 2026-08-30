@@ -55,16 +55,29 @@ def _normalise(token: str) -> str:
     return token.rstrip("/").rstrip(".,;")
 
 
-def looks_like_repo_path(token: str) -> bool:
-    """True for tokens we are confident name a file or directory in this repo."""
+def looks_like_repo_path(token: str, base=None) -> bool:
+    """True for tokens we are confident name a file or directory in this repo.
+
+    A slash alone is not enough: metric names (``throughput/samples_per_sec``)
+    and loss component names (``kld/entropy``) are written the same way. So a
+    token qualifies only if it carries a known file suffix, or its **first
+    segment** is something that actually exists — next to the document or at
+    the repository root. That keeps the check precise without a deny-list of
+    namespaces that would go stale on its own.
+    """
     if not token or any(c.isspace() for c in token):
         return False
     if token[0] in "/~-.#" or AMBIGUOUS & set(token):
         return False
     if "://" in token:
         return False
-    has_suffix = any(token.endswith(s) for s in REPO_SUFFIXES)
-    return "/" in token or has_suffix
+    if any(token.endswith(suffix) for suffix in REPO_SUFFIXES):
+        return True
+    if "/" not in token:
+        return False
+    head = token.split("/", 1)[0]
+    roots = [REPO_ROOT] if base is None else [base, REPO_ROOT]
+    return any((root / head).exists() for root in roots)
 
 
 def _check(path, candidates):
@@ -82,7 +95,7 @@ def test_inline_code_paths_exist(path):
     candidates = {
         normalised
         for span in INLINE_CODE.findall(text)
-        if looks_like_repo_path(normalised := _normalise(span))
+        if looks_like_repo_path(normalised := _normalise(span), path.parent)
     }
     missing = _check(path, sorted(candidates))
     assert not missing, "\n".join([
@@ -105,10 +118,12 @@ def test_scripts_told_to_run_exist(path):
             first, _, rest = line.strip().partition(" ")
             if first == "cd":
                 target = _normalise(rest.split(" ")[0])
-                if looks_like_repo_path(target):
+                if looks_like_repo_path(target, path.parent):
                     prefix = f"{prefix}{target}/"
                 continue
-            if first.startswith("./") and looks_like_repo_path(_normalise(first)):
+            if first.startswith("./") and looks_like_repo_path(
+                _normalise(first), path.parent
+            ):
                 candidates.add(f"{prefix}{_normalise(first)}")
     missing = _check(path, sorted(candidates))
     assert not missing, "\n".join([

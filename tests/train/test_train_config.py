@@ -99,3 +99,21 @@ def test_unknown_amp_is_rejected():
 
 def test_amp_none_means_disabled():
     assert resolve_run_config(OmegaConf.create({"amp": None})).amp == "no"
+
+
+def test_unquoted_no_in_yaml_means_disabled():
+    """`amp: no` is what every config writes, and YAML makes it a bool.
+
+    Unquoted ``no``/``off``/``false`` all resolve to False before this code
+    ever sees them, so rejecting the bool would reject every config in the
+    repository.
+    """
+    config = OmegaConf.create("amp: no\n")
+    assert config.amp is False
+    assert resolve_run_config(config).amp == "no"
+
+
+def test_amp_true_is_rejected():
+    """`amp: yes` does not say whether fp16 or bf16 was meant."""
+    with pytest.raises(ValueError, match="amp must be one of"):
+        resolve_run_config(OmegaConf.create("amp: yes\n"))

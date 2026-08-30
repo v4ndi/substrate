@@ -8,6 +8,9 @@
 |---|---|---|---|
 | [`tabular_preprocessing`](tabular_preprocessing/) | табличный препроцессинг на обоих бэкендах, перенос артефакта между ними | скрипт | синтетика, генерируется скриптом |
 | [`eventsequence_preprocessing`](eventsequence_preprocessing/) | то же для событийных последовательностей | скрипт | синтетика, генерируется скриптом |
+| [`distributed_training`](distributed_training/) | multi-GPU и multi-node обучение, шардирование, AMP, DDP | скрипт + конфиг | синтетика, генерируется скриптом |
+| [`custom_callback`](custom_callback/) | своя точка расширения в цикле обучения | модуль + тесты | не нужны |
+| [`custom_loss`](custom_loss/) | своя функция потерь, подключаемая из конфига | модуль + тесты | не нужны |
 | [`basics`](basics/) | загрузка данных в датасет, своя метрика | ноутбуки | внутренние (HDFS) |
 | [`tabular_hidden_states`](tabular_hidden_states/) | обучение табличного трансформера, early/late fusion внешних эмбеддингов | конфиги + ноутбуки | скрипт выгрузки |
 | [`next_event_prediction`](next_event_prediction/) | self-supervised обучение на событиях, выгрузка эмбеддингов клиента | конфиги + ноутбук | скрипт выгрузки |
@@ -16,12 +19,21 @@
 ## Запускается прямо сейчас
 
 ```bash
+# препроцессинг на обоих бэкендах
 python examples/tabular_preprocessing/generate_data.py
 python examples/tabular_preprocessing/run_both_backends.py
+
+# обучение на нескольких процессах
+python examples/distributed_training/generate_data.py
+# скрипт напечатает готовую команду torchrun
+
+# точки расширения
+python -m pytest tests/examples
 ```
 
-Оба примера препроцессинга генерируют данные сами и не требуют ни Spark, ни
-доступа к хранилищу: Spark-часть пропускается, если подходящей JVM нет.
+Примеры препроцессинга и распределённого обучения генерируют данные сами и не
+требуют ни Spark, ни доступа к хранилищу: Spark-часть пропускается, если
+подходящей JVM нет, а распределённое обучение работает и на CPU через gloo.
 
 ## Требует выгрузки данных
 

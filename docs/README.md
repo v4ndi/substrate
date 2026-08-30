@@ -25,6 +25,14 @@
 
 Как устроена подсистема и как её расширить.
 
+* [guides/training.md](guides/training.md) — цикл обучения: эпохи против шагов,
+  валидация, чекпоинты, возобновление, накопление градиента.
+* [guides/callbacks.md](guides/callbacks.md) — двенадцать событий, контракт
+  контекста, единственное ограничение на порядок, как написать свой.
+* [guides/losses.md](guides/losses.md) — `Loss` / `LossOutput`, подмена из
+  конфига, композиция, когда нужен `num_items`.
+* [guides/datasets.md](guides/datasets.md) — шардирование по записям, `drop_tail`,
+  контракт паритета, кэш фильтров, HDFS.
 * [guides/models.md](guides/models.md) — как блоки складываются в пайплайн:
   табличный и последовательностный стек, early/late fusion, uplift, multi-task.
 * [guides/metrics.md](guides/metrics.md) — контракт метрики, сведение по
@@ -53,6 +61,9 @@
   примитивы чтения parquet.
 * [best_practices/gradient_checkpointing.md](best_practices/gradient_checkpointing.md)
   — как включить gradient checkpointing и чем за это платишь.
+* [best_practices/performance_metrics.md](best_practices/performance_metrics.md)
+  — блок `logging:`: пропускная способность, перекос между рангами, диагностика
+  шардирования. Доступен только тем, кто читал исходники, — до этой страницы.
 * [mlp_benchmark/instruction.md](mlp_benchmark/instruction.md) — конфигурация
   `MLPCampaignBenchmark`.
 
