@@ -5,11 +5,23 @@
 
 ## С чего начать
 
-Если вы здесь впервые — корневой [README.md](../README.md) отвечает на вопросы
-«что это» и «как установить», а [examples/](../examples/README.md) содержит
-сквозные примеры, которые можно запустить.
+[getting_started.md](getting_started.md) — путь от установки до инференса.
+Корневой [README.md](../README.md) отвечает на вопросы «что это» и «как
+установить», а [examples/](../examples/README.md) содержит сквозные примеры.
 
-## Разделы
+## Конфигурация
+
+Обучение и инференс целиком описываются одним YAML, поэтому это главный раздел
+для того, кто пользуется библиотекой, а не дорабатывает её.
+
+* [configuration/schema.md](configuration/schema.md) — все ключи конфига, их
+  значения по умолчанию и то, чего они **не** делают.
+* [configuration/targets.md](configuration/targets.md) — каталог классов,
+  которые можно подставить в `_target_`.
+* [configuration/distributed.md](configuration/distributed.md) — multi-GPU и
+  несколько узлов, смешанная точность, DDP, миграция с `accelerator:`.
+
+## Остальные разделы
 
 | раздел | что внутри |
 |---|---|
@@ -17,8 +29,6 @@
 | [best_practices/](best_practices/) | приёмы, которые экономят память и время |
 | [mlp_benchmark/](mlp_benchmark/) | рецепт запуска MLP-бенчмарка по кампаниям |
 | [decisions/](decisions/) | проектные документы: почему код устроен так, а не иначе |
-
-## Страницы
 
 * [data/event_sequence_batch.md](data/event_sequence_batch.md) — устройство
   `EventSequenceBatch`: что лежит в полях, как устроен паддинг.

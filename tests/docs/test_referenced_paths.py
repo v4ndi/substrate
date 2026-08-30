@@ -97,10 +97,19 @@ def test_scripts_told_to_run_exist(path):
     for info, body in FENCED_BLOCK.findall(path.read_text()):
         if info.strip().lower() not in SHELL_FENCES:
             continue
+        # A fence is a transcript: an earlier `cd` moves where a later `./x`
+        # resolves from. Without this, "cd examples/foo" then "./run.sh" would
+        # be reported missing, and the check would get switched off.
+        prefix = ""
         for line in body.splitlines():
-            first, _, _ = line.strip().partition(" ")
+            first, _, rest = line.strip().partition(" ")
+            if first == "cd":
+                target = _normalise(rest.split(" ")[0])
+                if looks_like_repo_path(target):
+                    prefix = f"{prefix}{target}/"
+                continue
             if first.startswith("./") and looks_like_repo_path(_normalise(first)):
-                candidates.add(_normalise(first))
+                candidates.add(f"{prefix}{_normalise(first)}")
     missing = _check(path, sorted(candidates))
     assert not missing, "\n".join([
         f"{relative(path)} tells the reader to run scripts that do not exist:",
