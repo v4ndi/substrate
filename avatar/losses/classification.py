@@ -1,0 +1,96 @@
+"""Classification / regression loss with optional L1 weight regularisation."""
+
+from __future__ import annotations
+
+import torch
+import torch.nn as nn
+
+from avatar.losses.base import Loss
+from avatar.losses.regularization import L1RegularizationLoss
+from avatar.outputs import LossOutput
+
+__all__ = ["ClassificationLoss", "build_task_loss_fn"]
+
+
+def build_task_loss_fn(num_classes: int, task_type: str) -> nn.Module:
+    """Pick the criterion implied by ``(num_classes, task_type)``.
+
+    Args:
+        num_classes: Size of the output head. 1 means binary or regression.
+        task_type: ``"classification"`` or ``"regression"``.
+
+    Raises:
+        ValueError: For combinations that do not describe a real task.
+    """
+    if num_classes == 1 and task_type == "regression":
+        return nn.MSELoss()
+    if num_classes == 1 and task_type == "classification":
+        return nn.BCEWithLogitsLoss()
+    if num_classes > 1 and task_type == "classification":
+        return nn.CrossEntropyLoss()
+    raise ValueError(
+        f"Invalid combination: task_type={task_type}, num_classes={num_classes}. "
+        "Supported combinations:\n"
+        "- num_classes=1 with task_type='regression'\n"
+        "- num_classes=1 with task_type='classification'\n"
+        "- num_classes>1 with task_type='classification'"
+    )
+
+
+class ClassificationLoss(Loss):
+    """Task criterion plus an optional L1 penalty on the encoder's weights.
+
+    Args:
+        num_classes: Output head size, used to pick the default criterion.
+        task_type: ``"classification"`` or ``"regression"``.
+        loss_fn: Explicit criterion; overrides the ``(num_classes, task_type)``
+            choice. This is the injection point — a focal or weighted loss goes
+            here as a config change rather than a code change.
+        l1_weight: Multiplier for the L1 penalty. Zero disables it entirely.
+        l1_apply_substr: Only parameters whose name contains this substring are
+            penalised; the default targets embedding tables.
+    """
+
+    def __init__(
+        self,
+        num_classes: int = 1,
+        task_type: str = "classification",
+        loss_fn: nn.Module | None = None,
+        l1_weight: float = 0.0,
+        l1_apply_substr: str = "embed",
+    ):
+        super().__init__()
+        self.loss_fn = (
+            loss_fn
+            if loss_fn is not None
+            else build_task_loss_fn(num_classes, task_type)
+        )
+        self.l1_weight = l1_weight
+        self.l1_loss = L1RegularizationLoss(apply_substr=l1_apply_substr)
+
+    def forward(
+        self,
+        logits: torch.Tensor,
+        targets: torch.Tensor,
+        model: nn.Module | None = None,
+    ) -> LossOutput:
+        """Score ``logits`` against ``targets``.
+
+        Args:
+            logits: Raw head outputs.
+            targets: Ground truth, shaped as the criterion expects.
+            model: Module to regularise. Required when ``l1_weight`` is set;
+                the penalty walks its ``named_parameters``.
+        """
+        loss = self.loss_fn(logits, targets)
+        components: dict[str, torch.Tensor] = {}
+        if self.l1_weight > 0:
+            if model is None:
+                raise ValueError(
+                    "ClassificationLoss has l1_weight > 0 but no model to "
+                    "regularise; pass the module whose weights to penalise."
+                )
+            l1 = self.l1_loss(model)
+            components["l1"] = l1
+            loss = loss + l1 * self.l1_weight
+        return LossOutput(loss=loss, components=components)

@@ -17,7 +17,11 @@ from torch.utils.data import DataLoader
 
 from avatar.metrics import BaseMetric
 from avatar.train.callbacks.base import CallbackHandler, TrainerCallback
-from avatar.train.checkpoint import load_checkpoint
+from avatar.train.checkpoint import (
+    latest_checkpoint_step,
+    load_checkpoint,
+    model_path,
+)
 from avatar.train.config import RunConfig
 from avatar.train.dist import DistEnv, seed_everything, unwrap_model
 from avatar.train.evaluate import evaluate
@@ -356,8 +360,6 @@ class Trainer:
         """Load the best saved weights and score the test set."""
         if self.test_dataloader is None:
             return None
-        from avatar.train.checkpoint import latest_checkpoint_step, model_path
-
         best_step = latest_checkpoint_step(self.checkpoint_dir)
         if best_step is not None:
             weights = model_path(self.checkpoint_dir, best_step)

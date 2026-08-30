@@ -1,7 +1,28 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import torch
+
+
+@dataclass
+class LossOutput:
+    """What a loss module returns.
+
+    Attributes:
+        loss: The scalar the trainer calls ``backward()`` on. ``None`` for
+            multi-head losses, where the cross-rank token weighting happens in
+            the trainer instead (see
+            :func:`avatar.train.loss_reduce.calculate_output_loss`).
+        components: The individual terms. When ``num_items`` is set these are
+            the per-head losses the trainer reduces; otherwise they are for
+            logging only and ``loss`` already contains their sum.
+        num_items: Valid item count per head, keyed like ``components``. Its
+            presence is what tells the trainer to token-weight across ranks.
+    """
+
+    loss: torch.Tensor | None = None
+    components: dict[str, torch.Tensor] = field(default_factory=dict)
+    num_items: dict[str, torch.Tensor] | None = None
 
 
 @dataclass

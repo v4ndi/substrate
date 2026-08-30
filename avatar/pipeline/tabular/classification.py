@@ -1,7 +1,8 @@
 import torch
 import torch.nn as nn
 
-from avatar.losses import L1RegularizationLoss
+from avatar.losses.base import Loss
+from avatar.losses.classification import ClassificationLoss
 from avatar.nn.utils.ffn import FeedForwardNetwork
 from avatar.outputs import TabularOutput
 from avatar.pipeline.tabular.tabular_aggregation import TabularWithAggregatedStates
@@ -49,6 +50,7 @@ class TabularClassification(nn.Module):
         hidden_proj_dim: int | None = None,
         output_head=None,
         l1_loss_weight: float = 0.0,
+        loss: Loss | None = None,
     ):
         super().__init__()
         self.encoder = tabular_model
@@ -67,27 +69,16 @@ class TabularClassification(nn.Module):
             dropout_p=dropout_p,
             output_head=output_head,
         )
-        self._init_loss(num_classes=num_classes, task_type=task_type)
         self.l1_loss_weight = l1_loss_weight
-
-    def _init_loss(self, num_classes: int, task_type: str):
-        # Configure appropriate loss function
-        if num_classes == 1 and task_type == "regression":
-            self.loss = nn.MSELoss()
-        elif num_classes == 1 and task_type == "classification":
-            self.loss = nn.BCEWithLogitsLoss()
-        elif num_classes > 1 and task_type == "classification":
-            self.loss = nn.CrossEntropyLoss()
-        else:
-            raise ValueError(
-                f"Invalid combination: task_type={task_type}, num_classes={num_classes}. "
-                "Supported combinations:\n"
-                "- num_classes=1 with task_type='regression'\n"
-                "- num_classes=1 with task_type='classification'\n"
-                "- num_classes>1 with task_type='classification'"
+        self.loss = (
+            loss
+            if loss is not None
+            else ClassificationLoss(
+                num_classes=num_classes,
+                task_type=task_type,
+                l1_weight=l1_loss_weight,
             )
-
-        self.l1_loss = L1RegularizationLoss(apply_substr="embed")
+        )
 
     def _init_out_head(
         self,
@@ -163,8 +154,8 @@ class TabularClassification(nn.Module):
         l1_loss = None
 
         if targets is not None:
-            loss = self.loss(logits, targets)
-            l1_loss = self.l1_loss(self.encoder) if self.l1_loss_weight > 0 else 0
-            loss = loss + l1_loss * self.l1_loss_weight
+            result = self.loss(logits, targets, model=self.encoder)
+            loss = result.loss
+            l1_loss = result.components.get("l1", 0)
 
         return TabularOutput(logits=logits, loss=loss, auxilary_loss=l1_loss)
