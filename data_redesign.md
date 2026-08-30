@@ -155,7 +155,7 @@ avatar/data/
 ├── sequential/
 │   ├── __init__.py
 │   ├── dataset.py              EventSequenceDataset  (always sharded)
-│   ├── collate.py              EventSequenceCollateFn, FixedHorizonCollateFn, ColesCollateFn
+│   ├── collate.py              EventSequenceCollateFn
 │   └── batch.py                EventSequenceBatch
 ├── tabular/
 │   ├── __init__.py
@@ -500,6 +500,9 @@ Implemented as designed, with the deviations below. Suite: **272 passed, 2 skipp
   empty it. Bounds now come from the post-filter length, which is also what makes
   the predicate deterministic enough for the scan to predict. `max_length >=
   min_length` is asserted for the same reason.
+- **`ColesCollateFn` and `FixedHorizonCollateFn` deleted.** §6 proposed keeping
+  them; like the dead samplers they had zero references in code, configs or tests,
+  so they went the same way.
 - **Filter-time accounting moved into the datasets.** The base times nothing; each
   dataset reports through `_time_filter()` / `_source_rows`, so `filter_sec` still
   measures the predicate rather than parquet decoding.

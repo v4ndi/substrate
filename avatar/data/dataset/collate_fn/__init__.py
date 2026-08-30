@@ -8,11 +8,7 @@ and :mod:`avatar.data.sequential.collate`. This shim keeps existing Hydra
 import warnings
 
 from avatar.data.base.collate import BaseCollateFn
-from avatar.data.sequential.collate import (
-    ColesCollateFn,
-    EventSequenceCollateFn,
-    FixedHorizonCollateFn,
-)
+from avatar.data.sequential.collate import EventSequenceCollateFn
 from avatar.data.tabular.collate import (
     MultiTaskSupervisedCollateFn,
     MultiTaskUpliftCollateFn,
@@ -31,9 +27,7 @@ warnings.warn(
 
 __all__ = [
     "BaseCollateFn",
-    "ColesCollateFn",
     "EventSequenceCollateFn",
-    "FixedHorizonCollateFn",
     "MultiTaskSupervisedCollateFn",
     "MultiTaskUpliftCollateFn",
     "SupervisedCollateFn",

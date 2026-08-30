@@ -22,11 +22,9 @@ from avatar.data.base import (
     resolve_filesystem,
 )
 from avatar.data.sequential import (
-    ColesCollateFn,
     EventSequenceBatch,
     EventSequenceCollateFn,
     EventSequenceDataset,
-    FixedHorizonCollateFn,
 )
 from avatar.data.tabular import (
     MultiTaskSupervisedCollateFn,
@@ -43,11 +41,9 @@ __all__ = [
     "BaseCollateFn",
     "BaseParquetDataset",
     "BaseShardedParquetDataset",
-    "ColesCollateFn",
     "EventSequenceBatch",
     "EventSequenceCollateFn",
     "EventSequenceDataset",
-    "FixedHorizonCollateFn",
     "MultiTaskSupervisedCollateFn",
     "MultiTaskUpliftCollateFn",
     "ShardPlanner",
