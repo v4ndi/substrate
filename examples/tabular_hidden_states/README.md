@@ -84,19 +84,19 @@ model:
 Теперь можно к сборке конфигов и запуску обучения, предлагаем следущие архитектурные эксперименты:
 1. Without external hidden_states
 ```bash
-accelerate launch -m avatar.train --config-dir=configs --config-name=no_hidden
+torchrun --standalone --nproc_per_node=1 -m avatar.train --config-dir=configs --config-name=no_hidden
 ```
 2. Early Fusion
 ```bash
-accelerate launch -m avatar.train --config-dir=configs --config-name=early_fusion
+torchrun --standalone --nproc_per_node=1 -m avatar.train --config-dir=configs --config-name=early_fusion
 ```
 3. Late Fusion
 ```bash
-accelerate launch -m avatar.train --config-dir=configs --config-name=late_fusion
+torchrun --standalone --nproc_per_node=1 -m avatar.train --config-dir=configs --config-name=late_fusion
 ```
 4. Early Fusion + Late Fusion
 ```bash
-accelerate launch -m avatar.train --config-dir=configs --config-name=early_late_fusion
+torchrun --standalone --nproc_per_node=1 -m avatar.train --config-dir=configs --config-name=early_late_fusion
 ```
   
 ## Логирование метрик и запуск mlflow
@@ -117,12 +117,10 @@ https://jupyterhub-datalab.apps.prom-datalab.ca.sbrf.ru/user/<YOUR_LOGIN>_omega-
 Пример конфига для инференса:
 ```yaml
 load_state: /home/datalab/nfs/avatar_fm/examples/tabular_hidden_states/best_models/tabular_hidden_states/tabular_early_fusion/13/model.bin # Путь до весов
-accelerator:
-  _target_: accelerate.Accelerator
-  _partial_: True
-  dataloader_config:
-    _target_: accelerate.utils.DataLoaderConfiguration
-    dispatch_batches: False
+distributed:
+  backend: null  # null -> nccl on GPU, gloo on CPU
+  gradient_accumulation_steps: 1
+amp: no  # no | fp16 | bf16
 test_dataloader:
   _target_: torch.utils.data.DataLoader
   dataset:
@@ -175,7 +173,7 @@ metrics:
   
 Пример запуска инференса:
 ```
-accelerate launch -m avatar.inference --config-dir=configs/inference --config-name=<pass_your_config_name>
+python -m avatar.infer --config-dir=configs/inference --config-name=<pass_your_config_name>
 ```
 В ноутбуке `metrics.ipynb` приведен код для расчета метрик.
 

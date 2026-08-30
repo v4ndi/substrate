@@ -40,7 +40,6 @@ class TrainingArguments:
     checkpoint_state: str | None = None
     model_state: str | None = None
     steps_before_evaluation: int | None = None
-    distributed_evaluate: bool = False
 
     def to_dict(self) -> dict[str, object]:
         return deepcopy(self.__dict__)

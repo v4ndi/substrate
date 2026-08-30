@@ -17,12 +17,12 @@ chmod +x download_data.sh
 ```
   
 ```bash
-accelerate launch -m avatar.train --config-dir=configs/ --config-name=ssl
+torchrun --standalone --nproc_per_node=1 -m avatar.train --config-dir=configs/ --config-name=ssl
 ```
 
 ## Запуск инференса
 ```
-accelerate launch -m avatar.inference --config-dir=configs --config-name=inference
+python -m avatar.infer --config-dir=configs --config-name=inference
 ```
 По итогу будут сохранены `.parquet` файлы, которые будут содержать следующие поля:
 * epk_id - идентификатор клиента

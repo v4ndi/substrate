@@ -751,8 +751,9 @@ class MLPCampaignBenchmark(BaseMetric):
     ):
         subprocess.run(
             [
-                "accelerate",
-                "launch",
+                "torchrun",
+                "--standalone",
+                "--nproc_per_node=1",
                 "-m",
                 "avatar.train",
                 "--config-dir",

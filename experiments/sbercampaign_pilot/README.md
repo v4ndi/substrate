@@ -26,7 +26,7 @@ hdfs dfs -get /user/team/team_ai_avatar/rusakov/september_pilot/prom/model_weigh
 * `metrics.test_metrics.path_to_save` - указать свою директорию, в эту директорию будут сохраняться `parquet` файлы с результатами.
 4. Запуск инференса
 ```bash
-python -m avatar.inference --config-dir=configs/prom/sequence --config-name=inference_sequence
+python -m avatar.infer --config-dir=configs/prom/sequence --config-name=inference_sequence
 ```
 5. Выгрузка эмбеддингов в РХ
 ```bash
@@ -42,7 +42,7 @@ hdfs dfs -put path_to_dir path_to_hdfs
   
 **Запуск обучния:**
 ```bash
-accelerate launch -m avatar.train --config-dir=configs/prom/tabular/train/ --config-name=PASS_YOUR_PRODUCT_NAME_CONFIG
+torchrun --standalone --nproc_per_node=1 -m avatar.train --config-dir=configs/prom/tabular/train/ --config-name=PASS_YOUR_PRODUCT_NAME_CONFIG
 ```
 
 ## Инференс продуктов общий случай

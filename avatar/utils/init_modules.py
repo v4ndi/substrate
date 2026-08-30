@@ -97,33 +97,32 @@ def init_scheduler(
     config: DictConfig | dict[str, Any],
     optimizer: torch.optim.Optimizer,
     train_dataloader: torch.utils.data.DataLoader,
+    gradient_accumulation_steps: int = 1,
 ) -> torch.optim.lr_scheduler._LRScheduler:
     """Initializes and configures a learning rate scheduler based on the provided configuration.
 
     This function handles:
-    - Gradient accumulation step calculation
     - Automatic determination of total training steps when not specified
     - Special cases for infinite/invalid training step values
     - Instantiation of the scheduler with proper parameters
 
+    The scheduler is stepped once per accumulation boundary, so the step budget
+    is ``epochs * batches / gradient_accumulation_steps``.
+
     Args:
         config: Configuration dictionary or DictConfig containing:
             - scheduler: Parameters for scheduler instantiation
-            - accelerator: Gradient accumulation settings
             - train: Training duration settings
         optimizer: The optimizer whose learning rate should be scheduled
         train_dataloader: Training dataloader used to calculate total steps
+        gradient_accumulation_steps: Micro-batches per optimizer step
 
     Returns:
         Initialized learning rate scheduler instance
     """
 
     scheduler_params_dict = dict(config["scheduler"])
-    grad_accumulation_steps = (
-        config["accelerator"]["gradient_accumulation_steps"]
-        if "gradient_accumulation_steps" in config["accelerator"].keys()
-        else 1
-    )
+    grad_accumulation_steps = max(1, gradient_accumulation_steps)
     if "num_training_steps" not in scheduler_params_dict.keys():
         scheduler_params_dict["num_training_steps"] = (
             config["train"]["num_epochs"] * len(train_dataloader) * 100

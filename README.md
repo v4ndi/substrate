@@ -33,7 +33,7 @@ the authoritative dependency versions are in `pyproject.toml`.
 | `avatar/preprocessing/`  | `spark` and `local` (pyarrow+numpy) backends, shared `base` |
 | `avatar/data/`           | datasets, collate fns, parquet IO                           |
 | `avatar/metrics/`        | training / campaign / uplift metrics                        |
-| `avatar/train.py`        | training entrypoint (Hydra + Accelerate)                    |
+| `avatar/train/`          | training loop, callbacks, checkpoints (Hydra + torch.distributed) |
 | `examples/`              | runnable end-to-end examples (see `examples/README.md`)     |
 | `docs/`                  | topic notes (parquet, event-sequence batch, checkpointing)  |
 
