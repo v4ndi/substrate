@@ -33,6 +33,11 @@ _DDP_KWARGS_TARGET = "accelerate.utils.DistributedDataParallelKwargs"
 
 @dataclass(frozen=True)
 class DistributedConfig:
+    """Process-group settings and the accumulation factor.
+
+    ``backend`` of ``None`` picks NCCL on CUDA and gloo otherwise.
+    """
+
     backend: str | None = None
     timeout_sec: float = DEFAULT_TIMEOUT_SEC
     gradient_accumulation_steps: int = 1
@@ -40,6 +45,8 @@ class DistributedConfig:
 
 @dataclass(frozen=True)
 class DDPConfig:
+    """Options passed straight through to ``DistributedDataParallel``."""
+
     find_unused_parameters: bool = False
     gradient_as_bucket_view: bool = True
     broadcast_buffers: bool = True

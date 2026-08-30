@@ -1,3 +1,5 @@
+"""The tabular representation stack: embed, contextualise, pool."""
+
 import torch.nn as nn
 
 from avatar.data.tabular.batch import TabularBatch

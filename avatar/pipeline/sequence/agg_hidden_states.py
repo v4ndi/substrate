@@ -1,3 +1,5 @@
+"""Turn a client's event sequence into a single embedding."""
+
 import torch
 import torch.nn as nn
 
@@ -7,12 +9,26 @@ from avatar.outputs import BaseSequenceOutput
 
 
 class SequenceModelWithAggregation(nn.Module):
-    """Aggregate hidden states from sequence model
+    """Run a sequence model and pool its hidden states into one vector.
+
+    No head and no loss: this is the pipeline used at inference to produce the
+    ``seq_hidden_state`` column that the tabular models then consume as an
+    external embedding.
+
     Args:
-        sequence_model: BaseSequenceModel,
-        model_weights: str = None,
-        freeze_backbone: bool = False,
-        aggregation_layer: dict[str, any] = {"name": "mean"},
+        sequence_model: The backbone over event sequences.
+        model_weights: Path to a checkpoint for the backbone, loaded strictly.
+            Typically the result of a ``NextKTokensPrediction`` pretraining run.
+        freeze_backbone: Freeze every backbone parameter.
+        aggregation_config: Config for
+            :func:`~avatar.nn.utils.agg.get_aggregation_layer`; defaults to
+            mean pooling. An aggregation reaching below the last layer
+            (``layer_idx < -1``) switches the backbone into returning all
+            hidden states automatically.
+
+    Returns:
+        :class:`~avatar.outputs.BaseSequenceOutput` whose
+        ``last_hidden_state`` is ``(batch, hidden_size)``.
     """
 
     def __init__(

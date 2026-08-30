@@ -16,6 +16,7 @@ _ALLOWED_KEY_CHARS = set(
 
 
 def sanitize_param_key(key: str) -> str:
+    """Replace characters MLflow rejects in a param or metric key with ``_``."""
     return "".join(char if char in _ALLOWED_KEY_CHARS else "_" for char in str(key))
 
 

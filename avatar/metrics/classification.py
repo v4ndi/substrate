@@ -1,3 +1,10 @@
+"""Classification quality metrics.
+
+Currently ROC AUC, with optional per-group breakdown. Metrics here consume
+``outputs.logits`` and ``inputs["targets"]`` and are the ones referenced from
+``metrics.valid_metrics`` in most configs.
+"""
+
 import numpy as np
 import torch
 from sklearn.metrics import roc_auc_score
@@ -6,12 +13,25 @@ from .base import BaseMetric
 
 
 class RocAucScore(BaseMetric):
-    """Calculate RocAucScore with group support
+    """ROC AUC over the accumulated population, optionally split by a group.
+
+    Binary probabilities are taken from ``outputs.logits``: a 1-D logit tensor
+    is passed through a sigmoid, a 2-D one through softmax with class 1 kept.
 
     Args:
-        group_column: str - Specifies the column used to partition the data
-        The RocAuc score will be calculated separately for each unique value
-        in this column and also averaged across groups
+        group_column: Column in ``inputs`` to partition on. When set, the score
+            is reported per unique value **and** averaged across values.
+
+    Returns from :meth:`compute`:
+        ``roc_auc_score`` always. With ``group_column`` set, additionally
+        ``roc_auc_score_group_{value}`` per group, ``roc_auc_score_mean`` and
+        ``roc_auc_score_std`` over the groups, and ``roc_auc_score_overall``.
+
+    Note:
+        With no positive targets accumulated, ``roc_auc_score`` reports 0.5
+        rather than raising — an all-negative validation slice is a data
+        problem, but it should not kill a long run. Groups holding a single
+        class are skipped instead of being scored.
     """
 
     def __init__(self, group_column: str | None = None):
@@ -56,7 +76,7 @@ class RocAucScore(BaseMetric):
             self.groups.extend(groups)
 
     def compute(self) -> dict[str, float]:
-        """return Dict(metric_name: value)"""
+        """Score the whole accumulated population at once."""
         predicted = []
         targets = []
 

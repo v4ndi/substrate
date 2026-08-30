@@ -1,3 +1,5 @@
+"""Response-setting classifier: the S-Learner shape without a treatment flag."""
+
 import torch
 import torch.nn as nn
 
@@ -14,9 +16,9 @@ from avatar.pipeline.uplift.treatment_interaction import (
 
 
 class SupervisedLearner(nn.Module):
-    """
-    A neural network for tabular data classification in response setting.
-     Args:
+    """A neural network for tabular data classification in response setting.
+
+    Args:
         embedding: BaseTabularEmbedding - tabular embedding layer
         tabular_encoder: BaseTabularEncoder - tabular encoder layer
         aggregation_config: dict - dictionary with aggregation parameters

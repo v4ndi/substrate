@@ -1,3 +1,5 @@
+"""Multi-task uplift: the S-Learner two-pass trick, per task."""
+
 import torch
 import torch.nn as nn
 
@@ -13,7 +15,30 @@ from avatar.pipeline.uplift.treatment_interaction import (
 
 
 class MultiTaskUplift(nn.Module):
-    """Uplift multi-task wrapper"""
+    """Several uplift tasks over a shared (or per-task) backbone.
+
+    Combines :class:`~avatar.pipeline.multi_task.response.MultiTaskResponse`'s
+    structural sharing with :class:`~avatar.pipeline.uplift.s_learner.SLearner`'s
+    scoring: at evaluation each task is run twice, all-treated and
+    all-control, and uplift is the difference.
+
+    Args:
+        embedding: One embedding shared by all tasks, or one per task.
+        tabular_encoder: One encoder shared by all tasks, or one per task.
+        heads: ``{task name: MultiTaskHead}``; sized from the backbone here.
+        multi_task_loss: Combines the per-task losses into one scalar.
+        n_groups: Number of campaign groups; adds a group embedding.
+        treatment_interaction: How the treatment embedding meets the feature
+            tokens; defaults to concatenation.
+        group_interaction: The same, for the group embedding.
+        exchange_treatment_group: Reserve the last group id as a dedicated
+            control group, as in :class:`~avatar.pipeline.uplift.s_learner.SLearner`.
+        share_side_embeddings: Share the treatment and group embeddings across
+            tasks rather than giving each task its own.
+
+    Returns:
+        :class:`~avatar.outputs.MultiTaskxGroupUpliftOutput`.
+    """
 
     def __init__(
         self,
@@ -331,6 +356,23 @@ class MultiTaskUplift(nn.Module):
 
 
 class MultiTaskBackbone(nn.Module):
+    """Encoder plus pooling plus external-embedding fusion, for uplift tasks.
+
+    The uplift-side twin of
+    :class:`~avatar.pipeline.multi_task.response.MultiTaskBackbone`; kept
+    separate because the two pipelines evolve independently.
+
+    Args:
+        tabular_encoder: Encoder over the feature tokens.
+        aggregation_config: Config for
+            :func:`~avatar.nn.utils.get_aggregation_layer`; defaults to mean.
+        hidden_state_dim: Width of external embeddings concatenated after
+            pooling.
+        proj_hiddens_to_dim: Project them to this width first.
+        normalize_hidden_states: ``{name: width}`` — normalise each named
+            external embedding separately; supersedes ``hidden_state_dim``.
+    """
+
     def __init__(
         self,
         tabular_encoder: BaseTabularEncoder,
@@ -404,6 +446,16 @@ class MultiTaskBackbone(nn.Module):
 
 
 class MultiTaskHead(nn.Module):
+    """One task's uplift head, sized once the backbone width is known.
+
+    Args:
+        dropout_head: Dropout in the default feed-forward head.
+        separate_heads: Give treatment and control their own head for this
+            task instead of sharing one.
+        out_head: Replace the default head entirely.
+        loss_fn: Loss over this task's logits; defaults to cross-entropy.
+    """
+
     def __init__(
         self,
         dropout_head: float = 0.15,

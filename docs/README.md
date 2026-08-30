@@ -21,6 +21,23 @@
 * [configuration/distributed.md](configuration/distributed.md) — multi-GPU и
   несколько узлов, смешанная точность, DDP, миграция с `accelerator:`.
 
+## Руководства
+
+Как устроена подсистема и как её расширить.
+
+* [guides/models.md](guides/models.md) — как блоки складываются в пайплайн:
+  табличный и последовательностный стек, early/late fusion, uplift, multi-task.
+* [guides/metrics.md](guides/metrics.md) — контракт метрики, сведение по
+  рангам, композиция обёрток, как написать свою.
+
+## Справочники
+
+Каталоги по пакетам: что там лежит и что из этого брать.
+
+* [reference/pipeline.md](reference/pipeline.md) — пайплайны и их блоки.
+* [reference/metrics.md](reference/metrics.md) — метрики, сборщики,
+  бенчмарки, обёртки.
+
 ## Остальные разделы
 
 | раздел | что внутри |

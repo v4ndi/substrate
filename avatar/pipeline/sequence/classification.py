@@ -1,3 +1,5 @@
+"""Classification directly from an event sequence."""
+
 import torch
 import torch.nn as nn
 
@@ -95,7 +97,6 @@ class SequenceClassification(nn.Module):
             model_obj: The model containing parameters to unfreeze
             attr_name: String pattern to match against parameter names
         """
-
         for name, params in model_obj.named_parameters():
             if attr_name in name:
                 params.requires_grad = True

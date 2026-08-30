@@ -1,3 +1,5 @@
+"""Average already-computed metrics into summary numbers."""
+
 import re
 from statistics import mean
 
@@ -5,12 +7,30 @@ from avatar.metrics.base import BaseMetric
 
 
 class GroupAverageMetricWrapper(BaseMetric):
-    """GroupAverageMetricWrapper
-    Wrap metric, after usual compute, compute average for groups of metrics
+    """Add averages over the metrics the wrapped metric produced.
 
-    metric (BaseMetric): any metric with methods update, compute, reset.
-    gropus: (dict[str, list[str]]): new_metric_name -> list of metric, provided by metric to average
-    avg_over_regulars: dict[str, str] - new_metric_name -> regular (regular means subset of metrics to average)
+    Purely a post-processing step: ``update`` is forwarded untouched, and the
+    averaging happens on the names returned by the inner ``compute``. Usually
+    wrapped around
+    :class:`~avatar.metrics.utils.group_devided_wrap.GroupDevidedMetricsWrapper`,
+    whose per-group names are what there is to average.
+
+    Args:
+        metric: Any metric. Its ``compute`` output is both kept and averaged.
+        groups: ``new name -> explicit list of metric names`` to average.
+        avg_over_regulars: ``new name -> regular expression``; every produced
+            metric name matching it is averaged. Resolved once, against the
+            first ``compute``, and reused afterwards.
+
+    Raises:
+        AssertionError: A new name collides with a metric the inner metric
+            already produces, or is defined in both ``groups`` and
+            ``avg_over_regulars``.
+
+    Note:
+        A group that matches nothing averages to ``0``, not to a missing key.
+        A regular expression that silently stops matching after a rename
+        therefore shows up as a metric that went to zero.
     """
 
     def __init__(

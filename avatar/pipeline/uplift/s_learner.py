@@ -1,3 +1,5 @@
+"""S-Learner: one model, treatment supplied as a feature."""
+
 import torch
 import torch.nn as nn
 
@@ -14,25 +16,54 @@ from avatar.pipeline.uplift.treatment_interaction import (
 
 
 class SLearner(nn.Module):
-    """Simple S-Learner model
+    """S-Learner: one shared model, the treatment flag fed in as a feature.
+
+    Training runs the batch once, with each record's real treatment value.
+    Scoring runs it **twice** — everything forced to treated, then everything
+    forced to control — and reports ``uplift = P(y|treated) - P(y|control)``.
+    That second pass is why evaluation costs roughly twice a plain classifier,
+    and why ``calculate_train_uplift`` is off by default.
 
     Args:
-        embedding: BaseTabularEmbedding - tabular embedding layer
-        tabular_encoder: BaseTabularEncoder - tabular encoder layer
-        aggregation_config: dict - dictionary with aggregation parameters
-        n_groups: int - number of groups for uplift; Defualt: None
-        hidden_state_dim: int - number of hidden state dimensions; Defualt: None
-        dropout_head: float - dropout rate in the output head; Defualt: 0.15
-        separate_heads: bool - whether to have separate heads for treatment and
-            control; Defualt: False
-        treatment_interaction: BaseTreatmentInteraction; Default None -> ConcatTreatmentInteraction
-        calculate_train_uplift: bool - whether to forward model twice
-            for calculating uplift during training; Defualt: False
-        exchange_treatment_group: bool ??
-        out_head: nn.Module - output head; Defualt: FFN
-        proj_hiddens_to_dim: int - project hidden states to this dimension; Defualt: None
-        normalize_hidden_states: dict[str, int] - dictionary with hidden states to normalize; Defualt: None
-        loss_fn: nn.Module = nn.CrossEntropyLoss() | Any
+        embedding: Tabular embedding layer.
+        tabular_encoder: Encoder over the feature tokens.
+        aggregation_config: Config for
+            :func:`~avatar.nn.utils.get_aggregation_layer`. Defaults to mean
+            pooling. Its ``num_features`` must account for the extra token that
+            :class:`~avatar.pipeline.uplift.treatment_interaction.ConcatTreatmentInteraction`
+            appends — and for the group token, when ``n_groups`` is set.
+        n_groups: Number of campaign groups. When set, a group embedding is
+            added alongside the treatment embedding.
+        hidden_state_dim: Width of the external embedding concatenated after
+            pooling (late fusion). ``None`` disables late fusion.
+        dropout_head: Dropout in the output head.
+        separate_heads: Give treatment and control their own head instead of
+            sharing one. The shared backbone is unaffected.
+        treatment_interaction: How the treatment embedding meets the feature
+            tokens. Defaults to concatenation.
+        group_interaction: The same, for the group embedding.
+        calculate_train_uplift: Also run the two scoring passes during
+            training, so uplift metrics are available on the train set. Costs
+            two extra forward passes per step.
+        exchange_treatment_group: Reserve the **last** group id as a dedicated
+            control group: control records are relabelled to ``n_groups - 1``
+            during training, and the calibrated control pass uses that id too.
+            Only meaningful together with ``n_groups``.
+        out_head: Replace the default feed-forward head.
+        proj_hiddens_to_dim: Project the external embedding to this width
+            before concatenating, instead of only normalising it.
+        normalize_hidden_states: ``{name: width}`` — layer-normalise each named
+            external embedding separately before concatenating them. When set,
+            it determines the total external width and ``hidden_state_dim`` is
+            ignored.
+        loss_fn: Loss over the head's logits. Defaults to cross-entropy; a
+            custom loss is called with ``logits``, ``is_treat``, ``dist`` and
+            ``targets`` instead, which is what the direct-uplift losses need.
+
+    Returns:
+        :class:`~avatar.outputs.MultiGroupUpliftOutput`. During training
+        ``treatment_probs`` / ``control_probs`` / ``uplift`` are ``None``
+        unless ``calculate_train_uplift`` is set.
     """
 
     def __init__(
@@ -50,7 +81,7 @@ class SLearner(nn.Module):
         exchange_treatment_group: bool = False,
         out_head: nn.Module = None,
         proj_hiddens_to_dim: int | None = None,
-        normalize_hidden_states: dict[str, int] | None = None,  # добавить в докстринг
+        normalize_hidden_states: dict[str, int] | None = None,
         loss_fn: nn.Module | None = None,
     ):
         if aggregation_config is None:

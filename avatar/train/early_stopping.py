@@ -51,7 +51,6 @@ class EarlyStopping:
         Raises:
             ValueError: If strategy is neither "max" nor "min".
         """
-
         assert strategy in ["min", "max"], (
             f"Unsupported value for strategy: {strategy=}"
         )

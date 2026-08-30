@@ -17,6 +17,7 @@ import pyarrow.parquet as pq
 
 
 def build_table(n_rows: int = 200_000, n_num: int = 24, n_cat: int = 8, seed: int = 0):
+    """Build a synthetic wide table with nulls and heavy-tailed numeric columns."""
     rng = np.random.default_rng(seed)
     cols: dict[str, pa.Array] = {"epk_id": pa.array(np.arange(n_rows), pa.int64())}
 
@@ -43,6 +44,7 @@ def build_table(n_rows: int = 200_000, n_num: int = 24, n_cat: int = 8, seed: in
 
 
 def main() -> None:
+    """Write the synthetic dataset out as partitioned parquet."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=os.path.join(os.path.dirname(__file__), "data"))
     ap.add_argument("--rows", type=int, default=200_000)

@@ -47,10 +47,12 @@ def _restore_rng_state(state: dict[str, Any] | None) -> None:
 
 
 def checkpoint_path(directory: str, step: int) -> str:
+    """Where the full training state for ``step`` lives."""
     return os.path.join(directory, str(step), CHECKPOINT_NAME)
 
 
 def model_path(directory: str, step: int) -> str:
+    """Where the bare model weights for ``step`` live."""
     return os.path.join(directory, str(step), MODEL_NAME)
 
 

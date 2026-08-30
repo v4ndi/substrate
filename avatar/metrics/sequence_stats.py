@@ -1,3 +1,10 @@
+"""Diagnostics for sequence models: what went in, and how big the vectors are.
+
+These do not measure quality. They answer "is the data what I think it is" —
+how long the contexts actually are after slicing, how the event types are
+distributed, whether hidden states are drifting in scale.
+"""
+
 import numpy as np
 import torch
 
@@ -72,17 +79,21 @@ class SequenceStats(BaseMetric):
 
 
 class ExpertsWorkload(BaseMetric):
-    """
-    A metric class that calculates the workload distribution across experts based on router logits.
+    """Mean per-layer entropy of the router's expert distribution.
 
-    Attributes:
-        epsilon (float): Small value to prevent logarithm of zero in entropy calculation.
-        experts_workload (list of np.ndarray): Accumulated logits from each update call.
+    Reads ``outputs.router_logits`` and reports how evenly traffic is spread
+    over experts, averaged across layers.
 
-    Methods:
-        update: Updates the accumulated expert workload with new data.
-        compute: Computes the average by layer entropy of the normalized expert workload distribution.
-        reset: Resets the accumulated expert workload data.
+    Args:
+        epsilon: Guard added inside the logarithm so an unused expert does not
+            produce ``-inf``.
+
+    Warning:
+        Unlike every other metric here, :meth:`compute` returns a **scalar**,
+        not a ``{name: value}`` dict, so it cannot be used directly as a
+        ``valid_metrics`` entry — the evaluation loop does
+        ``scores.update(metric.compute())``. No config uses it today. Wrap it
+        or fix the return type before putting it in one.
     """
 
     def __init__(self, epsilon=1e-4):
@@ -113,6 +124,16 @@ class ExpertsWorkload(BaseMetric):
 
 
 class HiddensNorm(BaseMetric):
+    """Running mean of the L1, L2 and L-infinity norms of the pooled embedding.
+
+    Reads ``outputs.aggregated_hidden_state``. Useful as a drift alarm: a
+    representation whose norm climbs steadily across epochs is usually a sign
+    of a missing normalisation layer rather than of learning.
+
+    Returns from :meth:`compute`:
+        ``l1_norm``, ``l2_norm``, ``l_inf_norm``.
+    """
+
     def __init__(self):
         self.reset()
         pass

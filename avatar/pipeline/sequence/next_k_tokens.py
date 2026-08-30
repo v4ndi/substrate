@@ -1,3 +1,11 @@
+"""Self-supervised pretraining: predict the next K events.
+
+The pipeline owns the prediction heads — they carry parameters, and moving
+them would rename every ``lm_heads.*`` key in existing checkpoints. Label
+shifting, the per-feature criteria and the horizon weighting live in
+:class:`~avatar.losses.next_k_tokens.NextKTokensLoss` instead.
+"""
+
 from copy import deepcopy
 
 import torch
@@ -11,6 +19,20 @@ from avatar.outputs import SequenceOutput
 
 
 class NextKTokensPrediction(nn.Module):
+    """Predict each event's next ``K`` successors, one head per feature.
+
+    For every horizon step the model's hidden states are run through one
+    prediction head per sequence feature, and the results are handed to the
+    loss module as a list of ``{feature: HeadPrediction}`` — one entry per
+    horizon. With ``enable_event_id_prediction`` the predicted event-id
+    embedding is fed back between horizons, so step ``k+1`` conditions on what
+    step ``k`` predicted.
+
+    Used to pretrain a backbone that
+    :class:`~avatar.pipeline.sequence.agg_hidden_states.SequenceModelWithAggregation`
+    then turns into client embeddings.
+    """
+
     def __init__(
         self,
         model: BaseSequenceModel,
@@ -23,25 +45,31 @@ class NextKTokensPrediction(nn.Module):
         enable_event_id_prediction: bool = False,
         loss: NextKTokensLoss | None = None,
     ):
-        """
-        Args:
-            model: BaseSequenceModel - sequence model
-            feature_loss_weights - dictionary of weights for each feature.
-            If "timedelta" is not in the dictionary, this,
-            it will have a carefully selected coefficient
-            For other parameters, the default weight is 1.0.
-            aggregation_config: kwargs for avatar.nn.utils.agg.get_aggregation_layer
-            horizon: int - number of tokens to predict.
-            horizon_loss_coef: float - coef for horizon loss. Negative values not recommended.
-            If horizon_loss_coef is zero, then all losses are equally weighted.
-            numeric_loss: torch.nn.Module.loss - the loss function that is calculated for numeric features.
-            categorical_loss: torch.nn.Module.loss - the loss function that is calculated for categorical features.
-            loss: NextKTokensLoss - overrides the loss built from the arguments
-            above. The prediction heads stay here because they carry
-            parameters; only the label shifting, criteria and per-head
-            weighting live in the loss module.
+        """Build the prediction heads and, unless one is injected, the loss.
 
-            loss(horizon_i, horizon_loss_coef) = loss_i / horizon_i ** horizon_loss_coef
+        Args:
+            model: The sequence backbone.
+            horizon: How many events ahead to predict.
+            horizion_loss_weight: Exponent discounting far horizons —
+                ``loss_k = loss_k / k ** horizion_loss_weight``. Zero weights
+                every horizon equally; negative values are rejected.
+            feature_loss_weights: Per-feature weight, applied during training.
+                Features not listed default to 1.0, except ``timedelta``, which
+                carries a deliberately chosen coefficient.
+            aggregation_config: kwargs for
+                :func:`avatar.nn.utils.agg.get_aggregation_layer`.
+            numeric_loss: Criterion for numeric features.
+            categorical_loss: Criterion for categorical features.
+            enable_event_id_prediction: Predict the event id too and feed its
+                embedding into the next horizon step.
+            loss: Replaces the loss built from the arguments above. The
+                prediction heads stay on this module because they carry
+                parameters — moving them would rename every ``lm_heads.*`` key
+                in existing checkpoints; only label shifting, the criteria and
+                the per-head weighting live in the loss module.
+
+        Raises:
+            AssertionError: ``horizion_loss_weight`` is negative.
         """
         if aggregation_config is None:
             aggregation_config = {"name": "mean"}

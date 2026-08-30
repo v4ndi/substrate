@@ -82,8 +82,39 @@ select = [
     "B",   # flake8-bugbear
     "UP",  # pyupgrade
     "RUF", # ruff-specific
+    "D",   # pydocstyle
 ]
-ignore = ["E501"]  # line length handled by the formatter
+ignore = [
+    "E501",  # line length handled by the formatter
+    # Every module, public class and public function needs a docstring; every
+    # method does not. A docstring that restates the signature is noise, and
+    # requiring one on update/compute/reset would produce ~170 of them.
+    "D102",  # undocumented public method
+    "D105",  # undocumented magic method
+    "D106",  # undocumented nested class
+    "D107",  # undocumented __init__ (documented on the class instead)
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+# `D` is being enabled package by package as the documentation work lands.
+# Remove an entry once its package is clean — do not add new ones.
+[tool.ruff.lint.per-file-ignores]
+"avatar/data/**" = ["D"]
+"avatar/losses/**" = ["D"]
+"avatar/nn/**" = ["D"]
+"avatar/preprocessing/**" = ["D"]
+"avatar/utils/**" = ["D"]
+"avatar/cam_inference.py" = ["D"]
+"avatar/inference.py" = ["D"]
+"avatar/infer.py" = ["D"]
+"avatar/outputs.py" = ["D"]
+"avatar/train_utils.py" = ["D"]
+"avatar/training_agruments.py" = ["D"]
+"avatar/training_arguments.py" = ["D"]
+"avatar/_version.py" = ["D"]
+"tests/**" = ["D"]
 
 [tool.ruff.format]
 preview = true

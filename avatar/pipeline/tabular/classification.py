@@ -1,3 +1,5 @@
+"""Classification / regression head over a tabular representation."""
+
 import torch
 import torch.nn as nn
 

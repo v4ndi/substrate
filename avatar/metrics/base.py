@@ -1,3 +1,10 @@
+"""The metric contract: ``update`` / ``compute`` / ``reset``.
+
+:class:`BaseMetric` is what every metric in this package implements and what
+the evaluation loop calls. :class:`BaseInferenceMetric` specialises it for
+metrics whose product is a file rather than a number.
+"""
+
 import abc
 import datetime
 import os
@@ -72,7 +79,7 @@ class BaseMetric(abc.ABC):
 
 
 class BaseInferenceMetric(BaseMetric):
-    """Base module Metric for inference
+    """Base class for metrics whose product is a file, not a number.
 
     Args:
         path_to_save: Path to save dataframe
@@ -119,6 +126,21 @@ class BaseInferenceMetric(BaseMetric):
 
 
 class ClassificationInferenceMetrics(BaseInferenceMetric):
+    """Save per-record classification probabilities during inference.
+
+    Args:
+        input_columns_to_save: Columns of ``inputs`` to carry into the output
+            alongside the prediction — typically an id and the target.
+        path_to_save: Directory for the output file; created if missing.
+        classification_type: Currently only ``binary`` is implemented.
+        prefix: Optional suffix in the filename, to tell runs apart.
+        output_format: ``parquet`` or ``csv``.
+
+    Note:
+        Everything is held in memory until :meth:`compute`, unlike the
+        campaign collectors, which flush every ``save_steps`` batches.
+    """
+
     def __init__(
         self,
         input_columns_to_save: list[str],
