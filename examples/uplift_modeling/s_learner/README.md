@@ -22,7 +22,7 @@ train_dataloader:
     shuffle_files: True
     shuffle_pq: True
     hidden_state_column: seq_hidden_state # название колонки с hidden_state
-  batch_size: 2048
+  batch_size: 8192
   pin_memory: True
   drop_last: False
   num_workers: 8
@@ -39,7 +39,7 @@ valid_dataloader:
     shuffle_files: False
     shuffle_pq: False
     hidden_state_column: seq_hidden_state # название колонки с hidden_state
-  batch_size: 2048
+  batch_size: 8192
   pin_memory: True
   drop_last: False
   num_workers: 8
@@ -56,8 +56,8 @@ model:
     hidden_size: 64
     vocab_size: 172
     std_noise: null
-  tabular_backbone:
-    _target_: avatar.nn.tabular.ste.STEv2Body
+  tabular_encoder:
+    _target_: avatar.nn.tabular.TabularTransformer
     hidden_size: ${model.embedding.hidden_size}
     num_heads: 4
     num_layers: 3
@@ -74,7 +74,7 @@ mlflow:
 optimizer:
   _target_: torch.optim.AdamW
   _partial_: True
-  lr: 0.001
+  lr: 0.0025
   weight_decay: 0
   scale_lr_multigpu: True
 scheduler:

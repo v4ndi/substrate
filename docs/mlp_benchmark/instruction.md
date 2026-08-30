@@ -2,9 +2,11 @@
 
 Здесь указано как правильно использовать MLP Benchmark
 
-Пример конфига с запуском находится в файле launch_with_MLPBencmark.yaml
+Пример конфига с запуском находится в файле `launch_with_mlp_bencmark.yaml`
 
-Пример конфига для запуска MLP находится в файле MLP.yaml
+Примеры конфигов для запуска MLP: `train_mlp.yaml` (только скрытые состояния) и
+`train_mlp_with_target_2_target_3.yaml` (с категориальными признаками,
+`cat_feature: True`)
 
 
 ### Описание

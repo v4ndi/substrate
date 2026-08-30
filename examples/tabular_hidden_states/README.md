@@ -12,11 +12,11 @@ chmod +x download_data.sh
 
 ## Теоретическая часть
 ### Tabular Transformer
-В качестве табличной модели мы будем использовать адаптированную под табличные данные архитектуру Transformer encoder-only (`avatar.nn.tabular.STEv2`).
+В качестве табличной модели мы будем использовать адаптированную под табличные данные архитектуру Transformer encoder-only (`avatar.nn.tabular.TabularTransformer`).
   
 Основные блоки архитектуры:
 * Embedding Layer - отображает табличные признаки в векторное пространство. Пример реализации: `avatar.nn.embedding.TabularEmbedding`
-* Transformer Block - классический трансформер блок с multi-head-self-attn, ffn, add & norm. Пример реализации: `avatar.nn.tabular.STEv2Body`
+* Transformer Block - классический трансформер блок с multi-head-self-attn, ffn, add & norm. Пример реализации: `avatar.nn.tabular.EncoderBlock`
   
 ---
   
@@ -30,7 +30,7 @@ chmod +x download_data.sh
 
   
 ### Hidden State Aggregation
-Если мы хотим решать задачу классификации/регрессии на основе скрытых состояний, необходимо выполнить агрегацию hidden_states, например: `B, N, D -> B, D`. Для этого можно использовать операцию суммы, среднего, добавлять нормализацию, обучаемые параметры, добавлять `CLS` токен и так далее, а для downstream задачи использовать только его эмбеддинг. В пайплайне реализованы базовые методы агрегации; их реализации находятся здесь: `avatar.nn.utils.agg.py`.
+Если мы хотим решать задачу классификации/регрессии на основе скрытых состояний, необходимо выполнить агрегацию hidden_states, например: `B, N, D -> B, D`. Для этого можно использовать операцию суммы, среднего, добавлять нормализацию, обучаемые параметры, добавлять `CLS` токен и так далее, а для downstream задачи использовать только его эмбеддинг. В пайплайне реализованы базовые методы агрегации; их реализации находятся здесь: `avatar.nn.utils.agg`.
   
 После агрегации эмбеддингов мы можем применить nn.Linear(D, n_classes), где n_classes - это количество классов в случае задачи классификации.
 
@@ -42,31 +42,36 @@ chmod +x download_data.sh
 ```yaml
 model:
   _target_: avatar.pipeline.tabular.TabularClassification
-  model:
+  tabular_model:
     _target_: avatar.pipeline.tabular.TabularWithAggregatedStates
-    backbone:
-      _target_: avatar.nn.tabular.STEv2
-      embedding:
-        _target_: avatar.nn.embedding.TabularEmbedding
-        num_numerical_features: 189
-        hidden_size: 64
-        vocab_size: 172
-        std_noise: null
+    embedding:
+      _target_: avatar.nn.embedding.TabularEmbedding
+      num_numerical_features: 189
+      hidden_size: 64
+      vocab_size: 172
+      std_noise: null
+    encoder:
+      _target_: avatar.nn.tabular.TabularTransformer
+      hidden_size: ${model.tabular_model.embedding.hidden_size}
       num_heads: 4
       num_layers: 3
       attn_dropout: 0.15
     aggregation_config:
       name: linear
       num_features: 243
-      emb_dim: ${model.model.backbone.embedding.hidden_size}
+      emb_dim: ${model.tabular_model.embedding.hidden_size}
   num_classes: 2
   dropout_p: 0.15
   task_type: classification
 ```
   
+Обратите внимание: эмбеддинг и энкодер — соседние поля, а не вложенные друг в
+друга. Энкодер принимает уже посчитанные эмбеддинги и ничего не знает о том,
+откуда они взялись; это позволяет менять их независимо.
+
 Основные модули:
-* `avatar.nn.tabular.STEv2` - Табличный трансформер (Embedding Layer + Transformer Block layers). В качестве Embedding layer используется `avatar.nn.embedding.TabularEmbedding` - Embedding Layer. STEv2 является дочерним классом для `avatar.nn.tabular.BaseTabularBackbone`.
-* `avatar.nn.TabularWithAggregatedStates` - Модуль, оборачивает BaseTabularBackbone и добавляет слой агрегации, который можно реализовать самостоятельно, основываясь на `avatar.nn.utils.agg.BaseAggregation`, или использовать существущие.
+* `avatar.nn.tabular.TabularTransformer` - Табличный трансформер: принимает эмбеддинги признаков (B, N, D) и возвращает контекстуализированные скрытые состояния той же размерности. Является дочерним классом для `avatar.nn.tabular.BaseTabularEncoder`.
+* `avatar.pipeline.tabular.TabularWithAggregatedStates` - Модуль, который связывает эмбеддинг, энкодер и слой агрегации. Слой агрегации можно реализовать самостоятельно, основываясь на `avatar.nn.utils.BaseAggregation`, или использовать существующие.
 * `avatar.pipeline.tabular.TabularClassification` - используя агрегированный hidden_state из TabularWithAggregatedStates, добавляет слой проекции из hiden_state_dim -> n_classes и рассчитывает значение функции потерь.
   
 ![](materials/split_modules_base_tabular_pipeline.drawio.png)
@@ -96,7 +101,7 @@ torchrun --standalone --nproc_per_node=1 -m avatar.train --config-dir=configs --
 ```
 4. Early Fusion + Late Fusion
 ```bash
-torchrun --standalone --nproc_per_node=1 -m avatar.train --config-dir=configs --config-name=early_late_fusion
+torchrun --standalone --nproc_per_node=1 -m avatar.train --config-dir=configs --config-name=late_early_fusion
 ```
   
 ## Логирование метрик и запуск mlflow
@@ -138,27 +143,28 @@ test_dataloader:
     target_column: target_attr_1
 model:
   _target_: avatar.pipeline.tabular.TabularClassification
-  model:
+  tabular_model:
     _target_: avatar.pipeline.tabular.TabularWithAggregatedStates
-    backbone:
-      _target_: avatar.nn.tabular.STEv2
-      embedding:
-        _target_: avatar.nn.embedding.TabularEmbedding
-        num_numerical_features: 189
-        hidden_size: 64
-        vocab_size: 172
-        std_noise: null
-        hidden_state_aggregator:
-          _target_: avatar.nn.embedding.LayerNormConcatenate
-          hidden_state_dim: 128
-          embedding_dim: ${model.model.backbone.embedding.hidden_size} # Размерность на выходе из Tabular Embedding
+    embedding:
+      _target_: avatar.nn.embedding.TabularEmbedding
+      num_numerical_features: 189
+      hidden_size: 64
+      vocab_size: 172
+      std_noise: null
+      hidden_state_aggregator:
+        _target_: avatar.nn.embedding.LayerNormConcatenate
+        hidden_state_dim: 128 # Размерность external hidden_state
+        embedding_dim: ${model.tabular_model.embedding.hidden_size} # Размерность на выходе из Tabular Embedding
+    encoder:
+      _target_: avatar.nn.tabular.TabularTransformer
+      hidden_size: ${model.tabular_model.embedding.hidden_size}
       num_heads: 4
       num_layers: 3
       attn_dropout: 0.15
     aggregation_config:
       name: linear
-      num_features: 244 
-      emb_dim: ${model.model.backbone.embedding.hidden_size}
+      num_features: 244 # 243 табличных фичи на входе + 1 эмбеддинг на входе
+      emb_dim: ${model.tabular_model.embedding.hidden_size}
   num_classes: 2
   dropout_p: 0.15
   task_type: classification
@@ -175,7 +181,7 @@ metrics:
 ```
 python -m avatar.infer --config-dir=configs/inference --config-name=<pass_your_config_name>
 ```
-В ноутбуке `metrics.ipynb` приведен код для расчета метрик.
+В ноутбуке `metrics.ipynb` приведён код для расчёта метрик.
 
 |Подход|RocAucScore|
 |------|-----------|

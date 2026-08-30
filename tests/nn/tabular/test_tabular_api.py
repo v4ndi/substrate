@@ -12,6 +12,7 @@ def test_flat_public_api():
     for name in [
         "BaseTabularEncoder",
         "EncoderBlock",
+        "MLPEmbedding",
         "SublayerConnection",
         "TabularTransformer",
         "build_feature_padding_mask",
