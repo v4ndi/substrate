@@ -1,3 +1,5 @@
+"""Complete sequence models."""
+
 from avatar.nn.sequential.model.base import BaseSequenceModel
 from avatar.nn.sequential.model.transformers import TransformersWrapper
 

@@ -1,16 +1,17 @@
-"""Write a small preprocessed tabular dataset for the distributed example.
+"""Write a small multi-task tabular dataset for the MMoE / PLE example.
 
-Produces exactly what :class:`avatar.data.TabularDataset` expects *after*
-preprocessing — ``cat_features`` (list<int64>), ``num_features``
-(list<float32>), a binary ``target`` and an ``epk_id`` — so the example needs no
-Spark, no preprocessing pass and no access to internal storage.
+Three tasks over the same feature space, with deliberately different target
+functions: two of them share most of their signal, the third is nearly
+independent. That is what makes the gating visible — a mixture of experts is
+only interesting when the tasks disagree about which features matter.
 
-The target is a noisy linear function of the features, so the run has something
-learnable to show and ROC AUC climbs above 0.5 within a couple of epochs.
+Emits what :class:`avatar.data.TabularDataset` expects after preprocessing,
+plus the two columns the multi-task pipelines need: ``task_name`` and a
+campaign ``group_id``.
 
 Run::
 
-    python examples/distributed_training/generate_data.py
+    python examples/multi_task/generate_data.py
 """
 
 from __future__ import annotations
@@ -27,14 +28,14 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 N_CAT = 8
 N_NUM = 16
 VOCAB_SIZE = 64
+N_TASKS = 3
+N_GROUPS = 2
 
 
 def build_table(n_rows: int, seed: int) -> pa.Table:
-    """Build one split: ids, categorical ids, standardised numerics, target."""
+    """Build one split: features, task id, campaign group, per-task target."""
     rng = np.random.default_rng(seed)
 
-    # Cumulative-offset ids, as the real preprocessor emits: every categorical
-    # column indexes into one shared embedding table of size VOCAB_SIZE.
     per_column = VOCAB_SIZE // N_CAT
     cat = np.stack(
         [
@@ -45,20 +46,33 @@ def build_table(n_rows: int, seed: int) -> pa.Table:
     ).astype(np.int64)
     num = rng.standard_normal((n_rows, N_NUM)).astype(np.float32)
 
+    task = rng.integers(0, N_TASKS, n_rows)
+    group = rng.integers(0, N_GROUPS, n_rows)
+
     # The target function must be the SAME in every split — drawn from a fixed
     # seed, not from the split's. Redrawing it per split would give train and
     # valid different labelling rules, and validation would sit at chance.
     weights_rng = np.random.default_rng(20240101)
-    cat_weights = weights_rng.standard_normal(N_CAT)
-    num_weights = weights_rng.standard_normal(N_NUM)
-    signal = (cat % per_column) @ cat_weights / per_column + num @ num_weights
-    noise = rng.standard_normal(n_rows) * 0.5
+    # Tasks 0 and 1 share a direction; task 2 gets its own.
+    shared = weights_rng.standard_normal(N_NUM)
+    private = weights_rng.standard_normal((N_TASKS, N_NUM))
+    weights = np.stack([
+        shared + 0.2 * private[0],
+        shared + 0.2 * private[1],
+        private[2],
+    ])
+
+    signal = np.einsum("ij,ij->i", num, weights[task])
+    signal = signal + 0.3 * (cat % per_column).mean(axis=1)
+    noise = rng.standard_normal(n_rows) * 0.6
     target = ((signal + noise) > np.median(signal)).astype(np.int64)
 
     return pa.table({
         "epk_id": pa.array(np.arange(n_rows), pa.int64()),
         "cat_features": pa.array(cat.tolist(), pa.list_(pa.int64())),
         "num_features": pa.array(num.tolist(), pa.list_(pa.float32())),
+        "task_name": pa.array([str(t) for t in task], pa.string()),
+        "group_id": pa.array(group, pa.int64()),
         "target": pa.array(target, pa.int64()),
     })
 
@@ -92,12 +106,17 @@ def main() -> None:
     )
 
     print(f"wrote {args.train_rows} train / {args.valid_rows} valid rows to {args.out}")
-    print(f"  {N_CAT} categorical (vocab_size={VOCAB_SIZE}), {N_NUM} numeric")
+    print(f"  {N_TASKS} tasks, {N_GROUPS} campaign groups")
     print("\nnow launch training with:\n")
     print(
-        f"  torchrun --standalone --nproc_per_node=2 -m avatar.train \\\n"
-        f"      --config-dir={os.path.join(HERE, 'configs')} "
-        f"--config-name=synthetic \\\n"
+        f"  python -m avatar.train "
+        f"--config-dir={os.path.join(HERE, 'configs')} --config-name=mmoe \\\n"
+        f"      data_dir={args.out}\n"
+    )
+    print("  # or the PLE variant:")
+    print(
+        f"  python -m avatar.train "
+        f"--config-dir={os.path.join(HERE, 'configs')} --config-name=ple \\\n"
         f"      data_dir={args.out}"
     )
 

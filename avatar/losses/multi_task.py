@@ -1,3 +1,5 @@
+"""Combining several tasks' losses into one scalar."""
+
 import random
 
 import torch
@@ -5,6 +7,13 @@ import torch.nn as nn
 
 
 class WeightLossBalancer(nn.Module):
+    """Combine per-task losses with fixed, named weights.
+
+    Args:
+        loss_weights: ``{task name: weight}``. A loss whose name is absent
+            raises rather than being silently dropped.
+    """
+
     def __init__(self, loss_weights: dict[str, float]):
         super().__init__()
         self.loss_weights = nn.ParameterDict({
@@ -24,6 +33,15 @@ class WeightLossBalancer(nn.Module):
 
 
 class UncertainlyLossBalancer(nn.Module):
+    """Weigh tasks by learned homoscedastic uncertainty.
+
+    Each task gets a learned log-variance; noisier tasks are down-weighted
+    automatically, so tasks on different scales need no hand-tuned weights.
+
+    Args:
+        num_losses: How many tasks are being balanced.
+    """
+
     def __init__(self, num_losses):
         super().__init__()
         self.loss_vars = nn.Parameter(torch.zeros(num_losses))
@@ -43,6 +61,14 @@ class UncertainlyLossBalancer(nn.Module):
 
 
 class GradNormLossBalancer(nn.Module):
+    """Balance tasks by equalising their gradient norms on the shared trunk.
+
+    Args:
+        num_losses: How many tasks are being balanced.
+        alpha: Strength of the restoring force towards equal training rates.
+        renormilize_weights: Rescale the weights to sum to ``num_losses``.
+    """
+
     def __init__(self, num_losses, alpha=1.5, renormilize_weights=False):
         super().__init__()
         self.alpha = alpha
@@ -99,6 +125,19 @@ class GradNormLossBalancer(nn.Module):
 
 
 class PCGradBalancer(nn.Module):
+    """Project away conflicting task gradients before summing them.
+
+    When two tasks' gradients point in opposing directions, each is projected
+    onto the normal plane of the other, so neither undoes the other's step.
+
+    Args:
+        num_losses: How many tasks are being balanced.
+
+    Note:
+        Needs gradients to be enabled; under ``torch.no_grad`` it falls back to
+        a plain sum.
+    """
+
     def __init__(self, num_losses):
         super().__init__()
         self.num_losses = num_losses
@@ -211,6 +250,14 @@ class PCGradBalancer(nn.Module):
 
 
 class MultiTaskLoss(nn.Module):
+    """Reduce a dict of per-task losses to the scalar the trainer optimises.
+
+    Args:
+        loss_balancer: How the per-task losses are combined.
+        main_loss: Name of a task held out of balancing and added back
+            afterwards, so it keeps a weight of exactly one.
+    """
+
     def __init__(
         self,
         loss_balancer: nn.Module,

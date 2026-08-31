@@ -33,6 +33,8 @@
   конфига, композиция, когда нужен `num_items`.
 * [guides/datasets.md](guides/datasets.md) — шардирование по записям, `drop_tail`,
   контракт паритета, кэш фильтров, HDFS.
+* [guides/preprocessing.md](guides/preprocessing.md) — два бэкенда, артефакт и
+  почему его надо хранить вместе с весами.
 * [guides/models.md](guides/models.md) — как блоки складываются в пайплайн:
   табличный и последовательностный стек, early/late fusion, uplift, multi-task.
 * [guides/metrics.md](guides/metrics.md) — контракт метрики, сведение по
@@ -45,6 +47,8 @@
 * [reference/pipeline.md](reference/pipeline.md) — пайплайны и их блоки.
 * [reference/metrics.md](reference/metrics.md) — метрики, сборщики,
   бенчмарки, обёртки.
+* [reference/nn.md](reference/nn.md) — эмбеддинги, энкодеры, агрегации и что
+  с чем сочетается.
 
 ## Остальные разделы
 

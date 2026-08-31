@@ -46,6 +46,17 @@ def date_to_scaled_unix(values: pa.Array, time_unit: str = "days") -> np.ndarray
 
 
 class EventSequencePreprocessor(NumCatPipeline):
+    """Streaming event-sequence preprocessing: one machine, bounded memory.
+
+    Input is one row per event; output is one row per client, every attribute a
+    time-ordered list. ``transform`` shards by a hash of the id column into
+    bounded buckets, so a corpus larger than RAM still fits.
+
+    Unlike the Spark backend, the ordering here is deterministic: events are
+    sorted on the full-precision raw timestamp, and the output is always
+    monotonic in time.
+    """
+
     def __init__(
         self,
         categorical_columns: list[str],

@@ -1,3 +1,5 @@
+"""Modality-independent dataset machinery: sharding, parquet IO, filesystems."""
+
 from avatar.data.base.batch import move_to_device
 from avatar.data.base.collate import BaseCollateFn
 from avatar.data.base.distributed import (

@@ -1,3 +1,11 @@
+"""Output dataclasses: what each pipeline returns.
+
+The trainer only ever reads ``loss`` (or ``losses`` plus ``num_items`` for
+multi-head models); everything else exists so that metrics can read what a
+particular task produced. That is why a metric is bound to a pipeline: it
+requires the fields of the output that pipeline returns.
+"""
+
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -179,6 +187,13 @@ class MultiTaskxGroupResponseOutput(TabularOutput):
 
 @dataclass
 class MMoEOutput(MultiTaskxGroupResponseOutput):
+    """Multi-task response output plus the gating diagnostics MoE runs carry.
+
+    Attributes:
+        aux: Auxiliary values from the backbone — gate weights, entropy
+            penalties — read by the MoE metrics.
+    """
+
     aux: dict[str, Any] = None
 
 

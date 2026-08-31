@@ -1,3 +1,5 @@
+"""Base classes for event-sequence embeddings and their temporal component."""
+
 from copy import deepcopy
 from typing import Any
 
@@ -75,9 +77,10 @@ class BaseEventSequenceEmbedding(BaseEmbedding):
 
 
 class BaseTemporalEmbedding(nn.Module):
-    """Base class for temporal embedding
+    """Base class for temporal embeddings.
+
     Args:
-        hidden_size: int - Dimensionality of the embeddings
+        embedding_dim: Dimensionality of the embeddings.
     """
 
     def __init__(self, embedding_dim: int):

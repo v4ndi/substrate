@@ -43,22 +43,15 @@ class RocAucScore(BaseMetric):
     def update(self, inputs, outputs):
         targets = inputs["targets"].detach().contiguous().cpu().tolist()
 
-        if outputs.logits.dim() == 1:
-            predicted = (
-                torch.nn.functional.sigmoid(outputs.logits)
-                .detach()
-                .contiguous()
-                .cpu()
-                .tolist()
-            )
+        logits = outputs.logits
+        # One logit per record means a sigmoid head, whether it arrives as
+        # (B,) or as (B, 1) — the multi-task heads emit the latter. Softmax
+        # over a single-column tensor would index out of bounds.
+        if logits.dim() == 1 or logits.shape[-1] == 1:
+            probabilities = torch.nn.functional.sigmoid(logits.reshape(-1))
         else:
-            predicted = (
-                torch.nn.functional.softmax(outputs.logits, dim=-1)[:, 1]
-                .detach()
-                .contiguous()
-                .cpu()
-                .tolist()
-            )
+            probabilities = torch.nn.functional.softmax(logits, dim=-1)[:, 1]
+        predicted = probabilities.detach().contiguous().cpu().tolist()
 
         self.preds.append({"targets": targets, "probability": predicted})
 

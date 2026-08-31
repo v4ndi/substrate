@@ -26,6 +26,12 @@ from ..standard_scaler import StandardScaler
 
 
 class NumCatPipeline:
+    """Shared behaviour of the streaming numeric/categorical preprocessors.
+
+    Owns the label encoder and standard scaler, the streaming ``fit`` pass and
+    the ``dump`` / ``load`` artifact format that the Spark backend also reads.
+    """
+
     def __init__(
         self,
         categorical_columns: Sequence[str] | None,

@@ -1,3 +1,5 @@
+"""Spark helpers."""
+
 from __future__ import annotations
 
 import yaml
@@ -11,10 +13,12 @@ from .pipeline.tabular_pipe import TabularPreprocessor
 def dump_tabular_meta(
     tabular_preprocessor: TabularPreprocessor, save_meta: bool = False
 ):
-    """
+    """Describe each output column, for the model config to be sized from.
+
     Args:
         tabular_preprocessor: TabularPreprocessor
         save_meta: bool - if True meta will dump in yaml file
+
     Return:
         column_meta: {column_name: {
                 "type": "categorical/numerical",
@@ -30,7 +34,7 @@ def dump_tabular_meta(
         meta: {
             "vocab_size": int - the sum of unique values by categorical columns
             "num_numerical_features": int - len(numerical_columns)
-        }
+        }.
     """
     meta = {}
     if tabular_preprocessor.cat_cols is not None:
@@ -99,8 +103,7 @@ def dump_tabular_meta(
 
 
 def date_to_scaled_unix(date_col: Column, time_unit: str = "days") -> Column:
-    """
-    Convert a date column to Unix timestamp and scale it by the specified time unit.
+    """Convert a date column to Unix timestamp and scale it by the specified time unit.
 
     Args:
         date_col: A PySpark Column containing date or timestamp values

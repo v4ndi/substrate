@@ -1,3 +1,5 @@
+"""Startup banners: what is about to run, and on what."""
+
 import os
 from typing import Any
 
@@ -20,8 +22,7 @@ def print_meta(env, model: nn.Module, params: dict[str, Any] | None = None) -> N
 def print_trainable_layers(
     env, model: torch.nn.Module, indent: int = 0, max_depth: int | None = None
 ):
-    """
-    Recursively prints the hierarchical structure of a PyTorch model with trainable status.
+    """Recursively prints the hierarchical structure of a PyTorch model with trainable status.
 
     This function traverses through all layers of a neural network model and displays
     them in a tree-like structure, highlighting which layers are trainable (green) or

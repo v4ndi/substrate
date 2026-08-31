@@ -1,3 +1,8 @@
+"""``EventSequenceBatch``: padded event sequences and their masks.
+
+Field-by-field walkthrough in ``docs/data/event_sequence_batch.md``.
+"""
+
 import torch
 import torch.nn.functional as F
 
@@ -55,7 +60,6 @@ class EventSequenceBatch:
         Raises:
             ValueError: If input tensors have inconsistent batch or sequence dimensions.
         """
-
         self._events = events
         self._timestamps = timestamps
         self._attention_mask = attention_mask
@@ -74,7 +78,6 @@ class EventSequenceBatch:
         Raises:
             KeyError: If the requested event type is not found.
         """
-
         return self._events[key]
 
     def __setitem__(self, key: str, value: torch.Tensor):
@@ -163,7 +166,6 @@ class EventSequenceBatch:
         Raises:
             ValueError: If event_ids are not available when filtering is requested.
         """
-
         if event_id is not None:
             if isinstance(event_id, int):
                 event_id = [event_id]
@@ -184,7 +186,6 @@ class EventSequenceBatch:
         Returns:
             Total count of specified events in the batch.
         """
-
         return self.event_attn_mask(event_id).sum()
 
     def to(self, device: torch.device):

@@ -1,3 +1,5 @@
+"""Stack event-sequence records into a padded batch."""
+
 from functools import partial
 from typing import Any
 
@@ -11,13 +13,15 @@ from avatar.data.tabular.collate import TabularCollateFn
 
 
 class EventSequenceCollateFn(BaseCollateFn):
-    """Collate Function for EventSequenceDataset
+    """Stack event-sequence records into a padded batch.
+
     Args:
         sequence_columns: List[str] - list of sequence columns
         create_attention_mask: bool - whether to create attention mask
         target_column: Optional[str] - target column
         is_regression: bool - whether the target is regression
-        has_tabular: bool - whether the dataset has tabular data
+        has_tabular: bool - whether the dataset has tabular data.
+
     """
 
     def __init__(

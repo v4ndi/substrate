@@ -1,3 +1,5 @@
+"""The sequence-model contract: event encoder plus backbone."""
+
 import torch.nn as nn
 
 from avatar.data.sequential.batch import EventSequenceBatch

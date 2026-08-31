@@ -1,3 +1,5 @@
+"""Tabular dataset, batch and collate."""
+
 from avatar.data.tabular.batch import TabularBatch, UpliftTabularBatch, move_to_device
 from avatar.data.tabular.collate import (
     MultiTaskSupervisedCollateFn,

@@ -1,3 +1,5 @@
+"""The event encoder: embed an event's attributes, then pool them into one vector."""
+
 from typing import Literal
 
 import torch

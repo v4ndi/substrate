@@ -1,3 +1,8 @@
+"""The ``train:`` block of a config, as a dataclass.
+
+Every field here is a key of ``train:`` — see ``docs/configuration/schema.md``.
+"""
+
 from __future__ import annotations
 
 from copy import deepcopy
@@ -6,8 +11,7 @@ from dataclasses import dataclass
 
 @dataclass
 class TrainingArguments:
-    """
-    A class to store and manage arguments for training a model.
+    """A class to store and manage arguments for training a model.
 
     Attributes:
         num_epochs (int): The total number of epochs to train the model. Defaults to 1000.

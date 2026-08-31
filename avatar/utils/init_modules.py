@@ -1,3 +1,5 @@
+"""Build a run's pieces from its config: optimizer, scheduler, loaders, metrics."""
+
 import os
 from datetime import datetime
 from pathlib import Path
@@ -13,6 +15,15 @@ from avatar.metrics import BaseMetric
 
 
 def get_params_group(model, named_params_to_group=None, need_logs=True):
+    """Split the model's parameters into optimizer groups by name.
+
+    Args:
+        model: Model whose parameters to group.
+        named_params_to_group: List of ``{"name": [substrings],
+            "opt_params": {...}}``; a parameter joins the first group whose
+            substrings match. None means one group with every parameter.
+        need_logs: Print which parameter landed in which group.
+    """
     if named_params_to_group is None:
         return model.parameters()
     assert all(
@@ -72,6 +83,8 @@ def init_optimizer(
 
 
 def init_profiler(mlflow_arguments):
+    """Build a ``torch.profiler`` that writes Chrome traces to shared storage."""
+
     def trace_handler(profiler):
         save_dir = f"/home/datalab/nfs/profile_traces/{mlflow_arguments['experiment_name']}/{mlflow_arguments['run_name']}/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
         save_file = f"{save_dir}/trace.json"
@@ -120,7 +133,6 @@ def init_scheduler(
     Returns:
         Initialized learning rate scheduler instance
     """
-
     scheduler_params_dict = dict(config["scheduler"])
     grad_accumulation_steps = max(1, gradient_accumulation_steps)
     if "num_training_steps" not in scheduler_params_dict.keys():
@@ -141,6 +153,7 @@ def init_scheduler(
 
 
 def init_dataloaders(config: DictConfig):
+    """Instantiate the train, valid and test loaders; the last two may be None."""
     assert (
         "train_dataloader" in config.keys() and config["train_dataloader"] is not None
     )
@@ -155,6 +168,7 @@ def init_dataloaders(config: DictConfig):
 
 
 def init_metrics(config: DictConfig):
+    """Instantiate the train, valid and test metrics; any of them may be None."""
     if "metrics" not in config.keys() or config["metrics"] is None:
         return None, None, None
 
@@ -173,6 +187,12 @@ def init_metrics(config: DictConfig):
 
 
 def init_early_stopping(train_config: DictConfig):
+    """Instantiate ``train.early_stopping`` and remove it from the train config.
+
+    It is popped because what remains is passed straight to
+    :class:`~avatar.training_arguments.TrainingArguments`, which has no such
+    field.
+    """
     early_stopping = None
     if (
         "early_stopping" in train_config.keys()
@@ -185,6 +205,15 @@ def init_early_stopping(train_config: DictConfig):
 
 
 def init_exp_run_name(config: DictConfig):
+    """Read the MLflow names, and refuse to overwrite an existing run.
+
+    The checkpoint directory is built from these two names, so a repeated
+    ``run_name`` would overwrite someone else's run. ``debug`` is exempt.
+
+    Raises:
+        AssertionError: The checkpoint directory already exists and
+            ``run_name`` is not ``debug``.
+    """
     experiment_name = config["mlflow"]["experiment_name"]
     run_name = config["mlflow"]["run_name"]
     if run_name != "debug":
@@ -199,6 +228,11 @@ def init_swa_model(
     config: DictConfig | dict[str, Any],
     model,
 ) -> torch.optim.swa_utils.AveragedModel:
+    """Build the weight-averaging model from ``swa_model:``, if it is enabled.
+
+    Returns:
+        ``(model, min_num_steps, min_epoch)``, all None when disabled.
+    """
     if "swa_model" not in config:
         return None, None, None
     swa_params_dict = dict(config["swa_model"])

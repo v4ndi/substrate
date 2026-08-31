@@ -9,6 +9,7 @@
 | [`tabular_preprocessing`](tabular_preprocessing/) | табличный препроцессинг на обоих бэкендах, перенос артефакта между ними | скрипт | синтетика, генерируется скриптом |
 | [`eventsequence_preprocessing`](eventsequence_preprocessing/) | то же для событийных последовательностей | скрипт | синтетика, генерируется скриптом |
 | [`distributed_training`](distributed_training/) | multi-GPU и multi-node обучение, шардирование, AMP, DDP | скрипт + конфиг | синтетика, генерируется скриптом |
+| [`multi_task`](multi_task/) | MMoE и PLE: несколько задач над общим пулом экспертов | скрипт + конфиги | синтетика, генерируется скриптом |
 | [`custom_callback`](custom_callback/) | своя точка расширения в цикле обучения | модуль + тесты | не нужны |
 | [`custom_loss`](custom_loss/) | своя функция потерь, подключаемая из конфига | модуль + тесты | не нужны |
 | [`basics`](basics/) | загрузка данных в датасет, своя метрика | ноутбуки | внутренние (HDFS) |
@@ -66,5 +67,7 @@ chmod +x download_data.sh
 
 ## TODO
 
-* EventSequence SSL (NextToken, NextK, MLM) — расширить пример
+* MLM для событийных последовательностей — постановки нет в коде, нужен
+  отдельный пайплайн (next-token и next-K уже покрыты конфигами в
+  `next_event_prediction`)
 * Запуск на batch_datalab / supercomp

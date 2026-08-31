@@ -1,3 +1,5 @@
+"""Stack tabular records into a batch, with the task's targets."""
+
 from functools import partial
 from typing import Any
 
@@ -8,7 +10,7 @@ from avatar.data.tabular.batch import TabularBatch
 
 
 def check_columns_to_tensor(columns_to_tensor: dict[str, str] | None):
-    """Check columns types for conversion to tensor"""
+    """Check columns types for conversion to tensor."""
     if columns_to_tensor is None:
         return True
     for column, dtype in columns_to_tensor.items():
@@ -17,8 +19,7 @@ def check_columns_to_tensor(columns_to_tensor: dict[str, str] | None):
 
 
 class TabularCollateFn(BaseCollateFn):
-    """
-    Initializes the TabularCollateFn class.
+    """Initializes the TabularCollateFn class.
 
     Args:
         target_column (Optional[str], optional): The column name to use as the
@@ -37,14 +38,13 @@ class TabularCollateFn(BaseCollateFn):
 
     @staticmethod
     def collate_tabular(batch):
-        """
-        Collates tabular features (both categorical and numerical).
+        """Stack the categorical and numeric arrays of a batch of records.
 
         Args:
-            tab_features: A batch of tabular features (list of dictionaries).
+            batch: Records, each carrying a ``tab_features`` dict.
 
         Returns:
-            Dict[str, torch.Tensor]: A dictionary of collated categorical and numerical features.
+            A :class:`~avatar.data.tabular.batch.TabularBatch`.
         """
         tab_features = [item["tab_features"] for item in batch]
         if tab_features[0]["cat_features"] is not None:
@@ -76,8 +76,7 @@ class TabularCollateFn(BaseCollateFn):
         )
 
     def __call__(self, batch: list[dict[str, Any]]):
-        """
-        Processes the batch and converts it into a suitable format for model input.
+        """Processes the batch and converts it into a suitable format for model input.
 
         Args:
             batch (List[Dict[str, Any]]): A list of samples
@@ -116,6 +115,16 @@ class TabularCollateFn(BaseCollateFn):
 
 
 class UpliftCollateFn(TabularCollateFn):
+    """Tabular collate plus the treatment flag uplift pipelines need.
+
+    Args:
+        treatment_column: Column holding the treatment flag.
+        target_column: Column to use as the target.
+        group_column: Optional campaign-group column.
+        inverse_treatment: Swap 0 and 1 — needed when the source data marks
+            the control group with 1.
+    """
+
     def __init__(
         self,
         treatment_column: str,
@@ -123,23 +132,13 @@ class UpliftCollateFn(TabularCollateFn):
         group_column: str | None = None,
         inverse_treatment: bool = False,
     ):
-        """
-        Initializes the UpliftCollateFn class.
-
-        Args:
-            treatment_column: str; name of column that contains the binary values:
-                1 - treatment group; 0 - control
-            target_column (Optional[str], optional): The column name to use as the
-                target labels. Defaults to None.
-        """
         super().__init__(target_column=target_column, is_regression=False)
         self.treatment_column = treatment_column
         self.group_column = group_column
         self.inverse_treatment = inverse_treatment
 
     def __call__(self, batch: list[dict[str, Any]]):
-        """
-        Processes the batch and converts it into a suitable format for model input.
+        """Processes the batch and converts it into a suitable format for model input.
 
         Args:
             batch (List[Dict[str, Any]]): A list of samples
@@ -168,6 +167,17 @@ class UpliftCollateFn(TabularCollateFn):
 
 
 class MultiTaskUpliftCollateFn(UpliftCollateFn):
+    """Uplift collate plus the task id, for multi-task uplift models.
+
+    Args:
+        treatment_column: Column holding the treatment flag.
+        task_name_column: Column naming the task each record belongs to.
+        task_mapping: ``{task name: id}``.
+        target_column: Column to use as the target.
+        group_column: Optional campaign-group column.
+        inverse_treatment: Swap 0 and 1 in the treatment column.
+    """
+
     def __init__(
         self,
         treatment_column: str,
@@ -177,15 +187,6 @@ class MultiTaskUpliftCollateFn(UpliftCollateFn):
         group_column: str | None = None,
         inverse_treatment: bool = False,
     ):
-        """
-        Initializes the UpliftCollateFn class.
-
-        Args:
-            treatment_column: str; name of column that contains the binary values:
-                1 - treatment group; 0 - control
-            target_column (Optional[str], optional): The column name to use as the
-                target labels. Defaults to None.
-        """
         super().__init__(
             target_column=target_column,
             treatment_column=treatment_column,
@@ -196,8 +197,7 @@ class MultiTaskUpliftCollateFn(UpliftCollateFn):
         self.task_mapping = task_mapping
 
     def __call__(self, batch: list[dict[str, Any]]):
-        """
-        Processes the batch and converts it into a suitable format for model input.
+        """Processes the batch and converts it into a suitable format for model input.
 
         Args:
             batch (List[Dict[str, Any]]): A list of samples
@@ -207,14 +207,26 @@ class MultiTaskUpliftCollateFn(UpliftCollateFn):
             Dict[str, torch.Tensor]: A dictionary of processed features and target labels.
         """
         processed_batch = super().__call__(batch=batch)
-        processed_batch["task_name"] = torch.LongTensor([
+        task_ids = torch.LongTensor([
             self.task_mapping.get(x) for x in processed_batch[self.task_name_column]
         ])
+        # Drop the raw column first: when it is itself named ``task_name`` the
+        # delete would otherwise remove the tensor we just built.
         del processed_batch[self.task_name_column]
+        processed_batch["task_name"] = task_ids
         return processed_batch
 
 
 class SupervisedCollateFn(TabularCollateFn):
+    """Tabular collate that also carries chosen raw columns into the batch.
+
+    Args:
+        target_column: Column to use as the target.
+        is_regression: Emit float targets instead of long ones.
+        add_extra_columns: ``{batch key: source column}`` for columns a metric
+            needs to see — an id to save predictions against, say.
+    """
+
     def __init__(
         self,
         target_column: str | None = None,
@@ -238,6 +250,16 @@ class SupervisedCollateFn(TabularCollateFn):
 
 
 class MultiTaskSupervisedCollateFn(SupervisedCollateFn):
+    """Supervised collate plus the task id, for multi-task response models.
+
+    Args:
+        task_name_column: Column naming the task each record belongs to.
+        task_mapping: ``{task name: id}``.
+        target_column: Column to use as the target.
+        is_regression: Emit float targets instead of long ones.
+        add_extra_columns: ``{batch key: source column}``.
+    """
+
     def __init__(
         self,
         task_name_column: str,
@@ -246,15 +268,6 @@ class MultiTaskSupervisedCollateFn(SupervisedCollateFn):
         is_regression: bool = False,
         add_extra_columns: dict[str, str] | None = None,
     ):
-        """
-        Initializes the UpliftCollateFn class.
-
-        Args:
-            treatment_column: str; name of column that contains the binary values:
-                1 - treatment group; 0 - control
-            target_column (Optional[str], optional): The column name to use as the
-                target labels. Defaults to None.
-        """
         if add_extra_columns is None:
             add_extra_columns = {}
         super().__init__(
@@ -266,8 +279,7 @@ class MultiTaskSupervisedCollateFn(SupervisedCollateFn):
         self.task_mapping = task_mapping
 
     def __call__(self, batch: list[dict[str, Any]]):
-        """
-        Processes the batch and converts it into a suitable format for model input.
+        """Processes the batch and converts it into a suitable format for model input.
 
         Args:
             batch (List[Dict[str, Any]]): A list of samples
@@ -277,8 +289,11 @@ class MultiTaskSupervisedCollateFn(SupervisedCollateFn):
             Dict[str, torch.Tensor]: A dictionary of processed features and target labels.
         """
         processed_batch = super().__call__(batch=batch)
-        processed_batch["task_name"] = torch.LongTensor([
+        task_ids = torch.LongTensor([
             self.task_mapping.get(x) for x in processed_batch[self.task_name_column]
         ])
+        # Drop the raw column first: when it is itself named ``task_name`` the
+        # delete would otherwise remove the tensor we just built.
         del processed_batch[self.task_name_column]
+        processed_batch["task_name"] = task_ids
         return processed_batch

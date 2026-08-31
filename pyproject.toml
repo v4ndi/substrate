@@ -98,21 +98,10 @@ ignore = [
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
-# `D` is being enabled package by package as the documentation work lands.
-# Remove an entry once its package is clean — do not add new ones.
+# `avatar/**` and `examples/**` are clean under the rule set above; keep them so.
+# Tests are exempt: a test's name is its documentation, and its docstring is
+# prose for whoever is reading the failure — style rules there buy nothing.
 [tool.ruff.lint.per-file-ignores]
-"avatar/data/**" = ["D"]
-"avatar/losses/**" = ["D"]
-"avatar/nn/**" = ["D"]
-"avatar/preprocessing/**" = ["D"]
-"avatar/utils/**" = ["D"]
-"avatar/cam_inference.py" = ["D"]
-"avatar/inference.py" = ["D"]
-"avatar/infer.py" = ["D"]
-"avatar/outputs.py" = ["D"]
-"avatar/train_utils.py" = ["D"]
-"avatar/training_agruments.py" = ["D"]
-"avatar/training_arguments.py" = ["D"]
 "avatar/_version.py" = ["D"]
 "tests/**" = ["D"]
 
