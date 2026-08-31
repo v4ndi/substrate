@@ -1,10 +1,33 @@
 # Design: repository documentation
 
-Status: **proposal** (2026-08-30).
+Status: **implemented** (2026-08-31). All five phases landed; the numbers below
+describe the state this work started from and are kept as written.
 
 Written against `refactor/train-torch-distributed` (6ad5902), i.e. the state
 after the `avatar/data` and `avatar/train` rewrites. All numbers below are
 measured from that tree, not estimated.
+
+## What changed against the plan
+
+* **§0.4's target census counted `experiments/`.** In what a user actually
+  reads — docs and examples — it is 25 distinct targets in 148 uses, with 9
+  more used only under `experiments/`.
+* **`mlflow:` is required for training**, not optional as §0.5 implied:
+  `init_exp_run_name` reads it unconditionally and the checkpoint path is built
+  from it.
+* **A third dead config key** turned up beside `device_specific`:
+  `mlflow.logging_dir` is in all 30 configs and is read by no code.
+* **MkDocs was not adopted**, as §8 recommended. Coverage is now high enough
+  that this is worth revisiting.
+* **MLM for event sequences was not added** (§6, item 5). There is no such
+  pipeline in the repository; writing one is model work, not documentation.
+  Next-token and next-K are both covered by configs.
+* **Six code bugs** were found by writing the checks and the runnable examples,
+  and fixed: a deleted `MLPEmbedding` that a documented benchmark mode still
+  needed; `amp: no` failing every config in the repo; `TabularClassification`
+  unable to run at all; a collate deleting its own output; `RocAucScore`
+  rejecting single-logit heads; and both synthetic generators giving train and
+  valid different target functions.
 
 ---
 
