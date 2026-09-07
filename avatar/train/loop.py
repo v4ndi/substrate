@@ -333,6 +333,11 @@ class Trainer:
         env, control = self.env, self.control
         started = time.perf_counter()
         model = self.ctx.extra.get("eval_model") or self.model
+        # A callback-supplied model — the averaged copy EMACallback publishes —
+        # is built before the trainer moves the training model to the device, so
+        # it can still be on CPU while the batches are not. Moving it here is a
+        # no-op once it has arrived.
+        model = model.to(env.device)
         scores = evaluate(model, dataloader, env, metrics)
 
         self.ctx.metrics = scores or {}

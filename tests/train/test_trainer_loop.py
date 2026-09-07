@@ -216,3 +216,42 @@ def test_resume_restores_step_and_weights(tmp_path):
     assert resumed.state.global_step == first.state.global_step
     for key, value in first.model.state_dict().items():
         assert torch.equal(value, resumed.model.state_dict()[key])
+
+
+def test_evaluation_moves_a_callback_supplied_model_to_the_device(tmp_path):
+    """The averaged model a callback publishes may still live on CPU.
+
+    ``EMACallback`` wraps the training module before the trainer moves it to the
+    device, so the copy it publishes as ``eval_model`` can be on a different
+    device than the batches. Evaluation has to place it.
+    """
+
+    class ElsewhereModel(torch.nn.Module):
+        def __init__(self, inner):
+            super().__init__()
+            self.inner = inner
+            self.devices: list[torch.device] = []
+
+        def to(self, *args, **kwargs):
+            device = args[0] if args else kwargs.get("device")
+            if isinstance(device, torch.device):
+                self.devices.append(device)
+            return super().to(*args, **kwargs)
+
+        def forward(self, *args, **kwargs):
+            return self.inner(*args, **kwargs)
+
+    class PublishEvalModel(TrainerCallback):
+        def __init__(self, model):
+            self.model = model
+
+        def on_epoch_begin(self, ctx: CallbackContext) -> None:
+            ctx.extra["eval_model"] = self.model
+
+    trainer = build_trainer(tmp_path, num_epochs=1)
+    published = ElsewhereModel(trainer.model)
+    trainer.callbacks.callbacks.append(PublishEvalModel(published))
+    trainer.train()
+
+    assert published.devices, "evaluation used the published model without placing it"
+    assert published.devices[-1] == trainer.env.device
