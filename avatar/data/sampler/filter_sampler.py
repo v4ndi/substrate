@@ -1,3 +1,5 @@
+"""Samplers that filter records by column values."""
+
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -27,7 +29,7 @@ class ColumnFilterSampler(BaseSampler):
     allowed_values: tuple[any]
         List of allowed values
 
-    Raises
+    Raises:
     ------
     AssertionError
         If both `min_value`, `max_value`, `allowed_values` are `None`.
@@ -36,7 +38,7 @@ class ColumnFilterSampler(BaseSampler):
     ValueError
         If both bounds are `None` when evaluating the condition.
 
-    Notes
+    Notes:
     -----
     - This sampler assumes each yielded item from `self.dataset_iterator` is a
       mapping or object accessible via `sample[column]`. Adjust access if your
@@ -44,7 +46,7 @@ class ColumnFilterSampler(BaseSampler):
     - If integrating with PyTorch `DataLoader`, typical samplers yield indices
       rather than sample payloads; adapt `__iter__` accordingly in that case.
 
-    Examples
+    Examples:
     --------
     Filter by an integer range:
         min_value=10, max_value=20 includes values in [10, 20].
@@ -97,6 +99,12 @@ class ColumnFilterSampler(BaseSampler):
 
 
 class MultiTaskColumnsFilterSampler(BaseSampler):
+    """Filter on several columns at once, for multi-task datasets.
+
+    Special-cased by the datasets: its decisions define which records exist at
+    all, so the scan applies it once and it does not run again during iteration.
+    """
+
     def __init__(
         self,
         task_name_column: str,
@@ -109,6 +117,8 @@ class MultiTaskColumnsFilterSampler(BaseSampler):
         ``[min, max]`` rules remain supported for backwards compatibility.
 
         Args:
+            task_name_column: Column naming the task each record belongs to;
+                its value selects which entry of ``filters`` applies.
             filters: dict where
                 key = task name (str)
                     key = column name (str)

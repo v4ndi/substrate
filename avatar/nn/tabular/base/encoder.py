@@ -1,3 +1,9 @@
+"""The tabular-encoder contract: feature tokens in, feature tokens out.
+
+Encoders take embeddings, never a batch, and never compute a loss — that is
+what lets the same encoder serve classification, uplift and multi-task.
+"""
+
 import torch
 import torch.nn as nn
 

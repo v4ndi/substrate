@@ -156,7 +156,7 @@ class TabularDataset(BaseShardedParquetDataset):
     # Schema                                                              #
     # ------------------------------------------------------------------ #
     def check_tabular_features(self) -> bool:
-        """Check parquet schema for presence of tabular features"""
+        """Check parquet schema for presence of tabular features."""
         if self.filesystem is None:
             schema = pq.read_schema(self.files[0])
         else:
@@ -274,7 +274,7 @@ class TabularDataset(BaseShardedParquetDataset):
     # ------------------------------------------------------------------ #
     @staticmethod
     def process_tabular(record, hidden_state_columns: list[str] | None = None):
-        """Process tabular features to torch.tensor"""
+        """Process tabular features to torch.tensor."""
         tabular_features = {
             "cat_features": None,
             "num_features": None,

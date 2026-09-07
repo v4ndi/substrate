@@ -1,3 +1,11 @@
+"""Response and regression metrics, plus their multi-task variants.
+
+"Response" here means the ordinary supervised setting — one probability per
+record, scored with ROC AUC and precision/recall at the top k percent, which is
+how campaign quality is judged. The MMoE and PLE subclasses report the same
+numbers per task and add gate diagnostics.
+"""
+
 import os
 from datetime import datetime
 from typing import Literal
@@ -16,6 +24,7 @@ from avatar.metrics.base import BaseMetric
 
 
 def precision_at_k(y_true, y_pred, k_pnt):
+    """Share of positives among the top ``k_pnt`` **percent** by score."""
     assert y_true.ndim == 1
     k = int(y_true.shape[0] * k_pnt / 100)
     top_k_indices = np.argsort(-y_pred)[:k]
@@ -24,6 +33,7 @@ def precision_at_k(y_true, y_pred, k_pnt):
 
 
 def recall_at_k(y_true, y_pred, k_pnt):
+    """Share of all positives captured by the top ``k_pnt`` percent by score."""
     assert y_true.ndim == 1
     k = int(y_true.shape[0] * k_pnt / 100)
     top_k_indices = np.argsort(-y_pred)[:k]
@@ -32,6 +42,7 @@ def recall_at_k(y_true, y_pred, k_pnt):
 
 
 def calculate_response_metrics(y_true, y_pred):
+    """ROC AUC plus precision and recall at 5, 10, 15 and 20 percent."""
     metrics = (
         {"roc_auc_score": roc_auc_score(y_true, y_pred)}
         | {f"recall_at_{k}": recall_at_k(y_true, y_pred, k) for k in [5, 10, 15, 20]}
@@ -44,6 +55,7 @@ def calculate_response_metrics(y_true, y_pred):
 
 
 def calculate_regression_metrics(y_true, y_pred):
+    """MSE, MAE and MAPE."""
     metrics = {
         "mse": mean_squared_error(y_true, y_pred),
         "mae": mean_absolute_error(y_true, y_pred),
@@ -55,6 +67,11 @@ def calculate_regression_metrics(y_true, y_pred):
 def apply_calculate_metrics(
     y_true, y_pred, task_type: Literal["binary_clf", "reg"] = "binary_clf"
 ):
+    """Dispatch to the response or regression metric set.
+
+    Raises:
+        ValueError: ``task_type`` is neither ``binary_clf`` nor ``reg``.
+    """
     if task_type == "binary_clf":
         no_calib_metrics = calculate_response_metrics(y_true=y_true, y_pred=y_pred)
     elif task_type == "reg":
@@ -68,8 +85,7 @@ def apply_calculate_metrics(
 def save_to_parquet(
     df: pd.DataFrame, path_to_save: str, prefix: str | None = None
 ) -> str:
-    """
-    Save a DataFrame as a parquet file in the specified directory.
+    """Save a DataFrame as a parquet file in the specified directory.
 
     Parameters
     ----------
@@ -80,7 +96,7 @@ def save_to_parquet(
     prefix : str, optional
         Optional prefix for the filename.
 
-    Returns
+    Returns:
     -------
     str
         The full path to the saved parquet file.
@@ -102,14 +118,18 @@ def save_to_parquet(
 
 
 class ResponseMetrics(BaseMetric):
-    """Class for computing supervised metrics.
+    """Ranking quality of a single-head response model.
+
     Args:
-        save_submit_path: str = None
-            Path to save predictions.
-    Available metrics:
-        recall_at_5/10/15/20
-        precision_at_5/10/15/20
-        roc_auc_score
+        save_submit_path: Directory to write per-record predictions into.
+            ``None`` writes nothing.
+        main_metric: Which metric counts as *the* number for this run.
+
+    Returns from :meth:`compute`:
+        ``roc_auc_score``, ``recall_at_{5,10,15,20}`` and
+        ``precision_at_{5,10,15,20}``. The ``k`` is a **percentage** of the
+        population, not a record count, so ``precision_at_5`` is precision in
+        the top 5% by score.
     """
 
     def __init__(
@@ -123,6 +143,7 @@ class ResponseMetrics(BaseMetric):
 
     def update(self, inputs, outputs):
         """Stores model predictions for later computation.
+
         Args:
             inputs: Dict[str, any]
             outputs: Dict[str, torch.Tensor]
@@ -279,7 +300,8 @@ class ResponseMetrics(BaseMetric):
 
 
 class RegressionMetrics(BaseMetric):
-    """Class for computing regression metrics.
+    """Error metrics for a regression head.
+
     Args:
         save_submit_path: str = None
             Path to save predictions.
@@ -300,6 +322,7 @@ class RegressionMetrics(BaseMetric):
 
     def update(self, inputs, outputs):
         """Stores model predictions for later computation.
+
         Args:
             inputs: Dict[str, any]
             outputs: Dict[str, torch.Tensor]
@@ -442,6 +465,21 @@ class RegressionMetrics(BaseMetric):
 
 
 class InferenceSupervisedMetrics(BaseMetric):
+    """Write per-record predictions to parquet during inference.
+
+    Unlike the scoring metrics in this module, the product here is a file, not
+    a number: :meth:`compute` returns nothing useful and the predictions are
+    flushed every ``save_steps`` batches so a long inference run does not hold
+    the whole population in memory.
+
+    Args:
+        path_to_save: Directory for the parquet parts; created if missing.
+        save_steps: Flush every this many batches.
+        task_type: ``binary_clf`` or ``reg`` — selects how logits become the
+            saved prediction.
+        prefix: Optional suffix in the filename, to tell runs apart.
+    """
+
     def __init__(
         self,
         path_to_save,
@@ -501,7 +539,10 @@ class InferenceSupervisedMetrics(BaseMetric):
             self.compute()
 
     def compute(self):
-        """return Dict(metric_name: value)"""
+        """Flush the collected predictions to parquet and reset.
+
+        Returns nothing to log: the product of this metric is the file.
+        """
         predict = {
             "epk_id": [],
             "target_attr_2": [],
@@ -544,8 +585,7 @@ class InferenceSupervisedMetrics(BaseMetric):
 
 
 class MMoEResponseMetrics(ResponseMetrics):
-    """
-    Response metrics + MMoE gate utilization metrics.
+    """Response metrics + MMoE gate utilization metrics.
 
     Adds metrics like:
     gate_product_{product}_expert_{i}_mean
@@ -689,8 +729,7 @@ class MMoEResponseMetrics(ResponseMetrics):
 
 
 class PLEResponseMetrics(MMoEResponseMetrics):
-    """
-    Response metrics + PLE (CGC) gate utilization metrics.
+    """Response metrics + PLE (CGC) gate utilization metrics.
 
     In PLE, a task's gate evaluates [Shared Experts] + [Task-Specific Experts].
     This class correctly maps gate indices to global/shared vs specific metrics

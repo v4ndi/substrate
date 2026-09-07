@@ -1,3 +1,5 @@
+"""The event-encoder contract."""
+
 from typing import Literal
 
 import torch
@@ -17,7 +19,7 @@ class BaseEventEncoder(nn.Module):
     Applies ``embedding`` to the raw features, optionally adds a positional
     embedding, and optionally appends a time-encoding channel.
 
-    Attributes
+    Attributes:
     ----------
     embedding : BaseEventSequenceEmbedding
         The base event sequence embedding.

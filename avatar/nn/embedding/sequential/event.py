@@ -1,3 +1,5 @@
+"""Embed one event: its categorical and numeric attributes, per column."""
+
 from typing import Any
 
 import torch

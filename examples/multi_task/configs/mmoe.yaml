@@ -1,0 +1,118 @@
+# MMoE: три задачи, один общий пул экспертов, свой гейт на задачу.
+# Путь к данным передаётся при запуске: data_dir=/абсолютный/путь
+data_dir: ???
+
+distributed:
+  backend: null
+  gradient_accumulation_steps: 1
+amp: no
+ddp:
+  find_unused_parameters: True   # головы неактивных задач не получают градиент
+
+train_dataloader:
+  _target_: torch.utils.data.DataLoader
+  dataset:
+    _target_: avatar.data.TabularDataset
+    path: ${data_dir}/train
+    shuffle_files: True
+    shuffle_pq: True
+    filter_cache: False
+  batch_size: 512
+  num_workers: 2
+  drop_last: True                # см. README: задаче нужно >= 2 записи в батче
+  pin_memory: False
+  collate_fn:
+    _target_: avatar.data.MultiTaskSupervisedCollateFn
+    task_name_column: task_name
+    task_mapping: {"0": 0, "1": 1, "2": 2}
+    target_column: target
+    add_extra_columns: {group: group_id}   # MMoE.forward требует group
+
+valid_dataloader:
+  _target_: torch.utils.data.DataLoader
+  dataset:
+    _target_: avatar.data.TabularDataset
+    path: ${data_dir}/valid
+    shuffle_files: False
+    shuffle_pq: False
+    filter_cache: False
+  batch_size: 512
+  num_workers: 2
+  drop_last: True
+  pin_memory: False
+  collate_fn:
+    _target_: avatar.data.MultiTaskSupervisedCollateFn
+    task_name_column: task_name
+    task_mapping: {"0": 0, "1": 1, "2": 2}
+    target_column: target
+    add_extra_columns: {group: group_id}
+
+model:
+  _target_: avatar.pipeline.multi_task.MMoE
+  embedding:
+    _target_: avatar.nn.embedding.TabularEmbedding
+    num_numerical_features: 16
+    vocab_size: 64
+    hidden_size: 32
+  tabular_encoder:
+    _target_: avatar.pipeline.multi_task.MMoEBackbone
+    num_tasks: 3
+    experts:
+      - _target_: avatar.pipeline.multi_task.mmoe.MLPExpert
+        hidden_size: 32
+      - _target_: avatar.pipeline.multi_task.mmoe.MLPExpert
+        hidden_size: 32
+      - _target_: avatar.pipeline.multi_task.mmoe.MLPExpert
+        hidden_size: 32
+      - _target_: avatar.pipeline.multi_task.mmoe.MLPExpert
+        hidden_size: 32
+    aggregation_config:
+      name: linear
+      num_features: 25           # 8 категориальных + 16 числовых + 1 токен группы
+      emb_dim: 32
+  heads:
+    "0":
+      _target_: avatar.pipeline.multi_task.TaskHead
+      dropout_head: 0.1
+    "1":
+      _target_: avatar.pipeline.multi_task.TaskHead
+      dropout_head: 0.1
+    "2":
+      _target_: avatar.pipeline.multi_task.TaskHead
+      dropout_head: 0.1
+  multi_task_loss:
+    _target_: avatar.losses.multi_task.MultiTaskLoss
+    loss_balancer:
+      _target_: avatar.losses.multi_task.WeightLossBalancer
+      loss_weights: {"0": 1.0, "1": 1.0, "2": 1.0}
+  n_groups: 2
+
+optimizer:
+  _target_: torch.optim.AdamW
+  _partial_: True
+  lr: 0.002
+  weight_decay: 0.01
+
+scheduler:
+  _target_: transformers.optimization.get_scheduler
+  _partial_: True
+  name: cosine
+  num_warmup_steps: 20
+  num_training_steps: 2000
+
+train:
+  start_epoch: 0
+  checkpoint_state: null
+  model_state: null
+  seed: 42
+  num_epochs: 3
+  clip_grad_norm: 1.0
+  max_saved_checkpoints: 2
+
+mlflow:
+  experiment_name: multi_task_example
+  run_name: debug
+
+metrics:
+  valid_metrics:
+    _target_: avatar.metrics.RocAucScore

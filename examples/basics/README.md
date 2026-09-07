@@ -1,11 +1,12 @@
 ## Базовые операции с пайплайном
 ### Клонирование репозитория + установка зависимостей
 ```bash
-git clone https://df-bitbucket.ca.sbrf.ru/scm/dsrpt/avatar_fm.git
+git clone git@github.com:v4ndi/substrate.git avatar_fm
 cd avatar_fm
-chmod +x install.sh
-./install.sh
+python -m pip install -e ".[spark,dev]"
 ```
+
+Подробнее про extras (`spark`, `catboost`, `dev`) — в корневом `README.md`.
 
 ### Данные
 
@@ -41,10 +42,10 @@ hdfs dfs -get hdfs://arnsdpsbx/user/team/team_ai_avatar/avatar_fm/examples/campa
 ---
 
 ### Навигация
-* `atrifacts` - вспомогательные файлы, конфиги препроцессоров
+* `artifacts` - вспомогательные файлы, конфиги препроцессоров
 * `tabular_preprocessing.ipynb` - Предобработка табличных признаков + join скрытых состояний
 * `tabular_dataset.ipynb` - Инициализация табличного датасета и работа с ними
-* `metircs.ipynb` - Пример работы с базовым классом для рассчета метрик
+* `metrics.ipynb` - Пример работы с базовым классом для расчёта метрик
   
 ---
 

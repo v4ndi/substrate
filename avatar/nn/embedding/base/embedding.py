@@ -1,3 +1,5 @@
+"""Root of the embedding hierarchy: turn a batch into feature vectors."""
+
 import torch.nn as nn
 
 

@@ -1,6 +1,7 @@
 # Design: rewrite `avatar/train.py` — pure `torch.distributed`, callbacks, loss placement
 
-Status: **draft / proposal** (2026-08-29).
+Status: **implemented** (2026-08-30). See §6 for what shipped and where it
+deviates from this proposal.
 
 Three questions from the ask:
 
@@ -472,3 +473,148 @@ the eval loop already).
 - Scope: this is 3 refactors (distributed, callbacks, loss). Recommend landing
   in that order, each behind the smoke test, `accelerate` removed only after all
   three are green.
+
+---
+
+## 6. What shipped
+
+Landed in the order §5 recommends, each behind the smoke test, with
+`accelerate` removed only once all three were green.
+
+### 6.1 Layout as built
+
+```
+avatar/train/
+├── __init__.py          # flat re-export (40 names)
+├── __main__.py          # torchrun entrypoint (hydra), was avatar/train.py:main
+├── loop.py              # Trainer: the core loop
+├── dist.py              # DistEnv + collectives + seed_everything + unwrap_model
+├── config.py            # RunConfig; reads the new keys or the legacy accelerator: block
+├── state.py             # TrainerState, TrainerControl, CallbackContext
+├── checkpoint.py        # explicit save/load/rotate
+├── early_stopping.py    # EarlyStopping, moved from train_utils
+├── evaluate.py          # evaluate() + predict(), no accelerate
+├── factory.py           # build_callbacks: config -> callback list
+├── loss_reduce.py       # token-weighted cross-rank loss
+├── utils.py             # move_to_device, wrap_metrics, log params, loader checks
+└── callbacks/
+    ├── base.py mlflow.py checkpoint.py early_stopping.py ema.py
+    ├── metrics.py perf_metrics.py profiler.py progress.py
+    └── throughput.py train_stats.py
+
+avatar/losses/base.py             # Loss, CompositeLoss
+avatar/losses/classification.py   # ClassificationLoss, build_task_loss_fn
+avatar/losses/next_k_tokens.py    # NextKTokensLoss, HeadPrediction
+avatar/infer.py                   # inference entrypoint
+```
+
+`avatar/accelerate_utils.py` is deleted. `avatar/train_utils.py` and
+`avatar/inference.py` remain as deprecation shims.
+
+### 6.2 Deviations from the proposal
+
+- **`init_scheduler`'s `// grad_accumulation_steps` is kept**, contrary to
+  §1.9. It is not an accelerate fudge: the loop steps the scheduler once per
+  accumulation boundary, so `epochs * batches / grad_accum` is the correct step
+  budget. The two divisions that *were* fudges —
+  `steps_before_evaluation // num_processes` and EMA
+  `min_num_steps // num_processes` — are gone, and those budgets are now
+  literal.
+- **`GradNormCallback` merged into `TrainStatsCallback`**, which reports the
+  epoch means of loss, learning rate and gradient norm together. Three
+  single-number callbacks accumulating over the same loop was more machinery
+  than the job needs.
+- **`TrainMetricsCallback` added** (not in §2.3). Training-metric updates need
+  exactly `batch` and `output`, which `on_forward_end` already carries, so the
+  update moved out of the loop with everything else.
+- **`ProgressBarCallback` advances the bar from `on_batch_begin`** rather than
+  wrapping the dataloader; that keeps the loop iterating a plain iterator and
+  the bar an ordinary, removable callback.
+- **Checkpoint saves are vetoed, not requested.** The loop sets
+  `control.should_save` before firing `on_evaluate`, and
+  `EarlyStoppingCallback` clears it when the metric did not improve. This
+  reproduces the old "only checkpoint the best" behaviour and is the one place
+  where callback order matters (early stopping before the checkpointer).
+- **Rank 0's verdict is broadcast, not all-reduced.** Only rank 0 holds the
+  evaluation scores, so `should_training_stop` and `should_save` go through
+  `DistEnv.broadcast_flag`. An `any`-reduction would have let a vetoed save
+  happen anyway, because the other ranks never saw the metric.
+- **`evaluate()` picks its reduction from whether the dataset shards**, rather
+  than from a `distributed_evaluate` flag (which no config ever set and which
+  is now removed from `TrainingArguments`). A replicated dataset would count
+  every sample `world_size` times if gathered, so every rank still runs the
+  forward pass — nobody blocks at a collective the others never reach — but
+  only rank 0 scores.
+- **`NextKTokensLoss` does not own the prediction heads.** §3.5 says the loss
+  logic moves wholesale; the heads carry parameters, so moving them would
+  rename every `lm_heads.*` key in existing checkpoints. The heads stay on the
+  pipeline and hand their logits to the loss, which owns label shifting, the
+  criteria and the per-head weighting. The horizon loop also stays on the
+  pipeline: the event-id embedding feeds back into the hidden state between
+  horizons.
+- **The already-injected pipelines were left alone.** `SLearner`,
+  `SupervisedLearner`, `MMoE` and the multi-task pipelines already take
+  `loss_fn` from config, which is what §3.2 asks for. Rewrapping them in the
+  `Loss`/`LossOutput` contract would be churn without a behaviour change.
+- **One pre-existing asymmetry is preserved deliberately**: the timedelta head
+  divides by its horizon coefficient in eval as well as in training, while
+  every other head applies the coefficient only while training. It is carried
+  across as `HeadPrediction.scale_by_coef_in_eval` and pinned by a test rather
+  than silently normalised.
+- **NCCL env tuning is not set at import.** The old block wrote eight
+  `os.environ` keys as an import side effect, one of them
+  `CUDA_LAUNCH_BLOCKING=1`, which serialises every CUDA call. Set what a run
+  needs in its launcher.
+
+### 6.3 Config migration
+
+60 config files moved from `accelerator:` to `distributed:` / `amp:` / `ddp:` /
+`compile:`. The whole surface was five distinct blocks, so the mapping is
+mechanical:
+
+| old | new |
+|---|---|
+| `dataloader_config.dispatch_batches` | *dropped* — accelerate's own loader wrapping |
+| `gradient_accumulation_steps` | `distributed.gradient_accumulation_steps` |
+| `kwargs_handlers[DistributedDataParallelKwargs].*` | `ddp.*` |
+| `dynamo_plugin.backend` | `compile` |
+| `mixed_precision` | `amp` |
+
+`resolve_run_config` still reads the old block, with a `DeprecationWarning`,
+so out-of-repo configs keep working. New keys win when both are present.
+`avatar.train_utils.EarlyStopping` targets were repointed to
+`avatar.train.EarlyStopping` in 7 configs.
+
+### 6.4 Test coverage
+
+The loop had **no tests at all**; §5 called that the biggest risk. Added:
+
+- `tests/train/test_trainer_loop.py` (11) — loss falls over epochs, step/batch/
+  sample counts, gradient accumulation, callback event ordering, per-epoch and
+  per-step evaluation, checkpoint write and restore, resume, early stopping
+  (both halting and vetoing a save), and a callback stopping training.
+- `tests/train/test_train_config.py` (10) — new keys, legacy block, precedence,
+  AMP validation.
+- `tests/train/test_train_callbacks.py` (17) — dispatch and ordering, each
+  callback in isolation, MLflow param sanitising, loss reduction.
+- `tests/pipeline/test_losses.py` (15) — criterion selection, `LossOutput`
+  shape, L1 penalty, `CompositeLoss`, and `NextKTokensLoss` weighting.
+- `tests/train/test_distributed_training.py` (8, `slow`) — real `torchrun`
+  processes on gloo with the GPUs hidden: 1- and 2-rank, a simulated 2-node
+  4-rank job, gradient accumulation, clipping, DataLoader workers, and bf16.
+  Each asserts that the loss falls, that every rank ends on identical weights
+  and step counts, and that checkpoints round-trip.
+
+Hiding the GPUs is what makes this runnable here: gloo collectives run on CPU,
+so several ranks — and several nodes — fit on a single-GPU host, which NCCL
+cannot do.
+
+### 6.5 Follow-ups not done
+
+- Numerical parity against a known-good accelerate run (§5). The LR schedule
+  shape is unchanged by construction, but nothing has been trained end to end
+  on real data yet.
+- A converter for existing accelerate checkpoints; the format change is a clean
+  break for now.
+- Removing the `avatar.train_utils` / `avatar.inference` shims once out-of-repo
+  configs and scripts have moved.

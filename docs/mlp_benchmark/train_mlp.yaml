@@ -1,11 +1,11 @@
 PATH_TO_SAVE_PREDICT: /home/datalab/projects/avatards/moshcharov/predict/good_split_middle/bo/debug
 
-accelerator:
-  _target_: accelerate.Accelerator
-  _partial_: True
-  dataloader_config:
-    _target_: accelerate.utils.DataLoaderConfiguration
-    dispatch_batches: False
+distributed:
+  backend: null  # null -> nccl on GPU, gloo on CPU
+  gradient_accumulation_steps: 1
+amp: no  # no | fp16 | bf16
+ddp:
+  find_unused_parameters: False
   
 train_dataloader:
   _target_: torch.utils.data.DataLoader
@@ -99,7 +99,7 @@ train:
   max_saved_checkpoints: 15
   device_specific: False
   early_stopping:
-    _target_: avatar.train_utils.EarlyStopping
+    _target_: avatar.train.EarlyStopping
     main_metric: avg_calib_roc_auc_score
     patience: 15
     delta: 0.0001

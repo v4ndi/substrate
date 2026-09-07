@@ -7,13 +7,13 @@
 
 ## Конфиг обучения
 ```yaml
-# конфигцрация accelerator для multi-gpu обучения 
-accelerator:
-  _target_: accelerate.Accelerator
-  _partial_: True
-  dataloader_config:
-    _target_: accelerate.utils.DataLoaderConfiguration
-    dispatch_batches: False
+# конфигурация распределённого запуска для multi-gpu обучения
+distributed:
+  backend: null  # null -> nccl on GPU, gloo on CPU
+  gradient_accumulation_steps: 1
+amp: no  # no | fp16 | bf16
+ddp:
+  find_unused_parameters: False
 train_dataloader:
   _target_: torch.utils.data.DataLoader
   dataset:
@@ -22,7 +22,7 @@ train_dataloader:
     shuffle_files: True
     shuffle_pq: True
     hidden_state_column: seq_hidden_state # название колонки с hidden_state
-  batch_size: 2048
+  batch_size: 8192
   pin_memory: True
   drop_last: False
   num_workers: 8
@@ -39,7 +39,7 @@ valid_dataloader:
     shuffle_files: False
     shuffle_pq: False
     hidden_state_column: seq_hidden_state # название колонки с hidden_state
-  batch_size: 2048
+  batch_size: 8192
   pin_memory: True
   drop_last: False
   num_workers: 8
@@ -56,8 +56,8 @@ model:
     hidden_size: 64
     vocab_size: 172
     std_noise: null
-  tabular_backbone:
-    _target_: avatar.nn.tabular.ste.STEv2Body
+  tabular_encoder:
+    _target_: avatar.nn.tabular.TabularTransformer
     hidden_size: ${model.embedding.hidden_size}
     num_heads: 4
     num_layers: 3
@@ -74,7 +74,7 @@ mlflow:
 optimizer:
   _target_: torch.optim.AdamW
   _partial_: True
-  lr: 0.001
+  lr: 0.0025
   weight_decay: 0
   scale_lr_multigpu: True
 scheduler:
@@ -101,11 +101,11 @@ metrics:
 
 ## Запуск обучения
 ```bash
-accelerate launch -m avatar.train --config-dir=configs --config-name=train
+torchrun --standalone --nproc_per_node=1 -m avatar.train --config-dir=configs --config-name=train
 ```
 
 ## Запуск инференса
 ```bash
-accelerate launch -m avatar.inference --config-dir=configs --config-name=inference
+python -m avatar.infer --config-dir=configs --config-name=inference
 ```
 Результаты инференса можно найти в директории `predict`.

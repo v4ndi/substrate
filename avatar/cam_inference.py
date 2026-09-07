@@ -1,109 +1,102 @@
-import datetime
+"""Campaign inference: score every (task, communication channel) combination.
+
+Same loop as :mod:`avatar.infer`, but each batch is fanned out over the
+campaign's tasks and channels before being scored, so one pass over the data
+yields a prediction per combination.
+"""
+
+from __future__ import annotations
+
 import os
 
 import hydra
 import torch
-from accelerate.utils import set_seed
 from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
-from tqdm import tqdm
 
-from avatar.accelerate_utils import init_accelerate
+from avatar.train.config import resolve_run_config
+from avatar.train.dist import DistEnv, seed_everything
+from avatar.train.evaluate import predict
 
-os.environ["HYDRA_FULL_ERROR"] = "1"
-os.environ["NCCL_P2P_DISABLE"] = "1"
-os.environ["NCCL_IB_DISABLE"] = "1"
-os.environ["NCCL_BLOCKING_WAIT"] = "1"
-os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
-os.environ["NCCL_ASYNC_ERROR_HANDLING"] = "1"
-os.environ["NCCL_DEBUG"] = "INFO"
-os.environ["TORCHINDUCTOR_CACHE_DIR"] = (
-    f"/home/datalab/nfs/torchinductor_cache/cache_pid"
-    f"{os.getpid()}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S_%f')}"
-)
+os.environ.setdefault("HYDRA_FULL_ERROR", "1")
+
+# Channel id standing in for "this task has no channel dimension".
+NO_CHANNEL = -1
+
+
+def make_campaign_batches(campaign_meta: DictConfig):
+    """Build the ``prepare_batch`` hook for a campaign's task/channel matrix.
+
+    Args:
+        campaign_meta: The ``campaign_meta`` config block; its ``tasks`` mapping
+            gives the ``comm_type`` list for each task.
+
+    Returns:
+        A callable turning one batch into one batch per (task, channel) pair.
+    """
+
+    def prepare(batch: dict):
+        device = batch["tab_features"].cat_features.device
+        size = len(batch["epk_id"])
+        for task_name, task_meta in campaign_meta["tasks"].items():
+            try:
+                task_values = torch.LongTensor([int(task_name)] * size).to(device)
+            except (TypeError, ValueError):
+                # Some campaigns key tasks by name rather than id.
+                task_values = [task_name] * size
+            for comm_type in task_meta["comm_type"]:
+                channel = NO_CHANNEL if comm_type is None else comm_type
+                channel_values = [channel] * size
+                variant = dict(batch)
+                variant["task_name"] = task_values
+                variant["target_attr_2"] = channel_values
+                variant["group"] = (
+                    None
+                    if comm_type is None
+                    else torch.LongTensor(channel_values).to(device)
+                )
+                if "is_treat" not in variant:
+                    variant["is_treat"] = torch.ones(size, device=device).long()
+                yield variant
+
+    return prepare
 
 
 @hydra.main(version_base=None, config_path=".", config_name="config")
-def main(config: DictConfig):
-    accelerator = init_accelerate(
-        accelerate_arguments=config["accelerator"], mlflow_arguments=None
+def main(config: DictConfig) -> None:
+    """Load weights and score the campaign's task/channel matrix."""
+    run_config = resolve_run_config(config)
+    env = DistEnv.from_env(
+        backend=run_config.distributed.backend,
+        timeout_sec=run_config.distributed.timeout_sec,
     )
-    set_seed(42)
-    accelerator.print(OmegaConf.to_yaml(config))
+    seed_everything(42, rank=env.rank)
+    env.print(OmegaConf.to_yaml(config))
 
     model = instantiate(config["model"])
     test_dataloader = instantiate(config["test_dataloader"])
-    if "load_state" in config and config["load_state"] is not None:
-        load_state = config["load_state"]
-        model_state = torch.load(load_state)
-        model.load_state_dict(model_state, strict=True)
-    else:
+
+    load_state = config.get("load_state")
+    if load_state is None:
         raise ValueError("load state is None")
-    accelerator.print(model)
-    if accelerator.num_processes > 1:
-        raise ValueError("Distributed inference unsupported")
-
-    inference(
-        accelerator=accelerator,
-        config=config,
-        model=model,
-        test_dataloader=test_dataloader,
+    model.load_state_dict(
+        torch.load(load_state, map_location="cpu", weights_only=False), strict=True
     )
+    env.print(model)
+    model = model.to(env.device)
 
-
-def inference(accelerator, config, model, test_dataloader):
-    model, test_dataloader = accelerator.prepare(model, test_dataloader)
-    model.eval()
-    progress_bar = tqdm(
-        test_dataloader,
-        desc="Inference: ",
-        disable=(not accelerator.is_local_main_process),
-    )
     metrics = instantiate(config["metrics"]["test_metrics"])
-
-    for _, batch in enumerate(progress_bar):
-        for task_name, task_meta in config["campaign_meta"]["tasks"].items():
-            try:
-                task_name = [int(task_name)] * len(batch["epk_id"])
-                task_name = torch.LongTensor(task_name).to(
-                    batch["tab_features"].cat_features.device
-                )
-            except Exception:
-                task_name = [task_name] * len(batch["epk_id"])
-            batch["task_name"] = task_name
-            for comm_type in task_meta["comm_type"]:
-                if comm_type is None:
-                    comm_type = -1  # when canal are not supported
-                current_comm_type_list = [comm_type] * len(batch["epk_id"])
-                batch["target_attr_2"] = current_comm_type_list
-                channel_type = torch.LongTensor(current_comm_type_list).to(
-                    batch["tab_features"].cat_features.device
-                )
-                if comm_type is None:
-                    batch["group"] = None
-                else:
-                    batch["group"] = channel_type
-                if "is_treat" not in batch:
-                    batch["is_treat"] = (
-                        torch.ones(len(batch["epk_id"]))
-                        .to(batch["tab_features"].cat_features.device)
-                        .long()
-                    )
-                with torch.inference_mode():
-                    with accelerator.autocast():
-                        output = model(**batch)
-                    gathered_objects = accelerator.gather_for_metrics((batch, output))
-                    if accelerator.is_main_process:
-                        len_gather_obj = len(gathered_objects)
-                        assert len_gather_obj % 2 == 0, "incorrect lenght"
-                        for n_proc in range(0, len_gather_obj, 2):
-                            metrics.update(
-                                inputs=gathered_objects[n_proc],
-                                outputs=gathered_objects[n_proc + 1],
-                            )
-
-    metrics.compute()
-    accelerator.wait_for_everyone()
+    try:
+        predict(
+            model,
+            test_dataloader,
+            env,
+            metrics,
+            description="Campaign inference",
+            prepare_batch=make_campaign_batches(config["campaign_meta"]),
+        )
+    finally:
+        env.destroy()
 
 
 if __name__ == "__main__":

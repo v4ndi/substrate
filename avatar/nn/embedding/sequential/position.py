@@ -1,3 +1,11 @@
+"""Where an event sits in time.
+
+Two encodings of the same signal: ``TemporalPositionEncoding`` is the
+classic sinusoidal scheme over positions, ``Time2VecEmbedding`` learns a
+periodic representation of the timestamp itself, so irregular gaps between
+events stay meaningful.
+"""
+
 import math
 
 import torch
@@ -47,11 +55,12 @@ class TemporalPositionEncoding(BaseTemporalEmbedding):
 
     def forward(self, features: EventSequenceBatch) -> torch.FloatTensor:
         """Forward pass.
+
         Args:
-            batch: The input batch to process.
+            features: The batch to process; only its timestamps are read.
 
         Returns:
-            The temporal position embeddings tensor of shape (batch_size, seq_len, emb_dim)
+            Temporal position embeddings, ``(batch_size, seq_len, emb_dim)``.
         """
         t = features.timestamps
         bsz, seq_len = t.shape
@@ -73,8 +82,11 @@ class TemporalPositionEncoding(BaseTemporalEmbedding):
 
 
 class Time2VecEmbedding(BaseTemporalEmbedding):
-    """The module implements Time2Vec embedding technique from the paper
-    "Time2Vec: Learning a Vector Representation of Time"
+    """Time2Vec: a learned periodic representation of a timestamp.
+
+    From "Time2Vec: Learning a Vector Representation of Time". Unlike
+    positional encoding, it embeds the timestamp itself, so irregular gaps
+    between events stay meaningful.
 
 
     Args:

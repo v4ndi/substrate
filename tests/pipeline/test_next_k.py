@@ -1,21 +1,43 @@
+"""Label shifting and per-head criteria for next-k-token prediction.
+
+The arithmetic lives in :class:`~avatar.losses.next_k_tokens.NextKTokensLoss`,
+so these exercise it directly; ``test_pipeline_owns_a_loss_module`` covers the
+wiring back to the pipeline.
+"""
+
 import torch
 
+from avatar.losses.next_k_tokens import NextKTokensLoss
 from avatar.nn.embedding import BaseEmbedding
 from avatar.nn.sequential import BaseBackbone, BaseEventEncoder, BaseSequenceModel
 from avatar.pipeline.sequence import NextKTokensPrediction
 
-event_encoder = BaseEventEncoder(embedding=BaseEmbedding(hidden_size=128))
-event_encoder.embedding.columns_meta = {
-    "pos_geo_evt_attr_1": {"n_classes": 87, "type": "categorical"},
-    "txn_evt_attr_15": {"n_classes": 1, "type": "numeric"},
-}
+loss_module = NextKTokensLoss(horizon=3)
 
-model = NextKTokensPrediction(
-    model=BaseSequenceModel(
-        event_encoder=event_encoder, backbone=BaseBackbone()
-    ),
-    horizon=3,
-)
+
+def build_pipeline() -> NextKTokensPrediction:
+    event_encoder = BaseEventEncoder(embedding=BaseEmbedding(hidden_size=128))
+    event_encoder.embedding.columns_meta = {
+        "pos_geo_evt_attr_1": {"n_classes": 87, "type": "categorical"},
+        "txn_evt_attr_15": {"n_classes": 1, "type": "numeric"},
+    }
+    return NextKTokensPrediction(
+        model=BaseSequenceModel(event_encoder=event_encoder, backbone=BaseBackbone()),
+        horizon=3,
+    )
+
+
+def test_pipeline_owns_a_loss_module():
+    """The heads stay on the pipeline; the scoring moved to the loss."""
+    pipeline = build_pipeline()
+    assert isinstance(pipeline.loss, NextKTokensLoss)
+    # horizion_loss_weight defaults to 1 on the pipeline, so the discount grows
+    # linearly with the horizon; the loss must have been built from that.
+    assert pipeline.loss.coefs == [1, 2, 3]
+    assert pipeline.loss.feature_loss_weights == pipeline.feature_loss_weights
+    # The heads carry parameters, so they must not have moved.
+    assert any(name.startswith("lm_heads.") for name, _ in pipeline.named_parameters())
+    assert not any(name.startswith("loss.") for name, _ in pipeline.named_parameters())
 
 
 def test_create_labels_logits():
@@ -27,7 +49,7 @@ def test_create_labels_logits():
     horizon_offset = 1
     n_classes = 3
 
-    shifted_logits, shifted_labels = model.create_labels(
+    shifted_logits, shifted_labels = loss_module.create_labels(
         input_ids, logits, horizon_offset, n_classes
     )
 
@@ -50,7 +72,7 @@ def test_horizon():
     horizon_offset = 3
     n_classes = 3
 
-    shifted_logits, shifted_labels = model.create_labels(
+    shifted_logits, shifted_labels = loss_module.create_labels(
         input_ids, logits, horizon_offset, n_classes
     )
 
@@ -70,7 +92,7 @@ def test_padding():
     horizon_offset = 3
     n_classes = 3
 
-    _, shifted_labels = model.create_labels(
+    _, shifted_labels = loss_module.create_labels(
         input_ids, logits, horizon_offset, n_classes
     )
 
@@ -84,7 +106,7 @@ def test_padding():
     horizon_offset = 3
     n_classes = 1
 
-    _, shifted_labels = model.create_labels(
+    _, shifted_labels = loss_module.create_labels(
         input_ids, logits, horizon_offset, n_classes
     )
 
@@ -103,11 +125,11 @@ def test_null_label():
     horizon_offset = 3
     n_classes = 3
 
-    shifted_logits, shifted_labels = model.create_labels(
+    shifted_logits, shifted_labels = loss_module.create_labels(
         input_ids, logits, horizon_offset, n_classes
     )
 
-    loss, num_items = model.calculate_loss(
+    loss, num_items = loss_module.calculate_loss(
         shifted_logits=shifted_logits,
         shifted_labels=shifted_labels,
         n_classes=n_classes,
@@ -129,10 +151,10 @@ def test_apply_attention_mask():
     horizon_offset = 1
     n_classes = 1
 
-    shifted_logits, shifted_labels = model.create_labels(
+    shifted_logits, shifted_labels = loss_module.create_labels(
         input_ids, logits, horizon_offset, n_classes
     )
-    _, num_items = model.calculate_loss(
+    _, num_items = loss_module.calculate_loss(
         shifted_logits=shifted_logits,
         shifted_labels=shifted_labels,
         n_classes=n_classes,
@@ -149,7 +171,7 @@ def test_numeric_loss():
         torch.randint(2, 5, (2, 4)),
     )
     expected_output = abs(test_labels - test_logits.squeeze(-1)).sum()
-    loss, _ = model.calculate_loss(
+    loss, _ = loss_module.calculate_loss(
         shifted_logits=test_logits,
         shifted_labels=test_labels,
         n_classes=1,
@@ -167,7 +189,7 @@ def test_numeric_loss_with_mask():
         [0, 1, 1, 1],
     ])
     expected_output = abs(test_labels - test_logits.squeeze(-1)).sum() * 0.75
-    loss, _ = model.calculate_loss(
+    loss, _ = loss_module.calculate_loss(
         shifted_logits=test_logits,
         shifted_labels=test_labels,
         n_classes=1,
@@ -180,7 +202,7 @@ def test_numeric_loss_with_mask():
         [0, 0, 1, 1],
     ])
     expected_output = abs(test_labels - test_logits.squeeze(-1)).sum() * 0.5
-    loss, _ = model.calculate_loss(
+    loss, _ = loss_module.calculate_loss(
         shifted_logits=test_logits,
         shifted_labels=test_labels,
         n_classes=1,
@@ -193,7 +215,7 @@ def test_numeric_loss_with_mask():
         [0, 0, 0, 0],
     ])
     expected_output = torch.tensor([0.0])
-    loss, _ = model.calculate_loss(
+    loss, _ = loss_module.calculate_loss(
         shifted_logits=test_logits,
         shifted_labels=test_labels,
         n_classes=1,
@@ -209,7 +231,7 @@ def test_catigorical_loss():
     ])
     shifted_labels = torch.tensor([[2, 0, -100, -100]])
 
-    loss, num_items = model.calculate_loss(
+    loss, num_items = loss_module.calculate_loss(
         shifted_logits=shifted_logits,
         shifted_labels=shifted_labels,
         n_classes=3,

@@ -2,9 +2,11 @@
 
 Здесь указано как правильно использовать MLP Benchmark
 
-Пример конфига с запуском находится в файле launch_with_MLPBencmark.yaml
+Пример конфига с запуском находится в файле `launch_with_mlp_bencmark.yaml`
 
-Пример конфига для запуска MLP находится в файле MLP.yaml
+Примеры конфигов для запуска MLP: `train_mlp.yaml` (только скрытые состояния) и
+`train_mlp_with_target_2_target_3.yaml` (с категориальными признаками,
+`cat_feature: True`)
 
 
 ### Описание
@@ -64,14 +66,11 @@ metrics:
 ### Пример конфига:
 ```
 PATH_TO_SAVE_PREDICT: /home/datalab/nfs/avatar_fm/experiments/moshcharov/data/debug_cat_feature_mlpbench_rest/debug_mlp_bench_cat_feat_rest_debug/cc_response/predict
-accelerator:
-  _target_: accelerate.Accelerator
-  _partial_: True
-  dataloader_config:
-    _target_: accelerate.utils.DataLoaderConfiguration
-    dispatch_batches: False
+distributed:
+  backend: null  # null -> nccl on GPU, gloo on CPU
+  gradient_accumulation_steps: 1
+amp: no  # no | fp16 | bf16
 
-  
 train_dataloader:
   _target_: torch.utils.data.DataLoader
   dataset:
@@ -167,7 +166,7 @@ train:
   max_saved_checkpoints: 15
   device_specific: False
   early_stopping:
-    _target_: avatar.train_utils.EarlyStopping
+    _target_: avatar.train.EarlyStopping
     main_metric: avg_calib_roc_auc_score
     patience: 15
     delta: 0.0001

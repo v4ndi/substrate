@@ -1,3 +1,5 @@
+"""Split a batch by column values and score each slice separately."""
+
 import copy
 
 import numpy as np
@@ -7,12 +9,33 @@ from avatar.metrics.base import BaseMetric
 
 
 class GroupDevidedMetricsWrapper(BaseMetric):
-    """GroupAverageMetricWrapper
-    Wrap metric, after usual compute, compute average for groups of metrics
+    """Compute one metric independently for every combination of column values.
 
-    metric (BaseMetric): any metric with methods update, compute, reset.
-    gropus: (dict[str, list[str]]): new_metric_name -> list of metric, provided by metric to average
-    avg_over_regulars: dict[str, str] - new_metric_name -> regular (regular means subset of metrics to average)
+    Each batch is masked into slices — one per observed combination — and each
+    slice is fed to its **own** metric instance. Instances are created lazily,
+    the first time a combination is seen, which is why ``metric_class`` must be
+    a factory rather than an object.
+
+    Args:
+        metric_class: Callable returning a fresh :class:`BaseMetric`. From
+            Hydra this means the metric block carries ``_partial_: true``;
+            without it every group would share one accumulator and the scores
+            would silently be wrong.
+        columns_to_devide: Columns of ``inputs`` whose values define the groups.
+        columns_desc: Human-readable names used when building metric names;
+            defaults to ``columns_to_devide``.
+
+    Returns from :meth:`compute`:
+        ``{desc}_{value}_..._{inner metric name}`` for every combination — so
+        ``columns_desc=["channel", "group"]`` wrapping ``RocAucScore`` gives
+        names like ``channel_0_group_1_roc_auc_score``. Those names are what
+        :class:`~avatar.metrics.utils.group_average_wrap.GroupAverageMetricWrapper`
+        then averages over.
+
+    Note:
+        Groups are discovered from the data, so a combination absent from
+        validation simply produces no metric — the name will be missing rather
+        than zero.
     """
 
     def __init__(

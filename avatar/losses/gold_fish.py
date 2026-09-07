@@ -1,11 +1,21 @@
+"""The GoldFish objective."""
+
 import torch
 import torch.nn as nn
 
 
 class GoldFishLoss(nn.Module):
+    """Drop every k-th token from the loss.
+
+    A memorisation counter-measure: the model never receives a training signal
+    for the masked positions, so verbatim sequences are harder to reproduce.
+    """
+
     def __init__(self, strategy: str, k: int, goldfish_start_position: int = 0):
-        """Class for creating a mask to a tensor to ignore every k-th token and calculation loss.
-        `targets` is NOT updated in-place so apply_goldfish can be indepdently called for analysis/debugging/logging.
+        """Mask every k-th token out of the loss.
+
+        ``targets`` is not updated in place, so ``apply_goldfish`` can be
+        called independently for analysis, debugging or logging.
 
         Args:
             strategy: The strategy to use for goldfish.

@@ -1,0 +1,17 @@
+# Next-K вместо next-token: предсказываем не одно следующее событие, а три.
+# Наследует ssl.yaml и переопределяет только то, что относится к горизонту.
+defaults:
+  - ssl
+  - _self_
+
+model:
+  horizon: 3                  # 1 в ssl.yaml — это и есть next-token
+  horizion_loss_weight: 1     # loss_k = loss_k / k ** weight; 0 — все горизонты равны
+  feature_loss_weights:       # необязательно: вес на признак, только при обучении
+    evt_attr_9: 1.0
+    evt_attr_15: 0.5
+  enable_event_id_prediction: False   # True — предсказывать ещё и тип события
+                                      # и подавать его обратно между горизонтами
+
+mlflow:
+  run_name: self_supervised_next_k

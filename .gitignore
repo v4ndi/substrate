@@ -56,6 +56,7 @@ _SUCCESS
 **/data/*.parquet
 **/data/*.csv
 examples/**/data/
+examples/**/run/
 experiments/**/data/
 tests/data/**/*.parquet
 

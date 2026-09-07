@@ -1,10 +1,11 @@
+"""The collate contract shared by every modality."""
+
 from abc import ABC, abstractmethod
 from typing import Any
 
 
 class BaseCollateFn(ABC):
-    """
-    Abstract base class for collate functions.
+    """Abstract base class for collate functions.
 
     A collate function is responsible for combining a list of samples into a batch.
     This class defines the interface that all collate functions must implement.
@@ -12,8 +13,7 @@ class BaseCollateFn(ABC):
 
     @abstractmethod
     def __call__(self, batch: list[dict[str, Any]]) -> dict[str, Any]:
-        """
-        Combines a list of samples into a batch.
+        """Combines a list of samples into a batch.
 
         Args:
             batch (List[Dict[str, Any]]): A list of samples, where each sample is a dictionary.

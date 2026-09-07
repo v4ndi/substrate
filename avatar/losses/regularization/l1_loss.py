@@ -1,8 +1,17 @@
+"""L1 penalty over selected parameters."""
+
 import torch
 import torch.nn as nn
 
 
 class L1RegularizationLoss:
+    """L1 penalty over parameters whose name contains a substring.
+
+    Args:
+        apply_substr: Only parameters whose qualified name contains this are
+            penalised; the default targets embedding tables.
+    """
+
     def __init__(self, apply_substr: str = ""):
         self.apply_substr = apply_substr
 

@@ -1,3 +1,12 @@
+"""Uplift metrics: qini, uplift@k, and beta calibration of the two heads.
+
+Uplift is scored on the *difference* between the treatment and control
+probabilities, so both heads' outputs are needed and neither is meaningful
+alone. Calibration is optional but usually wanted: uplift@k is sensitive to how
+well the two probabilities are scaled against each other, not just to their
+ranking.
+"""
+
 import numpy as np
 import pandas as pd
 import torch
@@ -30,6 +39,11 @@ def calculate_uplift_metrics(
 
 
 def fit_calibrator(scores, y_true):
+    """Fit a beta calibrator mapping raw scores to calibrated probabilities.
+
+    A single positive is injected when the slice has none, so calibration on a
+    degenerate validation slice does not raise.
+    """
     calibrator = BetaCalibration()
     if y_true.sum() == 0:
         y_true[0] += 1
@@ -40,6 +54,19 @@ def fit_calibrator(scores, y_true):
 def apply_calibration_calculate_metrics(
     y_true, t_probs, c_probs, treatment, t_calibrator, c_calibrator, is_calib
 ):
+    """Report uplift metrics both raw and calibrated, and the per-head ROC AUC.
+
+    Calibration is monotone, so it must not change the ranking: the per-head
+    ROC AUC is asserted to move by less than 0.01, and — when ``is_calib`` is
+    set — the calibrated mean probability is asserted to match the observed
+    conversion rate. A failure here means the calibrator is distorting scores.
+
+    Returns:
+        ``(metrics, calibrated_uplift)``.
+
+    Raises:
+        AssertionError: Calibration changed the ranking or failed to calibrate.
+    """
     no_calib_metrics = calculate_uplift_metrics(
         y_true=y_true, uplift=(t_probs - c_probs), treatment=treatment, calibrated=False
     )
@@ -75,22 +102,30 @@ def apply_calibration_calculate_metrics(
 
 
 class UpliftMetrics(BaseMetric):
-    """Class for computing campaign uplift metrics.
-    Args:
-        require_calibration: bool = False
-            Whether to apply BetaCalibration for uplift and classification metrics.
-        save_submit_path: str = None
-            Path to save predictions.
-        main_metric: str = "qini_auc_score"
-            Available metrics:
-                uplift_at_5
-                uplift_at_10
-                uplift_at_15
-                uplift_at_20
-                uplift_auc_score
-                qini_auc_score
-    }
+    """Campaign uplift metrics, optionally over beta-calibrated probabilities.
 
+    Consumes ``outputs.uplift`` (or ``treatment_probs - control_probs`` when
+    ``uplift`` is None), ``outputs.treatment``, ``outputs.conversion`` and
+    ``outputs.group``. When the batch carries a task or ``product`` column,
+    metrics are additionally reported per task.
+
+    Args:
+        require_calibration: Fit a :class:`~betacal.BetaCalibration` per head
+            and report calibrated metrics alongside the raw ones. Calibration
+            must not change the ranking, so the class asserts that per-head ROC
+            AUC moves by less than 0.01 — a failed assertion here means the
+            calibrator is distorting the scores, not that the metric is wrong.
+        save_submit_path: Directory to write per-record predictions into.
+            ``None`` (the default) writes nothing.
+        main_metric: Which metric counts as *the* number for this run. Must be
+            one of ``uplift_at_{5,10,15,20,50}``, ``uplift_auc_score`` or
+            ``qini_auc_score``.
+
+    Note:
+        A validation slice with no conversions at all would make the uplift
+        metrics undefined, so a single positive is injected rather than
+        raising. Metrics from such a slice are meaningless — check the data
+        before reading them.
     """
 
     def __init__(
@@ -106,6 +141,7 @@ class UpliftMetrics(BaseMetric):
 
     def update(self, inputs, outputs):
         """Stores model predictions for later computation.
+
         Args:
             inputs: Dict[str, any] - epk_id - optional field
             outputs: Dict[str, torch.Tensor] - uplift, treatment, conversion,

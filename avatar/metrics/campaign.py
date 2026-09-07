@@ -1,3 +1,20 @@
+"""Campaign-scale metrics: dump embeddings, then benchmark a head on them.
+
+Two different things share this module, and the difference matters when
+choosing one:
+
+* **Collectors** (``CollectEmbeddings``, the ``Inference*`` classes) produce a
+  *file*, not a number. They flush every ``save_steps`` batches, so a run over
+  tens of millions of records never holds the population in memory. Their
+  ``compute`` writes the tail and returns nothing worth logging.
+* **Benchmarks** (``CatboostCampaignBenchmark``, ``MLPCampaignBenchmark``)
+  extend a collector: after dumping embeddings they split the dump by
+  ``report_month``, train a downstream model per campaign contour and report
+  its quality. That makes them expensive — they run a whole training job
+  inside a metric — so they belong in ``test_metrics``, never in
+  ``valid_metrics``.
+"""
+
 import datetime
 import os
 import subprocess
@@ -20,8 +37,7 @@ except ImportError:
 def save_to_parquet(
     df: pd.DataFrame, path_to_save: str, prefix: str | None = None
 ) -> str:
-    """
-    Save a DataFrame as a parquet file in the specified directory.
+    """Save a DataFrame as a parquet file in the specified directory.
 
     Parameters
     ----------
@@ -32,7 +48,7 @@ def save_to_parquet(
     prefix : str, optional
         Optional prefix for the filename.
 
-    Returns
+    Returns:
     -------
     str
         The full path to the saved parquet file.
@@ -54,8 +70,7 @@ def save_to_parquet(
 
 
 class CollectEmbeddings(BaseMetric):
-    """
-    Metric class for collecting and saving sequence embeddings and optional columns.
+    """Metric class for collecting and saving sequence embeddings and optional columns.
 
     Parameters
     ----------
@@ -77,8 +92,7 @@ class CollectEmbeddings(BaseMetric):
         additional_columns: list[str] | None = None,
         month_part_value: str | None = None,
     ):
-        """
-        Initialize the CollectEmbeddings metric.
+        """Initialize the CollectEmbeddings metric.
 
         See class docstring for parameter descriptions.
         """
@@ -93,8 +107,7 @@ class CollectEmbeddings(BaseMetric):
             os.makedirs(self.path_to_save, exist_ok=True)
 
     def update(self, inputs, outputs):
-        """
-        Update the metric state with new batch data.
+        """Update the metric state with new batch data.
 
         Parameters
         ----------
@@ -123,10 +136,9 @@ class CollectEmbeddings(BaseMetric):
             self.compute()
 
     def compute(self):
-        """
-        Aggregate collected data and save to a parquet file.
+        """Aggregate collected data and save to a parquet file.
 
-        Returns
+        Returns:
         -------
         dict
             Empty dictionary (for compatibility with metric interface).
@@ -154,15 +166,23 @@ class CollectEmbeddings(BaseMetric):
         return {}
 
     def reset(self):
-        """
-        Reset the internal state of the metric.
-        """
+        """Reset the internal state of the metric."""
         self.preds = []
 
 
 class CatboostCampaignBenchmark(CollectEmbeddings):
-    """
-    A class for benchmarking foundation models on campaign data.
+    """Dump embeddings, then train a CatBoost classifier per campaign contour.
+
+    The standard way to ask "are these representations useful downstream"
+    without touching the model being trained: embeddings are collected exactly
+    as :class:`CollectEmbeddings` does, split by ``report_month`` according to
+    ``split``, and a gradient-boosting model is fit per contour on train and
+    scored on test.
+
+    Requires the ``catboost`` extra; the constructor raises if it is missing.
+
+    Raises:
+        ImportError: ``catboost`` is not installed.
     """
 
     def __init__(
@@ -178,8 +198,7 @@ class CatboostCampaignBenchmark(CollectEmbeddings):
         additional_columns: list[str] | None = None,
         prefix: str | None = None,
     ):
-        """
-        Initialize the CatboostCampaignBenchmark instance.
+        """Initialize the CatboostCampaignBenchmark instance.
 
         Args:
             path_to_save (str): Path where results will be saved.
@@ -187,6 +206,8 @@ class CatboostCampaignBenchmark(CollectEmbeddings):
             compute_contour (list[str]): List of contours (products) to process.
             catboost_params (dict[str, object]): Parameters for the CatBoost model.
             split (dict[str, str]): Dict with necessary keys: "train", "valid" and "test".
+            repartition_by_product (bool): Write one dump per product instead of
+                one shared dump. Defaults to False.
             channel_type (str, optional): Column name for channel type. Defaults to None.
             control_flag (str, optional): Column name for control flag. Defaults to None.
             additional_columns (list[str], optional) : List of additional input columns to collect and save if present.
@@ -375,6 +396,12 @@ class CatboostCampaignBenchmark(CollectEmbeddings):
 
 # DERPRECATED
 class InferenceMultiTaskCampaignMetrics(BaseMetric):
+    """Write per-record uplift predictions for a multi-task campaign model.
+
+    Collects ``epk_id``, the task name, the group and both head probabilities,
+    flushing to parquet every ``save_steps`` batches.
+    """
+
     def __init__(self, path_to_save, save_steps, prefix=None):
         self.preds = []
         self.path_to_save = path_to_save
@@ -416,7 +443,10 @@ class InferenceMultiTaskCampaignMetrics(BaseMetric):
             self.compute()
 
     def compute(self):
-        """return Dict(metric_name: value)"""
+        """Flush the collected predictions to parquet and reset.
+
+        Returns nothing to log: the product of this metric is the file.
+        """
         predict = {
             "epk_id": [],
             "target_attr_2": [],
@@ -461,6 +491,12 @@ class InferenceMultiTaskCampaignMetrics(BaseMetric):
 
 
 class InferenceMultiTaskResponseMetrics(BaseMetric):
+    """Write per-record response predictions for a multi-task model.
+
+    The response counterpart of :class:`InferenceMultiTaskCampaignMetrics`:
+    one probability per record instead of a treatment/control pair.
+    """
+
     def __init__(self, path_to_save, save_steps, prefix=None):
         self.preds = []
         self.path_to_save = path_to_save
@@ -514,7 +550,10 @@ class InferenceMultiTaskResponseMetrics(BaseMetric):
             self.compute()
 
     def compute(self):
-        """return Dict(metric_name: value)"""
+        """Flush the collected predictions to parquet and reset.
+
+        Returns nothing to log: the product of this metric is the file.
+        """
         predict = {
             "epk_id": [],
             "target_attr_2": [],
@@ -560,6 +599,13 @@ class InferenceMultiTaskResponseMetrics(BaseMetric):
 
 # DEPRECATED
 class InferenceCampaignMetrics(BaseMetric):
+    """Write per-record predictions for a single-task campaign model.
+
+    Carries the campaign attribute columns (``target_attr_2`` /
+    ``target_attr_3``) alongside the prediction so the dump can be sliced by
+    channel and group afterwards.
+    """
+
     def __init__(self, path_to_save, save_steps, prefix=None):
         self.preds = []
         self.path_to_save = path_to_save
@@ -597,7 +643,10 @@ class InferenceCampaignMetrics(BaseMetric):
             self.compute()
 
     def compute(self):
-        """return Dict(metric_name: value)"""
+        """Flush the collected predictions to parquet and reset.
+
+        Returns nothing to log: the product of this metric is the file.
+        """
         predict = {
             "epk_id": [],
             "target_attr_2": [],
@@ -634,6 +683,40 @@ class InferenceCampaignMetrics(BaseMetric):
 
 
 class MLPCampaignBenchmark(BaseMetric):
+    """Dump embeddings, then launch a full MLP training run per contour.
+
+    The neural counterpart of :class:`CatboostCampaignBenchmark`: instead of
+    fitting a boosting model in-process, it writes train/valid/test parquet per
+    contour and starts :mod:`avatar.train` as a subprocess against a config of
+    your choosing. That config is the second half of this metric — see
+    ``docs/mlp_benchmark/instruction.md``.
+
+    Args:
+        path_to_config_dir: Directory holding the MLP training config.
+        config_name: Config file name inside that directory.
+        mlflow_run_name: Run name for the MLP runs; also part of the dump path.
+        mlflow_exp_name: Experiment name for the MLP runs.
+        path_to_save: Root for the dumps; the run and experiment names are
+            appended to it.
+        save_steps: Flush the collected embeddings every this many batches.
+        compute_contour: Which contours (products) to benchmark.
+        split: ``{"train": date, "valid": date, "test": date}`` — the split is
+            by ``report_month``. ``train`` takes everything up to and including
+            its date; ``valid`` and ``test`` take exactly their month.
+        additional_columns: Extra input columns to carry into the dump.
+        contour_name_column: Column holding the contour name.
+        prefix: Optional suffix in dumped filenames.
+        cat_feature: Also carry ``target_attr_2`` / ``target_attr_3`` into the
+            dump so the MLP can use them. Requires both to be listed in
+            ``additional_columns``, and a training config whose
+            ``tabular_model`` consumes them — see
+            :class:`~avatar.nn.tabular.MLPEmbedding`.
+
+    Raises:
+        AssertionError: ``cat_feature`` is set but the two attribute columns
+            are not in ``additional_columns``.
+    """
+
     def __init__(
         self,
         path_to_config_dir: str,
@@ -751,8 +834,9 @@ class MLPCampaignBenchmark(BaseMetric):
     ):
         subprocess.run(
             [
-                "accelerate",
-                "launch",
+                "torchrun",
+                "--standalone",
+                "--nproc_per_node=1",
                 "-m",
                 "avatar.train",
                 "--config-dir",

@@ -1,4 +1,4 @@
-"""Embedding layers, split into three sub-packages:
+"""Embedding layers, split into three sub-packages.
 
 - ``avatar.nn.embedding.base`` -- primitives shared by both stacks
   (``BaseEmbedding``, ``LinearEmbeddings``, ``HashEmbedding``).

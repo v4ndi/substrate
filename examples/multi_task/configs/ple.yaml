@@ -1,0 +1,23 @@
+# PLE (CGC): пул экспертов разделён на общих и приватных под каждую задачу.
+# Отличается от mmoe.yaml только блоками model._target_ и tabular_encoder.
+defaults:
+  - mmoe
+  - _self_
+
+model:
+  _target_: avatar.pipeline.multi_task.PLE
+  tabular_encoder:
+    _target_: avatar.pipeline.multi_task.PLEBackbone
+    num_tasks: 3
+    num_shared_experts: 2
+    num_specific_experts: 1        # на задачу: всего 2 + 3*1 = 5 модулей
+    shared_expert_cls:
+      _target_: avatar.pipeline.multi_task.mmoe.MLPExpert
+      hidden_size: 32
+    aggregation_config:
+      name: linear
+      num_features: 25
+      emb_dim: 32
+
+mlflow:
+  run_name: debug_ple

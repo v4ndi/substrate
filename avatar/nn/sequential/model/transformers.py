@@ -1,3 +1,5 @@
+"""Adapter for HuggingFace ``transformers`` backbones."""
+
 import torch.nn.functional as F
 from transformers import PreTrainedModel
 
@@ -8,8 +10,7 @@ from avatar.outputs import BaseSequenceOutput
 
 
 class TransformersWrapper(BaseSequenceModel):
-    """
-    Wrapper for transformer backbones also compatibility with Huggingface's transformers.
+    """Wrapper for transformer backbones also compatibility with Huggingface's transformers.
 
     Args:
         event_encoder (avatar.nn.sequential.BaseEventEncoder): The event encoder.
@@ -27,11 +28,11 @@ class TransformersWrapper(BaseSequenceModel):
         self.output_hidden_states = output_hidden_states
 
     def forward(self, seq_features: EventSequenceBatch):
-        """
-        Forward pass of the transformers wrapper.
+        """Forward pass of the transformers wrapper.
 
         Args:
             seq_features: EventSequenceBatch. The sequence features.
+
         Returns:
             BaseSequenceOutput: The output of the sequence model.
         """

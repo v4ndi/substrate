@@ -1,3 +1,5 @@
+"""``TabularBatch``: categorical ids, numeric values, optional hidden states."""
+
 import torch
 
 from avatar.data.base.batch import move_to_device
@@ -52,49 +54,36 @@ class TabularBatch:
 
     @property
     def cat_features(self) -> torch.LongTensor:
-        """
-        torch.LongTensor: Batch of categorical features with
-        shape[batch_size, n_cat_features].
-        """
+        """Categorical feature ids, ``(batch_size, n_cat_features)``."""
         return self._cat_features
 
     @property
     def num_features(self) -> torch.FloatTensor:
-        """
-        torch.FloatTensor: Batch of numerical features with
-        shape [batch_size, n_num_features].
-        """
+        """Standardised numeric features, ``(batch_size, n_num_features)``."""
         return self._num_features
 
     @property
     def hidden_states(self) -> dict[str, torch.Tensor]:
-        """
-        torch.FloatTensor: Optional hidden state tensor with
-        shape [batch_size, hidden_dim].
-        """
+        """External embeddings by column name, each ``(batch_size, hidden_dim)``."""
         return self._hidden_states
 
     @property
     def n_features(self) -> int:
-        """
-        int: Total number of features
-        (sum of categorical and numerical features).
-        """
+        """int: Total number of features (sum of categorical and numerical features)."""
         return self._num_features.shape[1] + self._cat_features.shape[1]
 
     @property
     def payload(self) -> dict:
-        """
-        dict: Dictionary containing the batch's features and optional
-        hidden state.
-        """
+        """The batch's feature tensors, as a plain dict."""
         return {"cat_features": self.cat_features, "num_features": self.num_features}
 
     def __getitem__(self, mask: torch.Tensor) -> "TabularBatch":
         """Slice the batch using a boolean mask or index tensor.
+
         Args:
             mask (torch.Tensor): Boolean mask or index tensor for slicing.
                 Should be compatible with the batch size dimension.
+
         Returns:
             TabularBatch: A new TabularBatch instance containing only the
                 selected elements.
@@ -163,18 +152,12 @@ class UpliftTabularBatch(TabularBatch):
 
     @property
     def is_treatment(self) -> torch.LongTensor:
-        """
-        torch.LongTensor: Binary treatment indicators
-        (1 = treatment, 0 = control).
-        """
+        """Binary treatment indicator: 1 is treated, 0 is control."""
         return self._is_treatment
 
     @property
     def channel_type(self) -> torch.LongTensor:
-        """
-        torch.LongTensor: Optional channel type indicators for
-        multi-campaign scenarios.
-        """
+        """Optional channel id, for multi-campaign runs."""
         return self._channel_type
 
     def to(self, device: torch.device) -> None:
