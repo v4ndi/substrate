@@ -1,0 +1,9 @@
+{
+  "tag": "hillstrom_fix_swa_seed42",
+  "revision_dir": "/home/jovyan/rusakov/repos/avatar_fm/.claude/worktrees/compare-training",
+  "avatar": "/home/jovyan/rusakov/repos/avatar_fm/.claude/worktrees/compare-training/avatar/__init__.py",
+  "overrides": [],
+  "exit_code": 0,
+  "seconds": 32.2,
+  "log": "/home/jovyan/rusakov/runs/compare_training/logs/hillstrom_fix_swa_seed42.log"
+}
