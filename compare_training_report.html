@@ -451,7 +451,7 @@ but got index is on cuda:0, different from other tensors on cpu</code></pre>
   <span class="label perf">производительность</span>
   <h3>Новая ревизия быстрее</h3>
   <p>Hillstrom, 8 эпох: <strong>93–118 с</strong> против <strong>35 с</strong>. Lenta, 12 эпох: <strong>1305–1347 с</strong> против <strong>1205–1212 с</strong>. На маленькой модели разрыв трёхкратный, на большой — около 10%.</p>
-  <p>Часть разницы объясняется тем, что старый <code>avatar/train.py</code> безусловно выставлял <code>CUDA_LAUNCH_BLOCKING=1</code> (а также <code>NCCL_DEBUG=INFO</code> и жёсткий путь кэша <code>TORCHINDUCTOR_CACHE_DIR=/home/datalab/...</code>, из-за которого на этой машине он вообще не запускался). Новая ревизия глобальных переменных окружения не трогает.</p>
+  <p>Часть разницы объясняется тем, что модуль <code>avatar.train</code> базовой ревизии безусловно выставлял <code>CUDA_LAUNCH_BLOCKING=1</code> (а также <code>NCCL_DEBUG=INFO</code> и жёсткий путь кэша <code>TORCHINDUCTOR_CACHE_DIR=/home/datalab/...</code>, из-за которого на этой машине он вообще не запускался). Новая ревизия глобальных переменных окружения не трогает.</p>
 </div>
 
 <div class="col">

@@ -2,6 +2,8 @@
 
 Status: **accepted** (2026-08-29). Follows the `avatar/nn/embedding` split
 precedent (commit `719fe71`).
+Deprecation shims `avatar.nn.sequence` and `avatar.nn.feature_encoder` were
+removed on 2026-09-10, the follow-up this document plans below.
 
 Decisions locked in this revision:
 

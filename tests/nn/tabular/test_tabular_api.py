@@ -1,4 +1,4 @@
-"""Public API surface of avatar.nn.tabular + the deprecation shim."""
+"""Public API surface of avatar.nn.tabular."""
 
 import importlib
 import warnings
@@ -47,17 +47,13 @@ def test_removed_symbols_are_gone():
         assert not hasattr(tab, name), name
 
 
-def test_ste_shim_warns_and_resolves():
-    with pytest.warns(DeprecationWarning, match="avatar.nn.tabular.ste"):
-        mod = importlib.reload(importlib.import_module("avatar.nn.tabular.ste"))
-
-    from avatar.nn.tabular import TabularTransformer
-
-    assert mod.STEv2Block is TabularTransformer
-    assert mod.STEv2 is TabularTransformer
-
-
 def test_no_deprecation_warning_from_top_level_import():
     with warnings.catch_warnings():
         warnings.simplefilter("error", DeprecationWarning)
         importlib.reload(importlib.import_module("avatar.nn.tabular"))
+
+
+def test_deprecation_shim_is_gone():
+    """avatar.nn.tabular.ste was dropped after configs moved to TabularTransformer."""
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module("avatar.nn.tabular.ste")

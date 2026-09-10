@@ -2,6 +2,7 @@
 
 Status: **accepted** (2026-08-29). Follows the `avatar/nn/embedding` (`719fe71`)
 and `avatar/nn/sequential` (`3759c1a..734f2aa`) precedents.
+The `avatar.nn.tabular.ste` deprecation shim was removed on 2026-09-10.
 
 Goal: `avatar/nn/tabular` holds **reusable tabular neural nets**;
 `avatar/pipeline/*` wraps them into task settings (classification, regression,
