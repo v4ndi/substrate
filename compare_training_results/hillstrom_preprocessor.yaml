@@ -1,0 +1,78 @@
+_backend: local
+batch_rows: 250000
+cat_cols:
+- history_segment
+- zip_code
+- channel
+- mens
+- womens
+- newbie
+label_encoder:
+  columns:
+  - history_segment
+  - zip_code
+  - channel
+  - mens
+  - womens
+  - newbie
+  frequency_encoder: false
+  spec_tokens:
+    unk: 0
+  values_to_id:
+    channel:
+      Multichannel: 1
+      Phone: 2
+      Web: 3
+      unk: 0
+    history_segment:
+      1) $0 - $100: 1
+      2) $100 - $200: 2
+      3) $200 - $350: 3
+      4) $350 - $500: 4
+      5) $500 - $750: 5
+      6) $750 - $1,000: 6
+      7) $1,000 +: 7
+      unk: 0
+    mens:
+      unk: 0
+      0: 1
+      1: 2
+    newbie:
+      unk: 0
+      0: 1
+      1: 2
+    womens:
+      unk: 0
+      0: 1
+      1: 2
+    zip_code:
+      Rural: 1
+      Surburban: 2
+      Urban: 3
+      unk: 0
+num_cols:
+- recency
+- history
+offset_map:
+  channel: 13
+  history_segment: 1
+  mens: 17
+  newbie: 23
+  womens: 20
+  zip_code: 9
+spec_tokens:
+  pad: 0
+standard_scaler:
+  columns:
+  - recency
+  - history
+  fillna: true
+  mean_std:
+    history:
+      mean: 242.69932791296208
+      std: 256.51848369755777
+    recency:
+      mean: 5.760645765091249
+      std: 3.5064060586712307
+  to_log_columns: []
+vocab_size: 26
