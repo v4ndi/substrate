@@ -1,13 +1,12 @@
-"""Response and regression metrics, plus their multi-task variants.
+"""Response and regression metrics, plus the inference-time collector.
 
 "Response" here means the ordinary supervised setting — one probability per
 record, scored with ROC AUC and precision/recall at the top k percent, which is
-how campaign quality is judged. The MMoE and PLE subclasses report the same
-numbers per task and add gate diagnostics.
+how campaign quality is judged.
 """
 
+import logging
 import os
-from datetime import datetime
 from typing import Literal
 
 import numpy as np
@@ -20,7 +19,9 @@ from sklearn.metrics import (
     roc_auc_score,
 )
 
-from avatar.metrics.base import BaseMetric
+from avatar.metrics.base import ArtifactMetric, ScalarMetric
+
+logger = logging.getLogger(__name__)
 
 
 def precision_at_k(y_true, y_pred, k_pnt):
@@ -82,42 +83,7 @@ def apply_calculate_metrics(
     return metrics
 
 
-def save_to_parquet(
-    df: pd.DataFrame, path_to_save: str, prefix: str | None = None
-) -> str:
-    """Save a DataFrame as a parquet file in the specified directory.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        The DataFrame to save.
-    path_to_save : str
-        Directory where the parquet file will be saved.
-    prefix : str, optional
-        Optional prefix for the filename.
-
-    Returns:
-    -------
-    str
-        The full path to the saved parquet file.
-    """
-    if not os.path.exists(path_to_save):
-        os.makedirs(path_to_save, exist_ok=True)
-    time_now = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
-    if prefix is not None:
-        filename = f"{time_now}_{prefix}.parquet"
-    else:
-        filename = f"{time_now}.parquet"
-    full_path = os.path.join(path_to_save, filename)
-    # for campatibility with spark cast datetime64[ns] to datetime64[us]
-    for col in df.select_dtypes(include=["datetime64[ns]"]).columns:
-        df[col] = df[col].astype(str)
-    df.to_parquet(full_path, index=False)
-    print(f"predict_saved: {full_path}")
-    return full_path
-
-
-class ResponseMetrics(BaseMetric):
+class ResponseMetrics(ScalarMetric):
     """Ranking quality of a single-head response model.
 
     Args:
@@ -131,6 +97,16 @@ class ResponseMetrics(BaseMetric):
         population, not a record count, so ``precision_at_5`` is precision in
         the top 5% by score.
     """
+
+    required_inputs = (
+        "epk_id",
+        "group",
+        "is_treat",
+        "targets",
+        "product",
+        "split_type",
+    )
+    required_outputs = ("logits", "task_name")
 
     def __init__(
         self,
@@ -159,7 +135,8 @@ class ResponseMetrics(BaseMetric):
             "y_true": inputs["targets"].detach().contiguous().cpu().numpy()
             if "targets" in inputs
             else None,
-            "y_pred": torch.nn.functional.sigmoid(outputs.logits)
+            "y_pred": torch.nn.functional
+            .sigmoid(outputs.logits)
             .squeeze(1)
             .detach()
             .contiguous()
@@ -281,17 +258,10 @@ class ResponseMetrics(BaseMetric):
             result[f"mean_{self.main_metric}"] = np.mean(mean_main_metric)
 
         if self.save_submit is not None:
-            import os
-
-            df = pd.DataFrame(merged_preds)
-            if not os.path.exists(self.save_submit):
-                os.makedirs(self.save_submit, exist_ok=True)
-            df.to_parquet(
-                os.path.join(self.save_submit, "predict.parquet"), index=False
-            )
-            print(
-                f"Predict was saved: {os.path.join(self.save_submit, 'predict.parquet')}"
-            )
+            os.makedirs(self.save_submit, exist_ok=True)
+            submit_path = os.path.join(self.save_submit, "predict.parquet")
+            pd.DataFrame(merged_preds).to_parquet(submit_path, index=False)
+            logger.info("submit written to %s", submit_path)
         return result
 
     def reset(self) -> None:
@@ -299,7 +269,7 @@ class ResponseMetrics(BaseMetric):
         self.preds = []
 
 
-class RegressionMetrics(BaseMetric):
+class RegressionMetrics(ScalarMetric):
     """Error metrics for a regression head.
 
     Args:
@@ -310,6 +280,16 @@ class RegressionMetrics(BaseMetric):
         mae
         mape
     """
+
+    required_inputs = (
+        "epk_id",
+        "group",
+        "is_treat",
+        "targets",
+        "product",
+        "split_type",
+    )
+    required_outputs = ("logits", "task_name")
 
     def __init__(
         self,
@@ -445,17 +425,10 @@ class RegressionMetrics(BaseMetric):
         result[f"mean_{self.main_metric}"] = np.mean(mean_main_metric)
 
         if self.save_submit is not None:
-            import os
-
-            df = pd.DataFrame(merged_preds)
-            if not os.path.exists(self.save_submit):
-                os.makedirs(self.save_submit, exist_ok=True)
-            df.to_parquet(
-                os.path.join(self.save_submit, "predict.parquet"), index=False
-            )
-            print(
-                f"Predict was saved: {os.path.join(self.save_submit, 'predict.parquet')}"
-            )
+            os.makedirs(self.save_submit, exist_ok=True)
+            submit_path = os.path.join(self.save_submit, "predict.parquet")
+            pd.DataFrame(merged_preds).to_parquet(submit_path, index=False)
+            logger.info("submit written to %s", submit_path)
 
         return result
 
@@ -464,390 +437,93 @@ class RegressionMetrics(BaseMetric):
         self.preds = []
 
 
-class InferenceSupervisedMetrics(BaseMetric):
+class InferenceSupervisedMetrics(ArtifactMetric):
     """Write per-record predictions to parquet during inference.
 
-    Unlike the scoring metrics in this module, the product here is a file, not
-    a number: :meth:`compute` returns nothing useful and the predictions are
-    flushed every ``save_steps`` batches so a long inference run does not hold
-    the whole population in memory.
+    The product here is a file, not a number: predictions are flushed every
+    ``save_steps`` batches so a long inference run does not hold the whole
+    population in memory, and :meth:`compute` writes the tail and returns an
+    empty dict.
 
     Args:
         path_to_save: Directory for the parquet parts; created if missing.
         save_steps: Flush every this many batches.
         task_type: ``binary_clf`` or ``reg`` — selects how logits become the
             saved prediction.
-        prefix: Optional suffix in the filename, to tell runs apart.
+        prefix: Optional tag in the filename, to tell runs apart.
+
+    Raises:
+        ValueError: ``task_type`` is neither ``binary_clf`` nor ``reg``.
     """
+
+    required_inputs = ("epk_id", "task_type", "target_attr_2", "report_month")
+    required_outputs = ("logits",)
 
     def __init__(
         self,
-        path_to_save,
-        save_steps,
+        path_to_save: str,
+        save_steps: int,
         task_type: Literal["binary_clf", "reg"],
-        prefix=None,
+        prefix: str | None = None,
     ):
-        self.preds = []
-        self.path_to_save = path_to_save
+        super().__init__(path_to_save=path_to_save, prefix=prefix)
+        self.preds: list[dict] = []
         self.save_steps = save_steps
-        self.prefix = prefix
+        if task_type not in ("binary_clf", "reg"):
+            raise ValueError(f"Unknown task_type: {task_type}")
         self.task_type = task_type
 
-        if not os.path.exists(self.path_to_save):
-            os.makedirs(self.path_to_save, exist_ok=False)
-
     def update(self, inputs, outputs):
+        """Accumulate one batch of predictions, flushing when the buffer is full."""
         epk_id = inputs["epk_id"]
-        if "task_type" in inputs:
-            task_name = inputs["task_type"]
-        else:
-            task_name = len(inputs["epk_id"]) * ["unk"]
+        task_name = inputs.get("task_type", len(epk_id) * ["unk"])
+        target_attr_2 = inputs.get("target_attr_2", len(epk_id) * [-1])
 
-        if "target_attr_2" in inputs:
-            target_attr_2 = inputs["target_attr_2"]
-        else:
-            target_attr_2 = len(inputs["epk_id"]) * [-1]
-
+        logits = outputs.logits.squeeze(1)
         if self.task_type == "binary_clf":
-            prediction = (
-                torch.nn.functional.sigmoid(outputs.logits)
-                .squeeze(1)
-                .detach()
-                .contiguous()
-                .cpu()
-                .numpy()
-            )
-        elif self.task_type == "reg":
-            prediction = outputs.logits.squeeze(1).detach().contiguous().cpu().numpy()
-        else:
-            raise ValueError(f"Unknown task_type: {self.task_type}")
-        # Create the prediction dictionary
+            logits = torch.nn.functional.sigmoid(logits)
+        prediction = logits.detach().contiguous().cpu().numpy()
+
         pred_dict = {
             "epk_id": epk_id,
             "target_attr_2": target_attr_2,
             "prediction": prediction,
             "task_name": task_name,
         }
-
-        # Add report_month if it exists in inputs
         if "report_month" in inputs:
             pred_dict["report_month"] = inputs["report_month"]
 
         self.preds.append(pred_dict)
 
         if len(self.preds) >= self.save_steps:
-            self.compute()
+            self.flush()
 
-    def compute(self):
-        """Flush the collected predictions to parquet and reset.
+    def flush(self) -> None:
+        """Write the buffered predictions to a parquet part and forget them."""
+        if not self.preds:
+            return
 
-        Returns nothing to log: the product of this metric is the file.
-        """
-        predict = {
-            "epk_id": [],
-            "target_attr_2": [],
-            "prediction": [],
-            "task_name": [],
-        }
+        columns = ["epk_id", "target_attr_2", "prediction", "task_name"]
+        predict: dict[str, list] = {column: [] for column in columns}
 
         has_report_month = any("report_month" in item for item in self.preds)
         if has_report_month:
             predict["report_month"] = []
 
         for item in self.preds:
-            predict["epk_id"].extend(item["epk_id"])
-            predict["target_attr_2"].extend(item["target_attr_2"])
-            predict["prediction"].extend(item["prediction"])
-            predict["task_name"].extend(item["task_name"])
+            for column in columns:
+                predict[column].extend(item[column])
             if has_report_month:
                 predict["report_month"].extend(
                     item.get("report_month", [None] * len(item["epk_id"]))
                 )
 
-        predict_df = pd.DataFrame().from_dict(predict)
+        frame = pd.DataFrame.from_dict(predict)
         if has_report_month:
-            predict_df["report_month"] = predict_df["report_month"].apply(
-                lambda x: str(x.date())
-            )
-        time_now = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
-        if self.prefix is not None:
-            cur_path = (
-                os.path.join(self.path_to_save, time_now) + f"_{self.prefix}.parquet"
-            )
-        else:
-            cur_path = os.path.join(self.path_to_save, time_now) + ".parquet"
-        predict_df.to_parquet(cur_path, index=False)
+            frame["report_month"] = frame["report_month"].apply(lambda x: str(x.date()))
+        self.save_dataframe(frame)
         self.reset()
-        print(f"predict_saved: {cur_path}")
-
-    def reset(self):
-        self.preds = []
-
-
-class MMoEResponseMetrics(ResponseMetrics):
-    """Response metrics + MMoE gate utilization metrics.
-
-    Adds metrics like:
-    gate_product_{product}_expert_{i}_mean
-    gate_product_{product}_entropy_mean
-    gate_product_{product}_max_mean
-    gate_product_{product}_top1_expert_{i}_rate
-    """
-
-    def __init__(
-        self,
-        save_submit_path: str | None = None,
-        main_metric: str | None = "roc_auc_score",
-        num_experts: int | None = None,
-    ):
-        super().__init__(
-            save_submit_path=save_submit_path,
-            main_metric=main_metric,
-        )
-        self.num_experts = num_experts
-        self.gate_preds = []
-
-    def update(self, inputs, outputs):
-        super().update(inputs, outputs)
-
-        if not hasattr(outputs, "aux") or outputs.aux is None:
-            return
-
-        if "gate" not in outputs.aux:
-            return
-
-        if "product" in inputs:
-            product = inputs["product"]
-            if torch.is_tensor(product):
-                product = product.detach().contiguous().cpu().numpy()
-        elif hasattr(outputs, "task_name") and outputs.task_name is not None:
-            product = outputs.task_name
-            if torch.is_tensor(product):
-                product = product.detach().contiguous().cpu().numpy()
-        else:
-            product = None
-
-        gate = outputs.aux["gate"].detach().contiguous().cpu().numpy()
-        gate_entropy = outputs.aux["gate_entropy"].detach().contiguous().cpu().numpy()
-        gate_max = outputs.aux["gate_max"].detach().contiguous().cpu().numpy()
-        gate_top1 = outputs.aux["gate_top1"].detach().contiguous().cpu().numpy()
-
-        task_name = outputs.task_name
-        if torch.is_tensor(task_name):
-            task_name = task_name.detach().contiguous().cpu().numpy()
-
-        group = outputs.group
-        if torch.is_tensor(group):
-            group = group.detach().contiguous().cpu().numpy()
-
-        split_type = inputs["split_type"] if "split_type" in inputs else None
-
-        self.gate_preds.append({
-            "product": product,
-            "task_name": task_name,
-            "group": group,
-            "split_type": split_type,
-            "gate": gate,
-            "gate_entropy": gate_entropy,
-            "gate_max": gate_max,
-            "gate_top1": gate_top1,
-        })
-
-    def _compute_gate_metrics(self) -> dict[str, float]:
-        if len(self.gate_preds) == 0:
-            return {}
-
-        gate = np.concatenate([p["gate"] for p in self.gate_preds], axis=0)
-        gate_entropy = np.concatenate(
-            [p["gate_entropy"] for p in self.gate_preds],
-            axis=0,
-        )
-        gate_max = np.concatenate([p["gate_max"] for p in self.gate_preds], axis=0)
-        gate_top1 = np.concatenate([p["gate_top1"] for p in self.gate_preds], axis=0)
-
-        product_values = [
-            p["product"] for p in self.gate_preds if p["product"] is not None
-        ]
-
-        if len(product_values) > 0:
-            product = np.concatenate(product_values, axis=0)
-        else:
-            product = np.array(["all"] * gate.shape[0])
-
-        split_values = [
-            p["split_type"] for p in self.gate_preds if p["split_type"] is not None
-        ]
-
-        if len(split_values) > 0:
-            split_type = np.concatenate(split_values, axis=0)
-        else:
-            split_type = np.array(["calib"] * gate.shape[0])
-
-        num_experts = self.num_experts or gate.shape[1]
-        result = {}
-
-        def add_gate_states(prefix: str, mask: np.ndarray):
-            if mask.sum() == 0:
-                return
-
-            for expert_idx in range(num_experts):
-                result[f"{prefix}_expert_{expert_idx}_mean"] = float(
-                    gate[mask, expert_idx].mean()
-                )
-
-            result[f"{prefix}_entropy_mean"] = np.nan_to_num(
-                float(gate_entropy[mask].mean()),
-                nan=0.0,
-            )
-            result[f"{prefix}_max_mean"] = float(gate_max[mask].mean())
-
-            for expert_idx in range(num_experts):
-                result[f"{prefix}_top1_expert_{expert_idx}_rate"] = float(
-                    (gate_top1[mask] == expert_idx).mean()
-                )
-
-        # Global gate stats
-        add_gate_states("gate_global", np.ones(gate.shape[0], dtype=bool))
-
-        # Product-level gate stats
-        for split in np.unique(split_type):
-            split_mask = split_type == split
-            add_gate_states(f"{split}_gate_global", split_mask)
-            for product_name in np.unique(product):
-                mask = split_mask & (product == product_name)
-                add_gate_states(f"{split}_gate_task_{product_name}", mask)
-        return result
-
-    def compute(self) -> dict[str, float]:
-        result = super().compute()
-        result.update(self._compute_gate_metrics())
-        return result
 
     def reset(self) -> None:
-        super().reset()
-        self.gate_preds = []
-
-
-class PLEResponseMetrics(MMoEResponseMetrics):
-    """Response metrics + PLE (CGC) gate utilization metrics.
-
-    In PLE, a task's gate evaluates [Shared Experts] + [Task-Specific Experts].
-    This class correctly maps gate indices to global/shared vs specific metrics
-    so that aggregating across tasks produces mathematically valid statistics.
-
-    Adds metrics like:
-    gate_{task/global}_{shared/specific}_expert_{i}_mean
-    gate_{task/global}_{product}_entropy_mean
-    gate_{task/global}_{product}_max_mean
-    gate_{task/global}_{product}_top1_{shared/specific}_expert_{i}_rate
-    """
-
-    def __init__(
-        self,
-        num_shared_experts: int,
-        num_specific_experts: int,
-        save_submit_path: str | None = None,
-        main_metric: str | None = "roc_auc_score",
-    ):
-        # The gate for each task will output (num_shared + num_specific) values
-        num_experts_per_task = num_shared_experts + num_specific_experts
-        super().__init__(
-            save_submit_path=save_submit_path,
-            main_metric=main_metric,
-            num_experts=num_experts_per_task,
-        )
-        self.num_shared_experts = num_shared_experts
-        self.num_specific_experts = num_specific_experts
-
-    def _compute_gate_metrics(self) -> dict[str, float]:
-        if len(self.gate_preds) == 0:
-            return {}
-
-        gate = np.concatenate([p["gate"] for p in self.gate_preds], axis=0)
-        gate_entropy = np.concatenate(
-            [p["gate_entropy"] for p in self.gate_preds], axis=0
-        )
-        gate_max = np.concatenate([p["gate_max"] for p in self.gate_preds], axis=0)
-        gate_top1 = np.concatenate([p["gate_top1"] for p in self.gate_preds], axis=0)
-
-        product_values = [
-            p["product"] for p in self.gate_preds if p["product"] is not None
-        ]
-        product = (
-            np.concatenate(product_values, axis=0)
-            if len(product_values) > 0
-            else np.array(["all"] * gate.shape[0])
-        )
-
-        split_values = [
-            p["split_type"] for p in self.gate_preds if p["split_type"] is not None
-        ]
-        split_type = (
-            np.concatenate(split_values, axis=0)
-            if len(split_values) > 0
-            else np.array(["calib"] * gate.shape[0])
-        )
-
-        result = {}
-
-        def add_ple_gate_states(prefix: str, mask: np.ndarray, is_global: bool = False):
-            if mask.sum() == 0:
-                return
-
-            # 1. Entropy & Max stats (always valid)
-            result[f"{prefix}_entropy_mean"] = np.nan_to_num(
-                float(gate_entropy[mask].mean()),
-                nan=0.0,
-            )
-            result[f"{prefix}_max_mean"] = float(gate_max[mask].mean())
-
-            # 2. Shared Experts (Indices 0 to num_shared_experts - 1)
-
-            if self.num_shared_experts > 0:
-                for idx in range(self.num_shared_experts):
-                    result[f"{prefix}_shared_expert_{idx}_mean"] = float(
-                        gate[mask, idx].mean()
-                    )
-                    result[f"{prefix}_top1_shared_expert_{idx}_rate"] = float(
-                        (gate_top1[mask] == idx).mean()
-                    )
-
-            # 3. Task-Specific Experts (Indices num_shared_experts to end)
-            for specific_idx in range(self.num_specific_experts):
-                actual_idx = self.num_shared_experts + specific_idx
-
-                # If we are looking at a specific task, we label it as specific_expert_{i}
-                if not is_global:
-                    result[f"{prefix}_specific_expert_{specific_idx}_mean"] = float(
-                        gate[mask, actual_idx].mean()
-                    )
-                    result[f"{prefix}_top1_specific_expert_{specific_idx}_rate"] = (
-                        float((gate_top1[mask] == actual_idx).mean())
-                    )
-                else:
-                    # If global, "actual_idx" points to completely different experts for different tasks.
-                    # We aggregate it as a general "utilization of task-specific experts" metric.
-                    result[f"{prefix}_any_specific_expert_mean"] = float(
-                        gate[mask, actual_idx:].sum(axis=1).mean()
-                    )
-                    result[f"{prefix}_top1_any_specific_expert_rate"] = float(
-                        (gate_top1[mask] >= self.num_shared_experts).mean()
-                    )
-
-        # Global gate stats
-        add_ple_gate_states(
-            "gate_global", np.ones(gate.shape[0], dtype=bool), is_global=True
-        )
-
-        # Split & Product level gate stats
-        for split in np.unique(split_type):
-            split_mask = split_type == split
-            add_ple_gate_states(f"{split}_gate_global", split_mask, is_global=True)
-
-            for product_name in np.unique(product):
-                mask = split_mask & (product == product_name)
-                add_ple_gate_states(
-                    f"{split}_gate_task_{product_name}", mask, is_global=False
-                )
-
-        return result
+        """Drop the buffered batches."""
+        self.preds = []

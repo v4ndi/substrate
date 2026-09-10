@@ -220,7 +220,8 @@ def build_event_attention_mask(
         [attention_mask.unsqueeze(-1), attention_mask.unsqueeze(-2)],
     )
     diag_matrix = (
-        torch.eye(n_features, dtype=torch.long)
+        torch
+        .eye(n_features, dtype=torch.long)
         .unsqueeze(0)
         .unsqueeze(1)
         .to(seq_features.device)

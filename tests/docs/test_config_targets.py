@@ -1,9 +1,10 @@
 """Every ``_target_`` in every shipped YAML config must still be instantiable.
 
-Configs are the real public API — 500-odd ``_target_`` uses against a few dozen
-classes — and they are not exercised by any other test: a config only fails when
-someone launches a run with it, which can be weeks after the rename that broke
-it. Resolving the target is cheap and catches exactly that class of break.
+Configs are the real public API — every ``_target_`` in ``examples/`` and
+``docs/`` against a few dozen classes — and they are not exercised by any other
+test: a config only fails when someone launches a run with it, which can be
+weeks after the rename that broke it. Resolving the target is cheap and catches
+exactly that class of break.
 
 Only the name is resolved, not instantiated: constructing a pipeline needs data
 and a GPU, and a missing class is the failure worth catching here.
@@ -63,4 +64,4 @@ def test_the_scan_actually_finds_targets():
         except yaml.YAMLError:
             continue
         total += sum(1 for t in iter_targets(document) if t.startswith("avatar."))
-    assert total > 100, f"only {total} avatar targets found — is the walk broken?"
+    assert total > 20, f"only {total} avatar targets found — is the walk broken?"

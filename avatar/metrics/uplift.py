@@ -7,6 +7,9 @@ well the two probabilities are scaled against each other, not just to their
 ranking.
 """
 
+import logging
+import os
+
 import numpy as np
 import pandas as pd
 import torch
@@ -14,7 +17,9 @@ from betacal import BetaCalibration
 from sklearn.metrics import roc_auc_score
 from sklift.metrics import qini_auc_score, uplift_at_k, uplift_auc_score
 
-from avatar.metrics.base import BaseMetric
+from avatar.metrics.base import ScalarMetric
+
+logger = logging.getLogger(__name__)
 
 
 def calculate_uplift_metrics(
@@ -51,21 +56,34 @@ def fit_calibrator(scores, y_true):
     return calibrator
 
 
+#: A monotone calibrator must not reorder records, so per-head ROC AUC should
+#: barely move. Above this the calibrator is distorting the scores.
+RANK_SHIFT_TOLERANCE = 0.01
+
+#: On the slice the calibrator was fitted on, the mean calibrated probability
+#: should reproduce the observed conversion rate.
+CALIBRATION_GAP_TOLERANCE = 1e-3
+
+
 def apply_calibration_calculate_metrics(
     y_true, t_probs, c_probs, treatment, t_calibrator, c_calibrator, is_calib
 ):
     """Report uplift metrics both raw and calibrated, and the per-head ROC AUC.
 
-    Calibration is monotone, so it must not change the ranking: the per-head
-    ROC AUC is asserted to move by less than 0.01, and — when ``is_calib`` is
-    set — the calibrated mean probability is asserted to match the observed
-    conversion rate. A failure here means the calibrator is distorting scores.
+    Calibration is monotone, so it must not change the ranking, and on the slice
+    it was fitted on the calibrated mean probability should reproduce the
+    observed conversion rate. Both are **reported as metrics**, not asserted:
+    ``calibration_rank_shift_*`` and ``calibration_gap_*`` come back in the
+    result and a warning is logged when either exceeds its tolerance.
+
+    They used to be assertions, and an under-trained model — whose near-constant
+    scores make ROC AUC noisy — killed the whole training run from inside
+    validation. A metric has no business stopping training: its job is to report
+    a number, and a number that says "the calibrator is off" is more useful in
+    MLflow than a traceback.
 
     Returns:
         ``(metrics, calibrated_uplift)``.
-
-    Raises:
-        AssertionError: Calibration changed the ranking or failed to calibrate.
     """
     no_calib_metrics = calculate_uplift_metrics(
         y_true=y_true, uplift=(t_probs - c_probs), treatment=treatment, calibrated=False
@@ -80,28 +98,45 @@ def apply_calibration_calculate_metrics(
     calib_c_roc_auc = roc_auc_score(y_true[treatment == 0], c_probs_[treatment == 0])
     calib_t_roc_auc = roc_auc_score(y_true[treatment == 1], t_probs_[treatment == 1])
 
-    assert abs(calib_c_roc_auc - c_roc_auc) < 0.01
-    assert abs(calib_t_roc_auc - t_roc_auc) < 0.01
+    diagnostics = {
+        "calibration_rank_shift_control": float(abs(calib_c_roc_auc - c_roc_auc)),
+        "calibration_rank_shift_treatment": float(abs(calib_t_roc_auc - t_roc_auc)),
+    }
     if is_calib:
-        assert (
-            abs(c_probs_[treatment == 0].mean() - y_true[treatment == 0].mean()) < 1e-03
+        diagnostics["calibration_gap_control"] = float(
+            abs(c_probs_[treatment == 0].mean() - y_true[treatment == 0].mean())
         )
-        assert (
-            abs(t_probs_[treatment == 1].mean() - y_true[treatment == 1].mean()) < 1e-03
+        diagnostics["calibration_gap_treatment"] = float(
+            abs(t_probs_[treatment == 1].mean() - y_true[treatment == 1].mean())
         )
+
+    for name, value in diagnostics.items():
+        tolerance = (
+            RANK_SHIFT_TOLERANCE
+            if name.startswith("calibration_rank_shift")
+            else CALIBRATION_GAP_TOLERANCE
+        )
+        if value >= tolerance:
+            logger.warning(
+                "%s is %.4g, above the tolerance of %.4g — the calibrated uplift "
+                "metrics from this slice are not trustworthy",
+                name,
+                value,
+                tolerance,
+            )
 
     calibrated_uplift = t_probs_ - c_probs_
 
     calib_metrics = calculate_uplift_metrics(
         y_true=y_true, uplift=calibrated_uplift, treatment=treatment, calibrated=True
     )
-    metrics = {**no_calib_metrics, **calib_metrics}
+    metrics = {**no_calib_metrics, **calib_metrics, **diagnostics}
     metrics["treatment_roc_auc_score"] = calib_t_roc_auc
     metrics["control_roc_auc_score"] = calib_c_roc_auc
     return metrics, calibrated_uplift
 
 
-class UpliftMetrics(BaseMetric):
+class UpliftMetrics(ScalarMetric):
     """Campaign uplift metrics, optionally over beta-calibrated probabilities.
 
     Consumes ``outputs.uplift`` (or ``treatment_probs - control_probs`` when
@@ -110,16 +145,21 @@ class UpliftMetrics(BaseMetric):
     metrics are additionally reported per task.
 
     Args:
-        require_calibration: Fit a :class:`~betacal.BetaCalibration` per head
-            and report calibrated metrics alongside the raw ones. Calibration
-            must not change the ranking, so the class asserts that per-head ROC
-            AUC moves by less than 0.01 — a failed assertion here means the
-            calibrator is distorting the scores, not that the metric is wrong.
+        require_calibration: Which of the two metric families feeds
+            ``mean_{main_metric}`` — the calibrated one or the raw one.
+            Calibrators are fitted either way.
         save_submit_path: Directory to write per-record predictions into.
             ``None`` (the default) writes nothing.
         main_metric: Which metric counts as *the* number for this run. Must be
             one of ``uplift_at_{5,10,15,20,50}``, ``uplift_auc_score`` or
             ``qini_auc_score``.
+
+    Returns from :meth:`compute`:
+        Per task and group, the raw and calibrated uplift metrics, the per-head
+        ROC AUC, and the calibration diagnostics
+        ``calibration_rank_shift_{control,treatment}`` and
+        ``calibration_gap_{control,treatment}``. A rank shift far from zero
+        means the calibrated numbers should not be read.
 
     Note:
         A validation slice with no conversions at all would make the uplift
@@ -127,6 +167,17 @@ class UpliftMetrics(BaseMetric):
         raising. Metrics from such a slice are meaningless — check the data
         before reading them.
     """
+
+    required_inputs = ("epk_id", "split_type", "product")
+    required_outputs = (
+        "uplift",
+        "treatment",
+        "conversion",
+        "control_probs",
+        "treatment_probs",
+        "group",
+        "task_name",
+    )
 
     def __init__(
         self,
@@ -350,17 +401,10 @@ class UpliftMetrics(BaseMetric):
             result[f"mean_{self.main_metric}"] = np.mean(mean_main_metric)
 
         if self.save_submit is not None:
-            import os
-
-            df = pd.DataFrame(merged_preds)
-            if not os.path.exists(self.save_submit):
-                os.makedirs(self.save_submit, exist_ok=True)
-            df.to_parquet(
-                os.path.join(self.save_submit, "predict.parquet"), index=False
-            )
-            print(
-                f"Predict was saved: {os.path.join(self.save_submit, 'predict.parquet')}"
-            )
+            os.makedirs(self.save_submit, exist_ok=True)
+            submit_path = os.path.join(self.save_submit, "predict.parquet")
+            pd.DataFrame(merged_preds).to_parquet(submit_path, index=False)
+            logger.info("submit written to %s", submit_path)
         return result
 
     def reset(self):

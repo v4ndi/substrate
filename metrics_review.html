@@ -21,6 +21,8 @@
     --sev-cost-bg: #e2eef3;
     --sev-dead: #5b6472;
     --sev-dead-bg: #e8ebef;
+    --sev-done: #1f6b4a;
+    --sev-done-bg: #e0efe7;
     --shadow: 0 1px 2px rgba(20, 22, 26, .05), 0 8px 24px -18px rgba(20, 22, 26, .35);
   }
 
@@ -43,6 +45,8 @@
       --sev-cost-bg: #16262d;
       --sev-dead: #99a3b1;
       --sev-dead-bg: #1e222a;
+      --sev-done: #74c69d;
+      --sev-done-bg: #15251d;
       --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -18px rgba(0, 0, 0, .8);
     }
   }
@@ -65,6 +69,8 @@
     --sev-cost-bg: #16262d;
     --sev-dead: #99a3b1;
     --sev-dead-bg: #1e222a;
+    --sev-done: #74c69d;
+    --sev-done-bg: #15251d;
     --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -18px rgba(0, 0, 0, .8);
   }
 
@@ -93,8 +99,6 @@
     .shell { grid-template-columns: minmax(0, 1fr); gap: 0; }
     nav.toc { display: none; }
   }
-
-  /* ---------- masthead ---------- */
 
   header.masthead {
     grid-column: 1 / -1;
@@ -160,14 +164,11 @@
     margin: 32px 0 8px;
   }
 
-  .score {
-    background: var(--card);
-    padding: 16px 18px 18px;
-  }
+  .score { background: var(--card); padding: 16px 18px 18px; }
 
   .score .n {
     font-family: "IBM Plex Sans", system-ui, sans-serif;
-    font-size: 34px;
+    font-size: 30px;
     font-weight: 600;
     line-height: 1;
     letter-spacing: -.02em;
@@ -176,9 +177,16 @@
     margin-bottom: 8px;
   }
 
-  .score.block .n { color: var(--sev-block); }
-  .score.silent .n { color: var(--sev-silent); }
-  .score.cost .n { color: var(--sev-cost); }
+  .score .n .was {
+    font-size: 17px;
+    font-weight: 400;
+    color: var(--muted);
+    text-decoration: line-through;
+    margin-right: 7px;
+  }
+
+  .score.done .n { color: var(--sev-done); }
+  .score.open .n { color: var(--sev-silent); }
   .score.dead .n { color: var(--sev-dead); }
 
   .score .lbl {
@@ -196,8 +204,6 @@
     display: block;
     margin-top: 5px;
   }
-
-  /* ---------- toc ---------- */
 
   nav.toc {
     position: sticky;
@@ -223,13 +229,10 @@
     color: var(--ink-soft);
     text-decoration: none;
     padding: 4px 0;
-    border-bottom: 1px solid transparent;
   }
 
   nav.toc a:hover { color: var(--signal); }
   nav.toc a:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
-
-  /* ---------- prose ---------- */
 
   main { min-width: 0; }
 
@@ -257,11 +260,8 @@
   }
 
   p { margin: 0 0 15px; max-width: 68ch; }
-  main > p, section > p { max-width: 68ch; }
-
   ul, ol { max-width: 68ch; padding-left: 22px; margin: 0 0 16px; }
   li { margin-bottom: 8px; }
-
   a { color: var(--signal); }
 
   code {
@@ -283,7 +283,6 @@
   }
 
   pre code { background: none; padding: 0; font-size: 13px; }
-
   strong { font-weight: 600; }
 
   /* ---------- findings ---------- */
@@ -291,16 +290,14 @@
   .finding {
     background: var(--card);
     border: 1px solid var(--rule);
-    border-left: 3px solid var(--sev-dead);
+    border-left: 3px solid var(--sev-silent);
     box-shadow: var(--shadow);
     padding: 20px 22px 6px;
     margin: 0 0 18px;
   }
 
   .finding.block { border-left-color: var(--sev-block); }
-  .finding.silent { border-left-color: var(--sev-silent); }
   .finding.cost { border-left-color: var(--sev-cost); }
-
   .finding > h3 { margin-top: 0; }
 
   .fhead {
@@ -317,12 +314,11 @@
     font-weight: 500;
     padding: 2px 7px;
     border-radius: 2px;
-    background: var(--sev-dead-bg);
-    color: var(--sev-dead);
+    background: var(--sev-silent-bg);
+    color: var(--sev-silent);
   }
 
   .finding.block .fid { background: var(--sev-block-bg); color: var(--sev-block); }
-  .finding.silent .fid { background: var(--sev-silent-bg); color: var(--sev-silent); }
   .finding.cost .fid { background: var(--sev-cost-bg); color: var(--sev-cost); }
 
   .ftitle {
@@ -340,14 +336,12 @@
     font-size: 10.5px;
     letter-spacing: .08em;
     text-transform: uppercase;
-    color: var(--muted);
-    border: 1px solid var(--rule);
+    color: var(--sev-cost);
+    border: 1px solid var(--sev-cost);
     padding: 2px 6px;
     border-radius: 2px;
     white-space: nowrap;
   }
-
-  .proof.run { color: var(--sev-cost); border-color: var(--sev-cost); }
 
   .fix {
     border-top: 1px solid var(--rule-soft);
@@ -365,6 +359,41 @@
     color: var(--muted);
     margin-right: 8px;
   }
+
+  /* ---------- done items ---------- */
+
+  .done-list { display: grid; gap: 16px; margin: 0 0 22px; max-width: 72ch; }
+
+  .done-item {
+    border-left: 2px solid var(--sev-done);
+    padding-left: 15px;
+  }
+
+  .done-item h4 {
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-size: 15.5px;
+    font-weight: 600;
+    margin: 0 0 5px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 9px;
+  }
+
+  .tick {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 10.5px;
+    font-weight: 500;
+    letter-spacing: .06em;
+    padding: 2px 6px;
+    border-radius: 2px;
+    background: var(--sev-done-bg);
+    color: var(--sev-done);
+    white-space: nowrap;
+  }
+
+  .done-item p { margin: 0 0 9px; font-size: 15.5px; color: var(--ink-soft); }
+  .done-item pre { margin-top: 10px; }
 
   /* ---------- tables ---------- */
 
@@ -396,7 +425,12 @@
   }
 
   td code { font-size: 12.5px; }
-  td.num { text-align: right; font-variant-numeric: tabular-nums; font-family: "IBM Plex Mono", ui-monospace, monospace; }
+  td.num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+  }
+  td.was { color: var(--muted); }
   tr:last-child td { border-bottom: none; }
 
   .tag {
@@ -405,13 +439,11 @@
     letter-spacing: .06em;
     padding: 1px 6px;
     border-radius: 2px;
+    background: var(--sev-cost-bg);
+    color: var(--sev-cost);
   }
 
-  .tag.live { background: var(--sev-cost-bg); color: var(--sev-cost); }
-  .tag.gone { background: var(--sev-dead-bg); color: var(--sev-dead); }
-  .tag.none { background: var(--sev-block-bg); color: var(--sev-block); }
-
-  /* ---------- callout ---------- */
+  .tag.file { background: var(--sev-dead-bg); color: var(--sev-dead); }
 
   .callout {
     border: 1px solid var(--rule);
@@ -424,28 +456,7 @@
 
   .callout p:last-child { margin-bottom: 12px; }
 
-  .good {
-    display: grid;
-    gap: 14px;
-    margin: 0 0 20px;
-    max-width: 72ch;
-  }
-
-  .good > div {
-    border-left: 2px solid var(--sev-cost);
-    padding-left: 14px;
-  }
-
-  .good h4 {
-    font-family: "IBM Plex Sans", system-ui, sans-serif;
-    font-size: 14.5px;
-    font-weight: 600;
-    margin: 0 0 4px;
-  }
-
-  .good p { margin: 0; font-size: 15px; color: var(--ink-soft); }
-
-  /* ---------- plan ---------- */
+  .callout.warn { border-top-color: var(--sev-block); }
 
   ol.plan { list-style: none; padding: 0; counter-reset: step; max-width: 72ch; }
 
@@ -467,17 +478,6 @@
     padding-top: 3px;
   }
 
-  .stage {
-    font-family: "IBM Plex Mono", ui-monospace, monospace;
-    font-size: 11px;
-    letter-spacing: .11em;
-    text-transform: uppercase;
-    color: var(--muted);
-    margin: 26px 0 4px;
-    padding-top: 14px;
-    border-top: 1px solid var(--rule);
-  }
-
   footer {
     grid-column: 1 / -1;
     margin-top: 56px;
@@ -496,777 +496,472 @@
 <div class="shell">
 
   <header class="masthead">
-    <p class="eyebrow">Код-ревью · avatar_fm</p>
+    <p class="eyebrow">Код-ревью · avatar_fm · после чистки</p>
     <h1>Ревью модуля <code>avatar.metrics</code></h1>
     <p class="standfirst">
-      Схема сведения метрик по рангам в новом трейне выбрана правильно. Но между
-      контрактом, докстрингами и кодом накопился разрыв, который некому было
-      поймать: на 3024 строки модуля приходится один тестовый файл.
+      Половина модуля не использовалась — её больше нет. Контракт разделён на
+      «числа» и «файлы», накопители потерь считают то, что обещают, а метрика
+      больше не имеет права остановить обучение. Пять находок осталось открытыми.
     </p>
     <div class="meta">
-      <span><b>Ревизия</b> 598799e · refactor/data-sharding-hdfs</span>
-      <span><b>Объём</b> 3024 строки · 25 классов · 13 файлов</span>
-      <span><b>Дата</b> 10.09.2026</span>
+      <span><b>Ветка</b> refactor/data-sharding-hdfs</span>
+      <span><b>Диффа</b> +1221 / −6762 в 69 файлах</span>
+      <span><b>Тесты</b> 405 passed, 2 skipped</span>
     </div>
 
     <div class="scoreboard">
-      <div class="score block">
-        <span class="n">3</span>
-        <span class="lbl">дефекта роняют прогон</span>
-        <span class="sub">B1 – B3</span>
+      <div class="score dead">
+        <span class="n"><span class="was">3024</span>1712</span>
+        <span class="lbl">строк в модуле</span>
+        <span class="sub">25 → 11 классов</span>
       </div>
-      <div class="score silent">
-        <span class="n">12</span>
-        <span class="lbl">тихо портят числа</span>
-        <span class="sub">S1 – S12</span>
+      <div class="score done">
+        <span class="n">9</span>
+        <span class="lbl">пунктов плана выполнено</span>
+        <span class="sub">из 9 запрошенных</span>
       </div>
-      <div class="score cost">
-        <span class="n">6</span>
-        <span class="lbl">устойчивость и стоимость</span>
-        <span class="sub">P1 – P6</span>
+      <div class="score open">
+        <span class="n"><span class="was">15</span>5</span>
+        <span class="lbl">находок осталось открытыми</span>
+        <span class="sub">B3, S4, S5, S6–S9, S12/P5</span>
       </div>
       <div class="score dead">
-        <span class="n">50%</span>
-        <span class="lbl">модуля не используется</span>
-        <span class="sub">12 из 25 классов</span>
+        <span class="n"><span class="was">1</span>3</span>
+        <span class="lbl">тестовых файла модуля</span>
+        <span class="sub">+ контрактные тесты</span>
       </div>
     </div>
   </header>
 
   <nav class="toc">
     <p>Разделы</p>
-    <a href="#verdict">Резюме</a>
-    <a href="#good">Что сделано хорошо</a>
-    <a href="#blocking">Ломают прогон</a>
-    <a href="#silent">Портят числа</a>
-    <a href="#cost">Устойчивость</a>
-    <a href="#proposals">Предложения</a>
+    <a href="#state">Состояние</a>
+    <a href="#done">Что исправлено</a>
+    <a href="#open">Что открыто</a>
     <a href="#dead">Мёртвый код</a>
-    <a href="#plan">Порядок работ</a>
+    <a href="#plan">Дальше</a>
   </nav>
 
   <main>
 
-    <section id="verdict">
-      <h2>1. Резюме</h2>
+    <section id="state">
+      <h2>1. Что стало с модулем</h2>
 
       <p>
-        Модуль устроен правильно по крупному счёту: контракт <code>update</code> /
-        <code>compute</code> / <code>reset</code> описан в документации, отделены
-        считающие числа метрики от сборщиков файлов и от бенчмарков, композиция через
-        обёртки работает. Новый цикл <code>avatar/train/evaluate.py</code> решил самую
-        тяжёлую задачу верно: неаддитивные метрики (ROC AUC, qini) считаются по всей
-        популяции на ранге 0, а не по шардам с усреднением.
+        Отчёт описывает <strong>текущее</strong> состояние. Всё, что исправлено или
+        удалено, из списка находок убрано — осталось только то, что открыто
+        сегодня. Историю изменений держит git, дублировать её здесь незачем.
       </p>
-
-      <p>
-        Проблема в другом. Ниже 3 дефекта, ломающих прогон, и 12, тихо портящих числа.
-        Половина воспроизводится в три строки — и это, собственно, диагноз: без тестов
-        расхождения между тем, что написано в докстринге, и тем, что считает код,
-        копились молча.
-      </p>
-
-      <div class="callout">
-        <p>
-          Всё, помеченное <span class="proof run">запущено</span>, воспроизведено на
-          этой ревизии скриптом <code>metrics_review_repro.py</code>, а не выведено
-          чтением. Помеченное <span class="proof">по коду</span> — вывод из чтения.
-        </p>
-      </div>
 
       <div class="tablewrap">
         <table>
-          <thead>
-            <tr><th>Часть модуля</th><th>Состояние</th></tr>
-          </thead>
+          <thead><tr><th></th><th>было</th><th>стало</th></tr></thead>
           <tbody>
-            <tr><td>Контракт <code>BaseMetric</code> и его место в трейне</td><td>хорошо, но не типизирован по видам метрик</td></tr>
-            <tr><td><code>avatar/train/evaluate.py</code> — сведение по рангам</td><td>правильная схема, дорогая реализация</td></tr>
-            <tr><td><code>RocAucScore</code>, обёртки групп</td><td>рабочие, есть краевые дефекты</td></tr>
-            <tr><td><code>UpliftMetrics</code></td><td>методологически некорректная калибровка + <code>assert</code> в проде</td></tr>
-            <tr><td><code>supervised.py</code></td><td>слабее всего: 2 из 5 классов мертвы, в живых — схлопывание ключей</td></tr>
-            <tr><td><code>campaign.py</code></td><td>сборщики рабочие, 3 из 6 классов мертвы</td></tr>
-            <tr><td><code>moe_reg</code>, <code>loss_logging</code>, <code>multi_loss</code></td><td>маленькие, и все три считают не то, что написано</td></tr>
-            <tr><td>Тесты</td><td>практически отсутствуют</td></tr>
+            <tr><td>строк в модуле</td><td class="num was">3024</td><td class="num">1712</td></tr>
+            <tr><td>публичных классов</td><td class="num was">25</td><td class="num">11 + 3 базовых</td></tr>
+            <tr><td>недостижимых классов</td><td class="num was">12 (50% строк)</td><td class="num">0</td></tr>
+            <tr><td>тестовых файлов модуля</td><td class="num was">1</td><td class="num">3</td></tr>
+            <tr><td>дефектов, роняющих прогон</td><td class="num was">3</td><td class="num">1</td></tr>
           </tbody>
         </table>
       </div>
+
+      <h3>Что удалено</h3>
+
+      <p>
+        Из модуля целиком ушли три файла: с <code>RocAucScore</code>, с
+        MoE-диагностикой (<code>Entropy</code>, <code>Importance</code>) и со
+        статистиками последовательностей (<code>SequenceStats</code>,
+        <code>ExpertsWorkload</code>, <code>HiddensNorm</code>). Внутри оставшихся
+        удалены <code>ClassificationInferenceMetrics</code>,
+        <code>MMoEResponseMetrics</code>, <code>PLEResponseMetrics</code>,
+        <code>CatboostCampaignBenchmark</code>, <code>MLPCampaignBenchmark</code>,
+        <code>InferenceCampaignMetrics</code>,
+        <code>InferenceMultiTaskResponseMetrics</code> и мёртвый хелпер
+        <code>save_to_parquet</code>.
+      </p>
+
+      <p>
+        Вместе с ними ушёл модуль-шим обратной совместимости для опечатки в имени
+        <code>training_arguments</code> — из той же семьи, что три пакета
+        <code>avatar.nn</code>, удалённые в PR&nbsp;#6 — и три примера,
+        построенных на удалённых метриках: tabular_hidden_states,
+        distributed_training и multi_task, плюс рецепт MLP-бенчмарка в
+        документации.
+      </p>
+
+      <h3>Что осталось</h3>
+
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>класс</th><th>база</th><th>роль</th></tr></thead>
+          <tbody>
+            <tr><td><code>UpliftMetrics</code></td><td><span class="tag">Scalar</span></td><td>uplift@k, qini, калибровка и её диагностика</td></tr>
+            <tr><td><code>ResponseMetrics</code></td><td><span class="tag">Scalar</span></td><td>ROC AUC, precision@k, recall@k</td></tr>
+            <tr><td><code>RegressionMetrics</code></td><td><span class="tag">Scalar</span></td><td>MSE, MAE, MAPE</td></tr>
+            <tr><td><code>MultiLossMetric</code></td><td><span class="tag">Scalar</span></td><td>компоненты составной функции потерь</td></tr>
+            <tr><td><code>UniversalLossesMetric</code></td><td><span class="tag">Scalar</span></td><td>все поля <code>*loss</code> выхода</td></tr>
+            <tr><td><code>GroupAverageMetricWrapper</code></td><td><span class="tag">Scalar</span></td><td>средние по посчитанным метрикам</td></tr>
+            <tr><td><code>GroupDevidedMetricsWrapper</code></td><td><span class="tag">Scalar</span></td><td>метрика отдельно по каждой группе</td></tr>
+            <tr><td><code>CollectEmbeddings</code></td><td><span class="tag file">Artifact</span></td><td>выгрузка эмбеддингов</td></tr>
+            <tr><td><code>InferenceMultiTaskCampaignMetrics</code></td><td><span class="tag file">Artifact</span></td><td>выгрузка вероятностей обеих голов</td></tr>
+            <tr><td><code>InferenceSupervisedMetrics</code></td><td><span class="tag file">Artifact</span></td><td>выгрузка предсказаний</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        Все 25 рабочих конфигов, ссылавшихся на
+        <code>InferenceMultiTaskCampaignMetrics</code> и
+        <code>CollectEmbeddings</code>, продолжают резолвиться — это проверяет
+        тест на таргеты конфигов.
+      </p>
     </section>
 
-    <section id="good">
-      <h2>2. Что сделано хорошо</h2>
-      <p>Отмечаю, чтобы при правках это не потерялось.</p>
+    <section id="done">
+      <h2>2. Что исправлено</h2>
 
-      <div class="good">
-        <div>
-          <h4>Режим сведения выбирается по признаку шардирования датасета</h4>
+      <div class="done-list">
+
+        <div class="done-item">
+          <h4>Контракт разделён на <code>ScalarMetric</code> и <code>ArtifactMetric</code> <span class="tick">закрывает B1</span></h4>
           <p>
-            Реплицированный датасет не собирается — иначе каждая запись попала бы в
-            метрику <code>world_size</code> раз. Форвард при этом выполняют все ранги,
-            чтобы никто не завис на коллективе. Тонкое место, сделано верно.
+            <code>ScalarMetric.compute</code> возвращает числа.
+            <code>ArtifactMetric</code> требует от наследника <code>flush</code> —
+            накопить, записать, забыть, — а <code>compute</code> реализован один
+            раз в базовом классе: вызывает <code>flush</code> и возвращает пустой
+            словарь.
+          </p>
+          <p>
+            Это структурно закрывает дефект, из-за которого четыре сборщика
+            возвращали из <code>compute</code> <code>None</code>, а цикл делает
+            <code>scores.update(metric.compute())</code>. Теперь
+            <code>None</code> вернуть неоткуда, и это проверяется тестом, который
+            запрещает наследнику <code>ArtifactMetric</code> переопределять
+            <code>compute</code>.
           </p>
         </div>
-        <div>
-          <h4><code>compute</code> только на ранге 0, и решения рассылаются оттуда же</h4>
+
+        <div class="done-item">
+          <h4>Калибровка больше не роняет обучение <span class="tick">B2</span></h4>
           <p>
-            Альтернатива — сводить «хотя бы один ранг сказал стоп» — привела бы к
-            рассинхрону чекпоинтов между рангами.
+            Два <code>assert</code>, убивавшие прогон при недообученной модели,
+            стали метриками:
+            <code>calibration_rank_shift_{control,treatment}</code> и
+            <code>calibration_gap_{control,treatment}</code> возвращаются в
+            результате, а при превышении порога пишется предупреждение. Проблема
+            видна в MLflow, обучение живёт.
+          </p>
+          <p>
+            Заодно честно описан <code>require_calibration</code>: он выбирает,
+            какое семейство метрик попадёт в <code>mean_{main_metric}</code>, а не
+            включает калибровку — калибраторы подгоняются всегда.
           </p>
         </div>
-        <div>
-          <h4>Обёртка групп требует <code>_partial_: true</code>, и это объяснено</h4>
+
+        <div class="done-item">
+          <h4>Накопители потерь считают то, что обещают <span class="tick">S2 · S3</span></h4>
           <p>
-            Без фабрики все группы делили бы один накопитель. Ровно та ошибка, которую
-            легко сделать и невозможно заметить по логам.
+            <code>MultiLossMetric</code> считает сумму потерь на сумму элементов, а
+            не среднее поштучных отношений: на батчах <code>(2, 4)</code> и
+            <code>(4, 2)</code> было 1.25, стало 1.0. И <code>compute</code> больше
+            не съедает собственный накопитель — два вызова подряд дают один ответ.
+          </p>
+          <p>
+            <code>UniversalLossesMetric</code> держит счётчик по каждому полю
+            отдельно: потеря, приходящая в одном батче из четырёх, больше не
+            делится на четыре.
           </p>
         </div>
-        <div>
-          <h4><code>UniversalLossesMetric</code> находит поля рефлексией</h4>
+
+        <div class="done-item">
+          <h4>Сбор на ранг 0 вместо раздачи всем <span class="tick">P1</span></h4>
           <p>
-            Новая вспомогательная функция потерь начинает логироваться без правки
-            конфига.
+            <code>all_gather_object</code> заменён на
+            <code>gather_object(dst=0)</code>. Полезная нагрузка нужна одному
+            рангу, а раздавалась всем — это <code>world_size</code>-кратный трафик
+            и пиковая память, которые остальные ранги тут же выбрасывали.
+          </p>
+          <p>
+            Тонкость, которой не было в исходном предложении:
+            <strong><code>gather_object</code> не поддерживается бэкендом
+            NCCL</strong> — он сводится к <code>gather</code>, а NCCL реализует
+            только <code>all_gather</code>. Поэтому под пиклённые объекты заводится
+            отдельная gloo-группа, одна на прогон, создаваемая при инициализации
+            (<code>new_group</code> — коллективная операция, её нельзя создавать
+            лениво в разных точках у разных рангов). Когда группа по умолчанию и
+            так gloo, дополнительная не создаётся.
           </p>
         </div>
-        <div>
-          <h4>Документация модуля выше среднего по репозиторию</h4>
+
+        <div class="done-item">
+          <h4>Метрика объявляет, что читает <span class="tick">P2</span></h4>
           <p>
-            Описан и контракт, и оба режима сведения, и композиция обёрток. Именно
-            поэтому расхождения кода с ней так хорошо видны.
+            <code>required_inputs</code> / <code>required_outputs</code> на
+            метрике, union по списку метрик, и цикл отправляет на ранг 0 только эти
+            поля вместо всего батча и всего выхода модели.
+          </p>
+          <pre><code>class MeanConfidence(ScalarMetric):
+    required_inputs = ()
+    required_outputs = ("logits",)</code></pre>
+          <p>
+            Стороны независимы: <code>UniversalLossesMetric</code>, которому нужны
+            все поля выхода, но ни одного ключа входа, всё равно позволяет
+            выбросить входные тензоры — обычно самые тяжёлые. <code>None</code>
+            означает «всё с этой стороны».
+          </p>
+          <p>
+            Сужение сохраняет класс выхода и все его поля, обнуляя незапрошенные, —
+            иначе сломались бы проверки через <code>hasattr</code>. Отсюда правило:
+            проверять поле по значению, а не по наличию атрибута.
           </p>
         </div>
+
+        <div class="done-item">
+          <h4>Файлы и каталоги <span class="tick">P3 · P4 · P6</span></h4>
+          <p>
+            <code>os.makedirs(..., exist_ok=False)</code> заменён на
+            <code>exist_ok=True</code>: каталог от предыдущего прогона ронял задачу
+            при <em>создании</em> метрики, то есть до начала обучения.
+          </p>
+          <p>
+            Имена частей стали
+            <code>&lt;время старта&gt;_part-00000[_префикс].parquet</code>. Раньше
+            имя строилось из <code>datetime.now()</code> с точностью до секунды, а
+            сборщики сбрасывают буфер каждые <code>save_steps</code> батчей — два
+            сброса в одну секунду молча затирали друг друга.
+          </p>
+          <p><code>print</code> в модуле не осталось: всё через <code>logging</code>.</p>
+        </div>
+
+        <div class="done-item">
+          <h4>Тесты <span class="tick">3 файла вместо 1</span></h4>
+          <p>
+            Появились контрактные тесты, параметризованные по всем классам модуля,
+            золотые значения для обоих накопителей потерь и тесты сужения полезной
+            нагрузки. Параметризация намеренная: дефекты, ради которых они
+            написаны, присутствовали сразу в нескольких классах, и тест на один
+            класс написали бы для того, который и так был исправен.
+          </p>
+        </div>
+
+      </div>
+
+      <div class="callout">
+        <p>
+          <strong>От чего отказались.</strong> Переход на контракт
+          <code>torchmetrics</code> снят по решению владельца модуля. Аргументы за
+          него никуда не делись — декларативные накопители с
+          <code>dist_reduce_fx</code> сняли бы часть дефектов по построению, — но
+          цена миграции сочтена неоправданной. Вместо этого сужение полезной
+          нагрузки даёт основную часть выигрыша по трафику без смены фреймворка.
+        </p>
       </div>
     </section>
 
-    <section id="blocking">
-      <h2>3. Дефекты, ломающие прогон</h2>
+    <section id="open">
+      <h2>3. Что осталось открытым</h2>
 
-      <article class="finding block">
-        <div class="fhead">
-          <span class="fid">B1</span>
-          <h3 class="ftitle">Четыре сборщика возвращают <code>None</code> из <code>compute()</code> — новый трейн падает на этом</h3>
-          <span class="proof run">запущено</span>
-        </div>
-        <p>
-          Цикл делает <code>scores.update(metric.compute())</code> в трёх местах:
-          валидация, инференс и train-метрики. А <code>compute()</code> не возвращает
-          ничего у четырёх классов:
-        </p>
-        <div class="tablewrap">
-          <table>
-            <thead><tr><th>Класс</th><th>Где</th><th>Ссылок в конфигах</th></tr></thead>
-            <tbody>
-              <tr><td><code>InferenceMultiTaskCampaignMetrics</code></td><td><code>campaign.py:445</code></td><td class="num">23</td></tr>
-              <tr><td><code>ClassificationInferenceMetrics</code></td><td><code>base.py:187</code></td><td class="num">4</td></tr>
-              <tr><td><code>InferenceMultiTaskResponseMetrics</code></td><td><code>campaign.py:552</code></td><td class="num">0</td></tr>
-              <tr><td><code>InferenceSupervisedMetrics</code></td><td><code>supervised.py:541</code></td><td class="num">0</td></tr>
-            </tbody>
-          </table>
-        </div>
-        <pre><code>{}.update(None)  ->  TypeError: 'NoneType' object is not iterable</code></pre>
-        <p>
-          Это <strong>регрессия рефакторинга</strong>: в базовой ревизии
-          <code>7c96504</code> инференс делал <code>scores = metrics.compute()</code> и
-          спокойно жил с <code>None</code>. Новый <code>predict()</code> превратил это в
-          падение — в самом конце прогона, уже после того, как parquet записан. Данные
-          не теряются, но задача завершается с ненулевым кодом.
-        </p>
-        <p>
-          Соседний <code>CollectEmbeddings.compute</code> возвращает <code>{}</code> и
-          работает: правильный ответ в модуле уже есть, просто не везде.
-        </p>
-        <div class="fix"><b>Фикс</b><code>return {}</code> в четырёх местах — минута работы. Но настоящая причина в контракте, см. предложение 1.</div>
-      </article>
-
-      <article class="finding block">
-        <div class="fhead">
-          <span class="fid">B2</span>
-          <h3 class="ftitle"><code>assert</code> внутри метрики убивает обучение</h3>
-          <span class="proof run">на практике</span>
-        </div>
-        <p>Это ровно то, обо что споткнулась кампания сравнения обучений в прошлой задаче.</p>
-        <pre><code>assert abs(calib_c_roc_auc - c_roc_auc) &lt; 0.01
-assert abs(calib_t_roc_auc - t_roc_auc) &lt; 0.01</code></pre>
-        <p>
-          Проверка сама по себе разумная: бета-калибровка монотонна и не должна менять
-          ранжирование. Но недообученная модель выдаёт почти константные скоры, ROC AUC
-          на них шумит сильнее 0.01 — и <strong>валидация роняет весь прогон
-          обучения</strong>. Метрика не должна иметь права остановить обучение: её
-          задача — сообщить число.
-        </p>
-        <div class="fix"><b>Фикс</b>Превратить проверку в метрику: писать <code>calibration_rank_shift</code> в результат и предупреждать при превышении порога. Проблема видна в MLflow, прогон живёт.</div>
-      </article>
+      <p>
+        Пять находок, не входивших в объём этой чистки. Все воспроизводятся одной
+        командой — <code>python metrics_review_repro.py</code>.
+      </p>
 
       <article class="finding block">
         <div class="fhead">
           <span class="fid">B3</span>
           <h3 class="ftitle"><code>RegressionMetrics</code> схлопывает все метрики в один ключ</h3>
-          <span class="proof run">запущено</span>
+          <span class="proof">запущено</span>
         </div>
-        <p><code>supervised.py:433</code>:</p>
         <pre><code>f"{task_name}_" if len(task_name) != 0 else "" + key: val</code></pre>
         <p>
           Приоритет операторов разбирает это как
           <code>(f"{task_name}_") if cond else ("" + key)</code>. При непустом
           <code>task_name</code> ключом становится <code>"prod_a_"</code> —
-          <strong>без имени метрики</strong>. Все три метрики пишутся в один ключ,
-          выживает последняя:
+          <strong>без имени метрики</strong>, и все три метрики пишутся в один
+          ключ:
         </p>
         <pre><code>{'mse': 1.0, 'mae': 2.0, 'mape': 3.0}  ->  {'prod_a_': 3.0}</code></pre>
         <p>
-          При пустом <code>task_name</code> ветка другая и всё корректно, поэтому дефект
-          виден только в многозадачном режиме.
+          При пустом <code>task_name</code> ветка другая и всё корректно, поэтому
+          дефект виден только в многозадачном режиме.
         </p>
-        <div class="fix"><b>Фикс</b>Как в соседних классах: <code>f"task_{task_name}_{key}" if len(str(task_name)) != 0 else key</code>.</div>
-      </article>
-    </section>
-
-    <section id="silent">
-      <h2>4. Дефекты, тихо портящие числа</h2>
-
-      <article class="finding silent">
-        <div class="fhead">
-          <span class="fid">S1</span>
-          <h3 class="ftitle"><code>Entropy</code> возвращает энтропию с обратным знаком</h3>
-          <span class="proof run">запущено</span>
-        </div>
-        <p>
-          <code>moe_reg.py:35</code> считает <code>sum(p·log p) / log(n)</code>, тогда
-          как нормированная энтропия — это <code>−sum(p·log p) / log(n)</code>:
-        </p>
-        <pre><code>равномерно по 4 экспертам -> -1.0000   докстринг обещает ~ +1
-коллапс на одного         -> -0.0000   докстринг обещает ~  0</code></pre>
-        <p>
-          Метрика монотонна и как индикатор работает, но знак и интервал не те, что
-          написаны: дашборд с «энтропией −1 = здорово» читается наоборот. Соседний
-          <code>ExpertsWorkload</code> берёт минус правильно — в модуле две реализации
-          одной величины с разным знаком.
-        </p>
+        <div class="fix"><b>Фикс</b>Как в соседнем <code>ResponseMetrics</code>: <code>f"task_{task_name}_{key}" if len(str(task_name)) != 0 else key</code>.</div>
       </article>
 
-      <article class="finding silent">
-        <div class="fhead">
-          <span class="fid">S2</span>
-          <h3 class="ftitle"><code>MultiLossMetric</code>: среднее отношений вместо отношения сумм, и <code>compute</code> не идемпотентен</h3>
-          <span class="proof run">запущено</span>
-        </div>
-        <p>Три дефекта в двадцати строках:</p>
-        <ol>
-          <li>
-            Считается <code>mean(loss_i / n_i)</code> вместо
-            <code>sum(loss_i) / sum(n_i)</code>. На батчах <code>(2, 4)</code> и
-            <code>(4, 2)</code> получается <strong>1.25</strong> вместо корректной
-            <strong>1.0</strong> — ровно то смещение, которое докстринг обещает устранить.
-          </li>
-          <li>
-            <code>compute()</code> мутирует <code>self.losses</code>, подменяя список
-            числом. Второй вызов даёт <strong>0.46875</strong> — мусор. Контракт явно
-            требует «Should not modify internal state».
-          </li>
-          <li>
-            <code>if self.num_items[attribute] != 0</code> сравнивает <strong>список</strong>
-            с нулём — всегда истина, ветка <code>else</code> недостижима.
-          </li>
-        </ol>
-      </article>
-
-      <article class="finding silent">
-        <div class="fhead">
-          <span class="fid">S3</span>
-          <h3 class="ftitle"><code>UniversalLossesMetric</code> делит на глобальный счётчик батчей</h3>
-          <span class="proof run">запущено</span>
-        </div>
-        <p>
-          Докстринг обещает: потеря, применимая не ко всем батчам, усредняется по тем,
-          где она есть. Код использует общий <code>update_counter</code>. Потеря,
-          присутствующая в 1 батче из 4 и всегда равная 1.0, логируется как
-          <strong>0.25</strong>. Плюс среднее по батчам не взвешено размером батча —
-          последний неполный батч имеет тот же вес, что и полный.
-        </p>
-      </article>
-
-      <article class="finding silent">
+      <article class="finding block">
         <div class="fhead">
           <span class="fid">S4</span>
-          <h3 class="ftitle"><code>RocAucScore</code> возвращает <code>nan</code>, и один <code>nan</code> навсегда выключает раннюю остановку</h3>
-          <span class="proof run">запущено</span>
+          <h3 class="ftitle"><code>nan</code> из вырожденного среза стирает рекорд ранней остановки</h3>
+          <span class="proof">запущено</span>
         </div>
         <p>
-          Защита асимметрична: <code>sum(targets) &gt; 0</code> ловит срез без единого
-          позитива (возвращается 0.5), но не ловит срез <strong>из одних позитивов</strong> —
-          там sklearn предупреждает и возвращает <code>nan</code>. Дальше:
+          Находка пережила чистку: она перешла с удалённого
+          <code>RocAucScore</code> на <code>ResponseMetrics</code>. На срезе из
+          одних позитивов <code>roc_auc_score</code> возвращает <code>nan</code>, а
+          <code>precision_at_k</code> — <code>nan</code> от деления на ноль.
         </p>
-        <pre><code>elif score &lt; self.best_score + self.delta:   # nan &lt; nan  ->  False</code></pre>
         <p>
-          Сравнение с <code>nan</code> всегда ложно, поэтому исполняется ветка
-          «улучшение»: <code>best_score = nan</code>, счётчик обнуляется. После этого
-          <strong>любой</strong> следующий скор тоже даёт <code>False</code> — ранняя
-          остановка не сработает уже никогда, а <code>best_metric</code> останется
-          <code>nan</code>.
+          Дальше <code>nan</code> попадает в <code>EarlyStopping</code>, где
+          сравнение <code>score &lt; best + delta</code> с <code>nan</code> всегда
+          ложно, поэтому исполняется ветка «улучшение» и рекорд переписывается:
         </p>
-        <div class="fix"><b>Фикс</b>Проверять <code>len(set(targets)) &gt; 1</code>, а не сумму; и научить <code>EarlyStopping</code> пропускать нечисловой скор вместо того, чтобы принимать его за рекорд.</div>
+        <pre><code>nan есть  best=0.1   early_stop=False
+nan нет   best=0.9   early_stop=True</code></pre>
+        <p>
+          Один <code>nan</code> забывает рекорд 0.9, и просадка до 0.1, которую
+          ранняя остановка обязана была поймать, проходит незамеченной.
+        </p>
+        <div class="fix"><b>Фикс</b>В двух местах: не выдавать <code>nan</code> из метрики (пропускать ключ и предупреждать) и научить <code>EarlyStopping</code> игнорировать нечисловой скор.</div>
       </article>
 
-      <article class="finding silent">
+      <article class="finding">
         <div class="fhead">
           <span class="fid">S5</span>
           <h3 class="ftitle"><code>GroupAverageMetricWrapper</code> фиксирует regex-группы на первом <code>compute</code></h3>
-          <span class="proof run">запущено</span>
+          <span class="proof">запущено</span>
         </div>
         <p>
-          Список имён под регулярное выражение вычисляется один раз. А обёртка,
-          делящая популяцию, создаёт группы <strong>лениво, по мере появления в
-          данных</strong>:
+          Список имён под регулярное выражение вычисляется один раз, а
+          <code>GroupDevidedMetricsWrapper</code> создаёт группы лениво, по мере
+          появления в данных:
         </p>
         <pre><code>эпоха 1 -> {'g_0_auc': 1.0, 'avg_auc': 1.0}
 эпоха 2 -> {'g_0_auc': 1.0, 'g_1_auc': 0.0, 'avg_auc': 1.0}</code></pre>
         <p>
-          Среднее по определению не полное, и в логах это не видно. Обёртка используется
-          в 21 конфиге — самая популярная в модуле.
+          Среднее по определению неполное, и в логах это не видно. Обёртка
+          используется в 21 конфиге — самая популярная в модуле.
         </p>
-        <div class="fix"><b>Фикс</b>Пересчитывать группы на каждом <code>compute</code> — это дешёвый поиск по десяткам имён, кэшировать нечего.</div>
+        <div class="fix"><b>Фикс</b>Пересчитывать группы на каждом <code>compute</code>: это дешёвый поиск по десяткам имён, кэшировать нечего.</div>
       </article>
 
-      <article class="finding silent">
+      <article class="finding">
         <div class="fhead">
-          <span class="fid">S6</span>
-          <h3 class="ftitle"><code>UpliftMetrics</code>: калибратор обучается и проверяется на одних и тех же строках</h3>
+          <span class="fid">S6–S9</span>
+          <h3 class="ftitle">Калибровка и вырожденные данные в <code>UpliftMetrics</code></h3>
           <span class="proof">по коду</span>
         </div>
-        <p>
-          Если в батче нет колонки <code>split_type</code> — а её нет во всех конфигах
-          пилота, — весь срез помечается как <code>"calib"</code>. Тогда тестовая маска
-          пуста, калибратор фитится на калибровочном срезе и на нём же оценивается, и в
-          главную метрику прогона уходит <strong>in-sample</strong> число. Проверка
-          <code>is_calib=True</code> при этом всегда проходит именно потому, что данные
-          те же — она проверяет не качество, а тождество.
-        </p>
-        <div class="fix"><b>Фикс</b>Без <code>split_type</code> либо не выдавать калиброванные метрики вовсе, либо считать их cross-fitting'ом. Второе честно и стоит одного лишнего прохода по массиву.</div>
-      </article>
-
-      <article class="finding silent">
-        <div class="fhead">
-          <span class="fid">S7</span>
-          <h3 class="ftitle"><code>require_calibration: False</code> не отключает калибровку</h3>
-          <span class="proof run">на практике</span>
-        </div>
-        <p>
-          Флаг влияет только на то, какая метрика попадает в <code>mean_*</code>.
-          Калибраторы фитятся всегда, ассерты из B2 выполняются всегда. Пользователь,
-          выключивший флаг, чтобы обойти падение, обнаружит, что оно осталось. Имя
-          параметра обещает не то, что он делает.
-        </p>
-      </article>
-
-      <article class="finding silent">
-        <div class="fhead">
-          <span class="fid">S8</span>
-          <h3 class="ftitle">При <code>require_calibration: True</code> две разные метрики получают одно значение</h3>
-          <span class="proof">по коду</span>
-        </div>
-        <p>
-          <code>mean_calibrated_X</code> и <code>mean_X</code> записываются из одного и
-          того же списка. Некалиброванное среднее в этом режиме получить невозможно,
-          хотя ключ для него в логе есть.
-        </p>
-      </article>
-
-      <article class="finding silent">
-        <div class="fhead">
-          <span class="fid">S9</span>
-          <h3 class="ftitle">Метрика молча дописывает в данные позитивный пример</h3>
-          <span class="proof">по коду</span>
-        </div>
-        <pre><code>if y_true.sum() == 0:
-    y_true[0] += 1</code></pre>
-        <p>
-          Мотив понятен и честно описан в докстринге. Но происходит это без единой
-          строчки в логе, а <code>+= 1</code> вместо <code>= 1</code> на неудачных
-          данных даст метку <code>2</code>. Правильнее вернуть <code>nan</code> или
-          пропустить группу — и <em>сказать об этом</em>.
-        </p>
-      </article>
-
-      <article class="finding silent">
-        <div class="fhead">
-          <span class="fid">S10</span>
-          <h3 class="ftitle"><code>PLEResponseMetrics</code>: ключ перезаписывается в цикле</h3>
-          <span class="proof">по коду</span>
-        </div>
-        <p>
-          В глобальной ветке <code>_any_specific_expert_mean</code> пишется внутри цикла
-          по индексу эксперта, а значение от этого индекса зависит. Все итерации, кроме
-          последней, выброшены; итоговое число — сумма по хвосту от последнего индекса,
-          а не «утилизация специфичных экспертов». Класс мёртв, но если его будут
-          оживлять — это первое, что нужно поправить.
-        </p>
-      </article>
-
-      <article class="finding silent">
-        <div class="fhead">
-          <span class="fid">S11</span>
-          <h3 class="ftitle"><code>SequenceStats</code> делит на размер первого батча</h3>
-          <span class="proof">по коду</span>
-        </div>
-        <p>
-          Знаменатель — <code>len(context_lengths) * self._batch_size</code>, где
-          <code>_batch_size</code> запомнен с первого батча. Последний батч почти всегда
-          неполный, значит средняя длина контекста систематически занижена.
-        </p>
-      </article>
-
-      <article class="finding silent">
-        <div class="fhead">
-          <span class="fid">S12</span>
-          <h3 class="ftitle">Обёртка групп не забывает группы при <code>reset()</code></h3>
-          <span class="proof">по коду</span>
-        </div>
-        <p>
-          Сбрасываются вложенные метрики, но не словарь групп. Группа, бывшая на первой
-          эпохе и исчезнувшая на второй, останется, и её пустая метрика попадёт в
-          <code>compute</code>. Контракт требует «as if newly instantiated».
-        </p>
-      </article>
-    </section>
-
-    <section id="cost">
-      <h2>5. Устойчивость и стоимость на новом трейне</h2>
-      <p>Здесь ничего не сломано, но новый трейн изменил цену этих решений.</p>
-
-      <article class="finding cost">
-        <div class="fhead">
-          <span class="fid">P1</span>
-          <h3 class="ftitle"><code>all_gather_object</code> там, где нужен <code>gather_object(dst=0)</code></h3>
-          <span class="proof">по коду</span>
-        </div>
-        <p>
-          <code>dist.py:132</code> собирает объект <strong>на все ранги</strong>, после
-          чего результат отбрасывается везде, кроме нулевого. Трафик и пиковая память
-          завышены в <code>world_size</code> раз без всякой пользы.
-        </p>
+        <ul>
+          <li>
+            <strong>S6.</strong> Без колонки <code>split_type</code> — а её нет ни
+            в одном конфиге пилота — весь срез помечается как <code>calib</code>, и
+            калибратор подгоняется и оценивается на одних и тех же строках. Главная
+            метрика прогона получается in-sample.
+          </li>
+          <li>
+            <strong>S7.</strong> <code>require_calibration: False</code>
+            по-прежнему не отключает калибровку — он только выбирает, что попадёт в
+            <code>mean_*</code>. Поведение теперь честно описано, но не изменено.
+          </li>
+          <li>
+            <strong>S8.</strong> При <code>require_calibration: True</code>
+            <code>mean_X</code> и <code>mean_calibrated_X</code> пишутся из одного
+            списка, и некалиброванное среднее получить нельзя.
+          </li>
+          <li>
+            <strong>S9.</strong> <code>y_true[0] += 1</code> на срезе без конверсий
+            молча дописывает в данные позитивный пример. Мотив описан в докстринге,
+            но в логе не остаётся ни строки, а <code>+= 1</code> вместо
+            <code>= 1</code> на неудачных данных даст метку <code>2</code>.
+          </li>
+        </ul>
+        <div class="fix"><b>Фикс</b>Cross-fitting либо отказ выдавать калиброванные метрики без <code>split_type</code>; развести <code>mean_X</code> и <code>mean_calibrated_X</code>; убрать дописывание метки в данные.</div>
       </article>
 
       <article class="finding cost">
         <div class="fhead">
-          <span class="fid">P2</span>
-          <h3 class="ftitle">Через сеть гоняются целые батчи, включая то, что метрике не нужно</h3>
-          <span class="proof">по коду</span>
+          <span class="fid">S12 · P5</span>
+          <h3 class="ftitle">Обёртка по группам: грязный <code>reset</code> и <code>deepcopy</code> всего выхода</h3>
+          <span class="proof">запущено</span>
         </div>
         <p>
-          Сериализуется <code>(batch, output)</code> целиком: все входные тензоры, все
-          скрытые состояния, все головы. <code>RocAucScore</code> читает из этого два
-          поля. При record-level шардировании это и есть главный потолок пропускной
-          способности валидации.
+          <code>reset()</code> сбрасывает вложенные метрики, но не словарь групп:
+          группа, бывшая на первой эпохе и исчезнувшая на второй, остаётся, и её
+          пустая метрика попадает в <code>compute</code>. Контракт требует
+          состояния «как после создания метрики».
         </p>
-        <p>
-          Отдельно: <code>TrainMetricsCallback</code> делает этот сбор <strong>на каждом
-          шаге обучения</strong>, а не раз в эпоху.
-        </p>
-        <div class="fix"><b>Дешёвый фикс</b>Дать метрике декларацию нужных полей — <code>required_inputs</code> / <code>required_outputs</code> — и собирать только их.</div>
-      </article>
-
-      <article class="finding cost">
-        <div class="fhead">
-          <span class="fid">P3</span>
-          <h3 class="ftitle"><code>os.makedirs(..., exist_ok=False)</code> роняет второй запуск</h3>
-          <span class="proof">по коду</span>
-        </div>
-        <p>
-          Директория от предыдущего прогона приводит к <code>FileExistsError</code> при
-          <em>создании</em> метрики — то есть до начала обучения. Соседние места в том же
-          модуле используют <code>exist_ok=True</code>. Разнобой.
-        </p>
-      </article>
-
-      <article class="finding cost">
-        <div class="fhead">
-          <span class="fid">P4</span>
-          <h3 class="ftitle">Имена файлов с точностью до секунды затирают друг друга</h3>
-          <span class="proof">по коду</span>
-        </div>
-        <p>
-          Пять мест строят имя из <code>datetime.now()</code> с точностью до секунды.
-          Сборщики сбрасывают буфер каждые <code>save_steps</code> батчей; два сброса
-          внутри одной секунды — обычное дело, и второй parquet <strong>молча затирает
-          первый</strong>. Нужен монотонный счётчик части.
-        </p>
-      </article>
-
-      <article class="finding cost">
-        <div class="fhead">
-          <span class="fid">P5</span>
-          <h3 class="ftitle">Обёртка групп не работает на train-метриках</h3>
-          <span class="proof run">запущено</span>
-        </div>
         <p>
           <code>copy.deepcopy(outputs)</code> безопасен на валидации
-          (<code>inference_mode</code>), но на выходе обучающего шага тензоры не листовые:
+          (<code>inference_mode</code>), но на выходе обучающего шага тензоры не
+          листовые, и обёртку нельзя использовать как train-метрику:
         </p>
         <pre><code>RuntimeError: Only Tensors created explicitly by the user
 (graph leaves) support the deepcopy protocol at the moment.</code></pre>
         <p>
-          Плюс сам по себе deepcopy всего выхода на каждую группу и каждый батч — это
-          лишние копии порядка «групп × размер батча», тогда как нужен только срез
-          логитов.
+          Плюс deepcopy всего выхода на каждую группу и каждый батч — лишние копии
+          порядка «групп × размер батча», тогда как нужен только срез логитов.
         </p>
       </article>
-
-      <article class="finding cost">
-        <div class="fhead">
-          <span class="fid">P6</span>
-          <h3 class="ftitle"><code>print</code> вместо логгера в семи местах</h3>
-          <span class="proof">по коду</span>
-        </div>
-        <p>
-          В многоранговом прогоне это перемешанный вывод без отметки ранга. Один из семи
-          (<code>sequence_stats.py:69</code>) печатает весь словарь статистик на каждый
-          <code>compute</code> — отладочный вывод, забытый в коде.
-        </p>
-      </article>
-    </section>
-
-    <section id="proposals">
-      <h2>6. Что предлагаю поменять</h2>
-
-      <h3>1. Разделить контракт на «числа» и «файлы»</h3>
-      <p>
-        Сейчас <code>compute()</code> обязан возвращать <code>dict[str, float]</code>, но
-        половина наследников по смыслу возвращает файл. Отсюда четыре класса, забывшие
-        <code>return {}</code>, и падение на самом ходовом конфиге.
-      </p>
-      <pre><code>class ScalarMetric(BaseMetric):
-    def compute(self) -> dict[str, float]: ...
-
-class ArtifactMetric(BaseMetric):
-    def flush(self) -> None: ...          # пишет parquet
-    def compute(self) -> dict[str, float]:
-        self.flush()
-        return {}                          # один раз, в базовом классе</code></pre>
-      <p>
-        Цикл тогда не может получить <code>None</code> в принципе — не потому, что все
-        наследники аккуратны, а потому, что возвращать <code>None</code> неоткуда.
-        Дешевле, чем ловить это ревью.
-      </p>
-
-      <h3>2. Перейти на контракт torchmetrics для аддитивной части</h3>
-      <p>
-        Индустриальный стандарт для PyTorch — <code>torchmetrics.Metric</code>: состояние
-        объявляется через <code>add_state(..., dist_reduce_fx=...)</code>, синхронизация
-        между рангами происходит внутри <code>compute()</code>. Что это даёт здесь:
-      </p>
-      <ul>
-        <li>
-          <strong>аддитивные метрики</strong> сводятся <code>all_reduce</code> по
-          нескольким скалярам вместо пересылки батчей — это снимает P2 для большей части
-          метрик;
-        </li>
-        <li>
-          <strong>неаддитивные</strong> (<code>BinaryAUROC</code> есть готовый) гоняют по
-          сети <em>только</em> <code>preds</code> и <code>target</code>, а не весь батч с
-          эмбеддингами;
-        </li>
-        <li>исчезает целый класс дефектов S2 / S3 — накопители пишутся декларативно.</li>
-      </ul>
-      <p>
-        Специфичные для задачи метрики — uplift, qini, кампанейские сборщики — на
-        torchmetrics не переводятся и остаются своими. Их и стоит оставить: в них
-        ценность модуля. Реалистичный порядок: сначала предложения 1 и 3, потом
-        <code>RocAucScore</code> → <code>BinaryAUROC</code> как пилот.
-      </p>
-
-      <h3>3. Декларация нужных полей вместо пересылки всего батча</h3>
-      <p>
-        Самое выгодное соотношение «эффект / объём правки» из всего списка: две строки
-        на метрику плюс фильтр в цикле оценки и в train-колбэке.
-      </p>
-
-      <h3>4. Метрика не имеет права останавливать обучение</h3>
-      <p>
-        Убрать <code>assert</code> из <code>uplift.py</code> (B2) и из
-        <code>sequence_stats.py:105</code> — там <code>assert hasattr(...) is not None</code>,
-        выражение всегда истинно, проверка декоративная. Общее правило: невалидные данные
-        → предупреждение и пропуск ключа; исключение допустимо только при конструировании
-        метрики, до старта обучения.
-      </p>
-
-      <h3>5. Числовая гигиена на границе</h3>
-      <ul>
-        <li>Возвращать <code>float(...)</code>, а не <code>np.float64</code> и не внутренний <code>defaultdict</code> — две метрики отдают наружу собственное состояние, и вызывающий может его испортить.</li>
-        <li>Не писать <code>nan</code> в результат: пропускать ключ и предупреждать. Тогда S4 не сможет сломать раннюю остановку, даже если проскочит.</li>
-        <li><code>EarlyStopping</code> должен явно игнорировать нечисловой скор.</li>
-      </ul>
-
-      <h3>6. Убрать тройное дублирование блока task/group</h3>
-      <p>
-        <code>UpliftMetrics.compute</code>, <code>ResponseMetrics.compute</code> и
-        <code>RegressionMetrics.compute</code> — три копии одного ~100-строчного цикла с
-        одинаковым хвостом сохранения submit'а. B3 живёт ровно в той копии, куда
-        исправление не доехало. Общий <code>_TaskGroupScorer</code> убирает ~200 строк и
-        один класс дефектов.
-      </p>
-
-      <h3>7. Опечатки в публичном API</h3>
-      <p>
-        <code>GroupDevidedMetricsWrapper</code>, параметр <code>columns_to_devide</code>,
-        файл <code>group_devided_wrap.py</code> (правильно — divided). Переименовать с
-        шимом на один релиз — тем же приёмом, каким только что убрали шимы в
-        <code>avatar/nn</code>. Класс используется только в двух yaml внутри
-        <code>docs/</code>, так что цена сейчас минимальна; через полгода будет выше.
-      </p>
-
-      <h3>8. Тесты</h3>
-      <p>Главный пункт: без него остальные не удержатся. Минимум:</p>
-      <ul>
-        <li>
-          <strong>контрактные тесты, параметризованные по всем классам модуля</strong>:
-          <code>compute()</code> дважды подряд даёт одно и то же; <code>reset()</code>
-          возвращает в исходное состояние; <code>compute()</code> всегда возвращает
-          <code>dict</code>. Эти три теста ловят B1, S2 и S12 разом;
-        </li>
-        <li><strong>золотые значения</strong> против sklearn / sklift на фиксированном массиве — ловит S1, S2, S3, S11;</li>
-        <li><strong>краевые случаи</strong>: срез из одних позитивов, из одних негативов, пустой, группа появляется на второй эпохе — ловит S4 и S5.</li>
-      </ul>
     </section>
 
     <section id="dead">
-      <h2>7. Анализ мёртвого кода</h2>
+      <h2>4. Анализ мёртвого кода</h2>
 
       <div class="callout">
         <p>
-          <strong>Правило.</strong> Символ достижим, если его имя встречается где-либо в
-          репозитории вне собственного файла: в коде, в Hydra-конфиге, в тесте, в
-          документации. Правило заведомо переоценивает достижимость, поэтому
-          <strong>ноль ссылок — сильное свидетельство</strong>, а ненулевое число не
-          доказывает ничего.
+          <strong>Правило.</strong> Символ достижим, если его имя встречается
+          где-либо в репозитории вне собственного файла: в коде, в Hydra-конфиге, в
+          тесте, в документации. Правило переоценивает достижимость, поэтому ноль
+          ссылок — сильное свидетельство, а ненулевое число не доказывает ничего.
         </p>
       </div>
 
-      <h3>Мёртвые классы в <code>avatar.metrics</code> — 12 из 25, 1507 строк из 3024</h3>
-
-      <div class="tablewrap">
-        <table>
-          <thead><tr><th>Класс</th><th>Файл</th><th>Строк</th><th>Ссылки</th></tr></thead>
-          <tbody>
-            <tr><td><code>MMoEResponseMetrics</code></td><td><code>supervised.py:587</code></td><td class="num">142</td><td><span class="tag none">нигде</span></td></tr>
-            <tr><td><code>PLEResponseMetrics</code></td><td><code>supervised.py:731</code></td><td class="num">123</td><td><span class="tag none">нигде</span></td></tr>
-            <tr><td><code>CatboostCampaignBenchmark</code></td><td><code>campaign.py:173</code></td><td class="num">222</td><td><span class="tag gone">только docs</span></td></tr>
-            <tr><td><code>MLPCampaignBenchmark</code></td><td><code>campaign.py:685</code></td><td class="num">184</td><td><span class="tag gone">только docs</span></td></tr>
-            <tr><td><code>ResponseMetrics</code></td><td><code>supervised.py:120</code></td><td class="num">180</td><td><span class="tag gone">только docs</span></td></tr>
-            <tr><td><code>RegressionMetrics</code></td><td><code>supervised.py:302</code></td><td class="num">163</td><td><span class="tag gone">только docs</span></td></tr>
-            <tr><td><code>InferenceSupervisedMetrics</code></td><td><code>supervised.py:467</code></td><td class="num">118</td><td><span class="tag gone">только docs</span></td></tr>
-            <tr><td><code>InferenceMultiTaskResponseMetrics</code></td><td><code>campaign.py:493</code></td><td class="num">105</td><td><span class="tag gone">только docs</span></td></tr>
-            <tr><td><code>GroupDevidedMetricsWrapper</code></td><td><code>group_devided_wrap.py:11</code></td><td class="num">104</td><td><span class="tag gone">только docs</span></td></tr>
-            <tr><td><code>InferenceCampaignMetrics</code></td><td><code>campaign.py:601</code></td><td class="num">82</td><td><span class="tag gone">только docs</span></td></tr>
-            <tr><td><code>ExpertsWorkload</code></td><td><code>sequence_stats.py:81</code></td><td class="num">43</td><td><span class="tag gone">только docs</span></td></tr>
-            <tr><td><code>HiddensNorm</code></td><td><code>sequence_stats.py:126</code></td><td class="num">41</td><td><span class="tag gone">только docs</span></td></tr>
-          </tbody>
-        </table>
-      </div>
-
-      <p>Два уточнения, чтобы таблицу не читали слишком буквально:</p>
-      <ul>
-        <li>
-          <code>BaseInferenceMetric</code> машина помечает мёртвым, но это ложное
-          срабатывание: правило не смотрит внутрь самого пакета, а его наследник
-          <code>ClassificationInferenceMetrics</code> живой. Класс нужен.
-        </li>
-        <li>
-          <code>SequenceStats</code> не мёртв и не жив: у него есть единственный на весь
-          модуль тест, но нет ни одного конфига.
-        </li>
-      </ul>
-
-      <p>Отдельно про два класса из таблицы:</p>
-      <ul>
-        <li>
-          <strong><code>ExpertsWorkload</code></strong> нельзя использовать, даже если
-          захотеть: его <code>compute</code> возвращает скаляр, а не словарь, и
-          <code>scores.update(...)</code> на нём упадёт. Это честно написано в его
-          собственном докстринге — класс документирован как неработающий и оставлен в
-          <code>__all__</code>.
-        </li>
-        <li>
-          <strong><code>GroupDevidedMetricsWrapper</code></strong> — единственный, кого
-          жалко: он описан в руководстве как одна из двух основных обёрток, а его пара
-          живёт в 21 конфиге. Но в рабочих конфигах он не встречается ни разу. Это не
-          «удалить», это расхождение документации с практикой: либо обёртку начать
-          использовать, либо переписать раздел документации.
-        </li>
-      </ul>
-
-      <div class="callout">
-        <p>
-          <strong>Что предлагаю удалить:</strong> <code>MMoEResponseMetrics</code>,
-          <code>PLEResponseMetrics</code>, <code>InferenceSupervisedMetrics</code>,
-          <code>InferenceCampaignMetrics</code>, <code>InferenceMultiTaskResponseMetrics</code>,
-          <code>ExpertsWorkload</code>, <code>HiddensNorm</code> — семь классов, 654 строки,
-          без единой ссылки за пределами документации; два из них вдобавок содержат
-          известные дефекты. Остальные четыре — обсудить: возможно, они нужны внешним
-          конфигам вне репозитория, как были нужны шимы <code>avatar.nn</code>.
-        </p>
-      </div>
-
-      <h3>Мёртвый код вне <code>avatar.metrics</code></h3>
-
-      <div class="tablewrap">
-        <table>
-          <thead><tr><th>Символ</th><th>Где</th></tr></thead>
-          <tbody>
-            <tr><td><code>check_columns_to_tensor</code></td><td><code>avatar/data/tabular/collate.py:12</code></td></tr>
-            <tr><td><code>BaseClassificationOutput</code></td><td><code>avatar/outputs.py:68</code></td></tr>
-            <tr><td><code>MMoeUpliftOutput</code></td><td><code>avatar/outputs.py:201</code></td></tr>
-            <tr><td><code>dump_tabular_meta</code></td><td><code>avatar/preprocessing/spark/utils.py:13</code></td></tr>
-          </tbody>
-        </table>
-      </div>
+      <h3>В <code>avatar.metrics</code> мёртвого кода не осталось</h3>
 
       <p>
-        Модуль целиком: <strong><code>avatar/training_agruments.py</code></strong>
-        (15 строк) — шим обратной совместимости для опечатки в имени модуля, из той же
-        семьи, что три пакета <code>avatar.nn</code>, удалённые в PR&nbsp;#6. Его имя не
-        встречается больше нигде в репозитории. Логично убрать вместе с ними, но это
-        внешне видимый путь — решение за вами.
+        Из 13 имён в <code>__all__</code> восемь встречаются в рабочих конфигах или
+        в коде, а остальные — <code>ScalarMetric</code>,
+        <code>ArtifactMetric</code>, <code>ResponseMetrics</code>,
+        <code>RegressionMetrics</code>, <code>InferenceSupervisedMetrics</code>,
+        <code>GroupDevidedMetricsWrapper</code> — живут пока только в документации
+        и тестах. Первые два — базовые классы, и машинное правило помечает их
+        мёртвыми лишь потому, что не смотрит внутрь пакета. Остальные оставлены
+        сознательно: это тот минимум, который решено сохранить.
       </p>
 
+      <div class="callout warn">
+        <p>
+          <strong>Побочный эффект чистки: осиротел multi-task.</strong> Удаление
+          примера multi_task забрало <strong>единственные рабочие конфиги</strong>
+          для <code>avatar.pipeline.multi_task</code>. Прямое следствие видно в
+          машинном отчёте: <code>MultiTaskLoss</code> из
+          <code>avatar.losses.multi_task</code> теперь не упоминается нигде, а
+          <code>WeightLossBalancer</code>, <code>UncertainlyLossBalancer</code> и
+          <code>PCGradBalancer</code> используются только внутри своего файла.
+        </p>
+        <p>
+          Сами классы <code>MMoE</code>, <code>PLE</code>,
+          <code>MMoEBackbone</code>, <code>PLEBackbone</code>,
+          <code>MLPExpert</code>, <code>TaskHead</code> остаются в коде и в тестах,
+          но показать их в работе больше нечем. Это следствие принятого решения, а
+          не ошибка — но если multi-task-постановка нужна, стоит вернуть пример,
+          переписав его метрики на <code>ResponseMetrics</code>.
+        </p>
+      </div>
+
+      <h3>Вне <code>avatar.metrics</code></h3>
+
       <p>
-        Ещё 19 публичных символов используются только внутри своего файла и должны стать
-        приватными или попасть в <code>__all__</code>. Плюс закомментированный код в семи
-        местах, который ruff считает кодом, и ещё один блок из семи строк прямо внутри
-        словаря в <code>uplift.py</code>, который ruff не поймал.
+        Прежний список сократился: <code>check_columns_to_tensor</code>,
+        <code>BaseClassificationOutput</code>, <code>MMoeUpliftOutput</code> и
+        <code>dump_tabular_meta</code> по-прежнему не имеют ни одной ссылки — их
+        никто не просил трогать. К ним добавился <code>MultiTaskLoss</code> по
+        причине выше. Ещё около двадцати публичных символов используются только
+        внутри своего файла и по-хорошему должны стать приватными.
       </p>
     </section>
 
     <section id="plan">
-      <h2>8. Порядок работ</h2>
-      <p>Оценки — по объёму правки, не по календарю.</p>
+      <h2>5. Порядок дальнейших работ</h2>
 
-      <p class="stage">Сначала — правит поведение, полчаса на всё</p>
       <ol class="plan">
-        <li><span><strong>B1</strong> — <code>return {}</code> в четырёх <code>compute</code>. Разблокирует 23 конфига кампании.</span></li>
-        <li><span><strong>B3</strong> — приоритет операторов в <code>supervised.py:433</code>.</span></li>
-        <li><span><strong>S4</strong> — проверка на два класса вместо суммы, плюс <code>EarlyStopping</code>, игнорирующий <code>nan</code>.</span></li>
-        <li><span><strong>B2</strong> — <code>assert</code> → предупреждение и метрика <code>calibration_rank_shift</code>.</span></li>
-      </ol>
-
-      <p class="stage">Потом — правит числа</p>
-      <ol class="plan" start="5">
-        <li><span><strong>S2, S3</strong> — накопители в <code>MultiLossMetric</code> и <code>UniversalLossesMetric</code>.</span></li>
-        <li><span><strong>S1</strong> — знак энтропии, и убрать вторую реализацию.</span></li>
+        <li><span><strong>B3</strong> — приоритет операторов в <code>RegressionMetrics</code>. Одна строка.</span></li>
+        <li><span><strong>S4</strong> — не выдавать <code>nan</code> из метрики и научить <code>EarlyStopping</code> его игнорировать. Пока это открыто, ранняя остановка ненадёжна.</span></li>
         <li><span><strong>S5</strong> — пересчёт regex-групп на каждом <code>compute</code>.</span></li>
-        <li><span><strong>S6, S7, S8</strong> — честная калибровка и осмысленный <code>require_calibration</code>.</span></li>
-      </ol>
-
-      <p class="stage">Параллельно — без этого предыдущее развалится обратно</p>
-      <ol class="plan" start="9">
-        <li><span>Контрактные тесты по всем классам модуля, золотые значения, краевые случаи.</span></li>
-      </ol>
-
-      <p class="stage">Затем — структура</p>
-      <ol class="plan" start="10">
-        <li><span>Удалить мёртвое.</span></li>
-        <li><span>Разделить <code>ScalarMetric</code> / <code>ArtifactMetric</code>.</span></li>
-        <li><span><code>required_inputs</code> / <code>required_outputs</code> и фильтрация перед сбором; <code>gather_object(dst=0)</code> вместо <code>all_gather_object</code>.</span></li>
-        <li><span>Общий <code>_TaskGroupScorer</code> вместо трёх копий.</span></li>
-        <li><span>Переименования с шимом; <code>RocAucScore</code> → <code>BinaryAUROC</code> как пилот на torchmetrics.</span></li>
+        <li><span><strong>S6–S9</strong> — честная калибровка: cross-fitting или отказ выдавать калиброванные метрики без <code>split_type</code>; развести <code>mean_X</code> и <code>mean_calibrated_X</code>; убрать дописывание метки в данные.</span></li>
+        <li><span><strong>S12, P5</strong> — чистый <code>reset</code> и срез логитов вместо <code>deepcopy</code> всего выхода.</span></li>
+        <li><span>Переименовать <code>GroupDevidedMetricsWrapper</code> и <code>columns_to_devide</code> (правильно — divided) с шимом на один релиз, тем же приёмом, каким убрали шимы в <code>avatar.nn</code>. Класс не встречается ни в одном рабочем конфиге, так что цена минимальна.</span></li>
+        <li><span>Убрать тройное дублирование блока task/group в <code>UpliftMetrics</code>, <code>ResponseMetrics</code> и <code>RegressionMetrics</code> — три копии одного ~100-строчного цикла. B3 живёт ровно в той копии, куда исправление не доехало.</span></li>
       </ol>
     </section>
   </main>

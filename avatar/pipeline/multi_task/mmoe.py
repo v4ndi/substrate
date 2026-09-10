@@ -278,9 +278,9 @@ class MMoEBackbone(nn.Module):
 
     Every task mixes the same experts with its own learned weights, then the
     mixture is pooled and optionally concatenated with external embeddings.
-    The gate weights are exposed on the output as ``task_gated_weights``, which
-    is what :class:`~avatar.metrics.moe_reg.Entropy` and
-    :class:`~avatar.metrics.moe_reg.Importance` read.
+    The gate weights are exposed on the output as ``task_gated_weights``: a
+    task whose weights concentrate on one expert has stopped mixing, which is
+    what makes them worth watching.
 
     Experts can be given directly (``experts``) or described
     (``expert_cls`` + ``expert_kwargs`` + ``num_experts``), in which case they

@@ -247,9 +247,8 @@ def init_swa_model(
     params_list = ["_target_", "_partial_", "avg_fn"]
     swa_params_dict = {key: swa_params_dict[key] for key in params_list}
     alpha = swa_params_dict["avg_fn"]
-    swa_params_dict["avg_fn"] = (
-        lambda avg_param, new_param, num_avg: alpha * avg_param
-        + (1 - alpha) * new_param
+    swa_params_dict["avg_fn"] = lambda avg_param, new_param, num_avg: (
+        alpha * avg_param + (1 - alpha) * new_param
     )
     swa_model = instantiate(swa_params_dict)(model)
     return swa_model, min_num_steps, min_epoch

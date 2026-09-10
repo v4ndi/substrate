@@ -6,7 +6,12 @@ from avatar.metrics import BaseMetric
 from avatar.train.callbacks.base import TrainerCallback
 from avatar.train.evaluate import dataloader_is_sharded
 from avatar.train.state import CallbackContext
-from avatar.train.utils import prefix_metrics, wrap_metrics
+from avatar.train.utils import (
+    metric_field_selection,
+    narrow_for_metrics,
+    prefix_metrics,
+    wrap_metrics,
+)
 
 
 class TrainMetricsCallback(TrainerCallback):
@@ -25,6 +30,9 @@ class TrainMetricsCallback(TrainerCallback):
         self.metrics = wrap_metrics(metrics)
         self.prefix = prefix
         self._gather = False
+        # Resolved once: the metric list does not change during a run, and this
+        # runs on every forward.
+        self._selection = metric_field_selection(self.metrics)
 
     def on_train_begin(self, ctx: CallbackContext) -> None:
         loader = ctx.extra.get("train_dataloader")
@@ -35,11 +43,8 @@ class TrainMetricsCallback(TrainerCallback):
     def on_forward_end(self, ctx: CallbackContext) -> None:
         if self.metrics is None:
             return
-        pairs = (
-            ctx.env.gather_objects((ctx.batch, ctx.output))
-            if self._gather
-            else [(ctx.batch, ctx.output)]
-        )
+        payload = narrow_for_metrics(ctx.batch, ctx.output, self._selection)
+        pairs = ctx.env.gather_objects(payload) if self._gather else [payload]
         if not ctx.env.is_main:
             return
         for metric in self.metrics:

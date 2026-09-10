@@ -21,7 +21,12 @@ from tqdm import tqdm
 from avatar.metrics import BaseMetric
 from avatar.train.dist import DistEnv, unwrap_model
 from avatar.train.loss_reduce import calculate_output_loss
-from avatar.train.utils import move_to_device, wrap_metrics
+from avatar.train.utils import (
+    metric_field_selection,
+    move_to_device,
+    narrow_for_metrics,
+    wrap_metrics,
+)
 
 
 def dataloader_is_sharded(dataloader: DataLoader) -> bool:
@@ -59,6 +64,7 @@ def evaluate(
     gather = env.distributed and sharded
 
     metrics = wrap_metrics(metrics)
+    selection = metric_field_selection(metrics)
     bar = tqdm(
         dataloader,
         desc=description,
@@ -76,7 +82,8 @@ def evaluate(
 
         if metrics is None:
             continue
-        pairs = env.gather_objects((batch, output)) if gather else [(batch, output)]
+        payload = narrow_for_metrics(batch, output, selection)
+        pairs = env.gather_objects(payload) if gather else [payload]
         if not env.is_main:
             continue
         for metric in metrics:
@@ -124,6 +131,7 @@ def predict(
     gather = env.distributed and sharded
 
     metrics = wrap_metrics(metrics)
+    selection = metric_field_selection(metrics)
     bar = tqdm(dataloader, desc=description, disable=not env.is_local_main)
 
     for batch in bar:
@@ -133,9 +141,8 @@ def predict(
             output = model(**variant)
             if metrics is None:
                 continue
-            pairs = (
-                env.gather_objects((variant, output)) if gather else [(variant, output)]
-            )
+            payload = narrow_for_metrics(variant, output, selection)
+            pairs = env.gather_objects(payload) if gather else [payload]
             if not env.is_main:
                 continue
             for metric in metrics:

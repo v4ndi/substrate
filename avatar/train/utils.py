@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import copy
+import dataclasses
 from typing import Any
 
 import numpy as np
@@ -67,6 +69,73 @@ def wrap_metrics(metrics: BaseMetric | list[BaseMetric] | None) -> list | None:
     elif not OmegaConf.is_list(metrics) and metrics is not None:
         metrics = [metrics]
     return metrics
+
+
+#: Result of :func:`metric_field_selection`: the input keys and the output
+#: fields the metrics asked for. ``None`` on either side means "everything".
+FieldSelection = tuple[frozenset[str] | None, frozenset[str] | None]
+
+
+def metric_field_selection(metrics: list[BaseMetric] | None) -> FieldSelection:
+    """Union of the fields a list of metrics declares it reads.
+
+    A metric that declares ``None`` on one side reads whatever the batch
+    happens to carry, and one such metric widens that side of the union back to
+    everything. The two sides are independent: loss logging needs every output
+    field but no input key, which still lets the input tensors — the large ones
+    — be dropped before they cross the wire.
+    """
+    if not metrics:
+        return None, None
+
+    inputs: set[str] | None = set()
+    outputs: set[str] | None = set()
+    for metric in metrics:
+        wanted_inputs = getattr(metric, "required_inputs", None)
+        wanted_outputs = getattr(metric, "required_outputs", None)
+        if wanted_inputs is None:
+            inputs = None
+        elif inputs is not None:
+            inputs.update(wanted_inputs)
+        if wanted_outputs is None:
+            outputs = None
+        elif outputs is not None:
+            outputs.update(wanted_outputs)
+
+    return (
+        None if inputs is None else frozenset(inputs),
+        None if outputs is None else frozenset(outputs),
+    )
+
+
+def narrow_for_metrics(batch: Any, output: Any, selection: FieldSelection) -> tuple:
+    """Drop everything the metrics did not ask for.
+
+    In a distributed run the pair is pickled and sent to rank 0 for every batch.
+    Sending the whole thing means sending sequence features, hidden states and
+    every head's output so that a metric can read two tensors; this narrows the
+    pair first.
+
+    The output keeps its class and all its fields — the ones nobody asked for
+    are set to ``None`` — so a metric that tests a field with ``hasattr`` still
+    sees it. Test the value, not the attribute.
+    """
+    wanted_inputs, wanted_outputs = selection
+
+    narrow_batch = batch
+    if wanted_inputs is not None and isinstance(batch, dict):
+        narrow_batch = {
+            key: value for key, value in batch.items() if key in wanted_inputs
+        }
+
+    narrow_output = output
+    if wanted_outputs is not None and dataclasses.is_dataclass(output):
+        narrow_output = copy.copy(output)
+        for field_ in dataclasses.fields(narrow_output):
+            if field_.name not in wanted_outputs:
+                setattr(narrow_output, field_.name, None)
+
+    return narrow_batch, narrow_output
 
 
 def prefix_metrics(

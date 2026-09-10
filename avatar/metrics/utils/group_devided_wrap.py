@@ -5,10 +5,10 @@ import copy
 import numpy as np
 import torch
 
-from avatar.metrics.base import BaseMetric
+from avatar.metrics.base import ScalarMetric
 
 
-class GroupDevidedMetricsWrapper(BaseMetric):
+class GroupDevidedMetricsWrapper(ScalarMetric):
     """Compute one metric independently for every combination of column values.
 
     Each batch is masked into slices — one per observed combination — and each
@@ -27,8 +27,9 @@ class GroupDevidedMetricsWrapper(BaseMetric):
 
     Returns from :meth:`compute`:
         ``{desc}_{value}_..._{inner metric name}`` for every combination — so
-        ``columns_desc=["channel", "group"]`` wrapping ``RocAucScore`` gives
-        names like ``channel_0_group_1_roc_auc_score``. Those names are what
+        ``columns_desc=["channel", "group"]`` wrapping ``ResponseMetrics`` gives
+        names like ``channel_0_group_1_calib_group_0_roc_auc_score``. Those
+        names are what
         :class:`~avatar.metrics.utils.group_average_wrap.GroupAverageMetricWrapper`
         then averages over.
 
@@ -36,7 +37,15 @@ class GroupDevidedMetricsWrapper(BaseMetric):
         Groups are discovered from the data, so a combination absent from
         validation simply produces no metric — the name will be missing rather
         than zero.
+
+        The inner metric is a factory, so this wrapper cannot ask it which
+        fields it reads before the first group appears. Both
+        ``required_inputs`` and ``required_outputs`` therefore stay ``None`` and
+        a distributed run gathers the whole batch for it.
     """
+
+    required_inputs = None
+    required_outputs = None
 
     def __init__(
         self,

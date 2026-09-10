@@ -5,52 +5,46 @@ All of them implement the ``update`` / ``compute`` / ``reset`` contract of
 ``metrics:`` block of a config. See ``docs/guides/metrics.md`` for the contract
 and ``docs/reference/metrics.md`` for the catalogue.
 
-Three groups worth telling apart:
+Two kinds, told apart by their base class rather than by a convention:
 
-* **scoring metrics** — return numbers (``RocAucScore``, ``UpliftMetrics``,
-  ``ResponseMetrics``, ``RegressionMetrics``);
-* **collectors** — return files (``ClassificationInferenceMetrics``,
-  ``CollectEmbeddings``, the campaign ``Inference*`` classes);
-* **wrappers and diagnostics** — reshape or explain the above
-  (``GroupAverageMetricWrapper``, ``GroupDevidedMetricsWrapper``,
-  ``MultiLossMetric``, ``SequenceStats``, ``Entropy``, ``Importance``).
+* :class:`~avatar.metrics.base.ScalarMetric` returns numbers —
+  ``UpliftMetrics``, ``ResponseMetrics``, ``RegressionMetrics``,
+  ``MultiLossMetric``, ``UniversalLossesMetric`` and the two wrappers;
+* :class:`~avatar.metrics.base.ArtifactMetric` returns a file —
+  ``CollectEmbeddings``, ``InferenceMultiTaskCampaignMetrics``,
+  ``InferenceSupervisedMetrics``.
 """
 
 from avatar.metrics.loss_logging import UniversalLossesMetric
 
-from .base import BaseMetric, ClassificationInferenceMetrics
-from .campaign import CatboostCampaignBenchmark, CollectEmbeddings, MLPCampaignBenchmark
-from .classification import RocAucScore
-from .moe_reg import Entropy, Importance
+from .base import ArtifactMetric, BaseMetric, ScalarMetric
+from .campaign import CollectEmbeddings, InferenceMultiTaskCampaignMetrics
 from .multi_loss import MultiLossMetric
-from .sequence_stats import ExpertsWorkload, HiddensNorm, SequenceStats
-from .supervised import RegressionMetrics, ResponseMetrics
+from .supervised import (
+    InferenceSupervisedMetrics,
+    RegressionMetrics,
+    ResponseMetrics,
+)
 from .uplift import UpliftMetrics
 from .utils import GroupAverageMetricWrapper, GroupDevidedMetricsWrapper
 
 __all__ = [
     # Base classes
+    "ArtifactMetric",
     "BaseMetric",
-    "CatboostCampaignBenchmark",
-    "ClassificationInferenceMetrics",
-    # Campaign tools
+    # Collectors — the product is a file
     "CollectEmbeddings",
-    "Entropy",
-    "ExpertsWorkload",
     # Wrappers
     "GroupAverageMetricWrapper",
     "GroupDevidedMetricsWrapper",
-    "HiddensNorm",
-    "Importance",
-    "MLPCampaignBenchmark",
-    # Core metrics
+    "InferenceMultiTaskCampaignMetrics",
+    "InferenceSupervisedMetrics",
+    # Loss reporting
     "MultiLossMetric",
     "RegressionMetrics",
+    # Scoring metrics — the product is numbers
     "ResponseMetrics",
-    "RocAucScore",
-    "SequenceStats",
-    # log all losses from outputs
+    "ScalarMetric",
     "UniversalLossesMetric",
-    # Specialized metrics
     "UpliftMetrics",
 ]

@@ -56,7 +56,6 @@
 |---|---|
 | [data/](data/) | формат батчей событийных последовательностей, чтение parquet |
 | [best_practices/](best_practices/) | приёмы, которые экономят память и время |
-| [mlp_benchmark/](mlp_benchmark/) | рецепт запуска MLP-бенчмарка по кампаниям |
 | [decisions/](decisions/) | проектные документы: почему код устроен так, а не иначе |
 
 * [data/event_sequence_batch.md](data/event_sequence_batch.md) — устройство
@@ -68,8 +67,6 @@
 * [best_practices/performance_metrics.md](best_practices/performance_metrics.md)
   — блок `logging:`: пропускная способность, перекос между рангами, диагностика
   шардирования. Доступен только тем, кто читал исходники, — до этой страницы.
-* [mlp_benchmark/instruction.md](mlp_benchmark/instruction.md) — конфигурация
-  `MLPCampaignBenchmark`.
 
 ## Проектные документы
 

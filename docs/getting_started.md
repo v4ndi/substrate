@@ -83,9 +83,8 @@ yaml.safe_dump(pp.dump(), open("artifacts/preprocessor.yaml", "w"))
 ## 3. Обучение
 
 Если хочется сначала увидеть работающее обучение, а не собирать конфиг с нуля,
-запустите [`examples/distributed_training`](../examples/distributed_training/):
-он генерирует синтетические данные и обучается на них за полминуты, в том числе
-на машине без GPU.
+пройдите [`examples/basics`](../examples/basics/): там собран минимальный
+прогон на синтетике, в том числе на машине без GPU.
 
 Обучение полностью описывается одним YAML. Минимальный рабочий конфиг:
 
@@ -175,7 +174,7 @@ mlflow:
 
 metrics:
   valid_metrics:
-    _target_: avatar.metrics.RocAucScore
+    _target_: avatar.metrics.ResponseMetrics
 ```
 
 Три числа, которые чаще всего ставят неправильно, берутся из препроцессора:
@@ -222,9 +221,10 @@ model:
   ...                    # ровно тот же блок, что при обучении
 metrics:
   test_metrics:
-    _target_: avatar.metrics.ClassificationInferenceMetrics
-    input_columns_to_save: [epk_id, targets]
+    _target_: avatar.metrics.InferenceSupervisedMetrics
     path_to_save: predicts/my_run
+    save_steps: 100
+    task_type: binary_clf
 ```
 
 ```bash

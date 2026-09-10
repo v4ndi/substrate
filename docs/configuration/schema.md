@@ -131,7 +131,7 @@ train_dataloader:
 ```yaml
 metrics:
   valid_metrics:
-    _target_: avatar.metrics.RocAucScore
+    _target_: avatar.metrics.ResponseMetrics
 ```
 
 Три независимых ключа: `train_metrics`, `valid_metrics`, `test_metrics`. Любой
@@ -242,9 +242,10 @@ model:
   ...                            # та же архитектура, что при обучении
 metrics:
   test_metrics:
-    _target_: avatar.metrics.ClassificationInferenceMetrics
-    input_columns_to_save: [epk_id, targets]
+    _target_: avatar.metrics.InferenceSupervisedMetrics
     path_to_save: predicts/my_run
+    save_steps: 100
+    task_type: binary_clf
 ```
 
 Запуск:

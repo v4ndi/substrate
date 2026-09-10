@@ -95,4 +95,4 @@ response-постановка с опциональным эмбеддингом
 приватные эксперты считаются **на задачу**.
 
 Веса гейтов доступны в выходе как `task_gated_weights`; их читают
-`avatar.metrics.Entropy` и `avatar.metrics.Importance`.
+поле `task_gated_weights` выхода — распределение задачи по экспертам.

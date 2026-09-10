@@ -164,7 +164,7 @@ encoder:
 ### `avatar.nn.tabular.MLPEmbedding` (1)
 
 Узкоспециальный модуль: эмбеддит две категориальные кампанейские колонки в один
-плоский вектор. Нужен режиму `cat_feature: True` в `MLPCampaignBenchmark`.
+плоский вектор — вход для downstream-модели поверх выгруженных эмбеддингов.
 
 ### `avatar.nn.sequential.EventEncoder` (3)
 
@@ -271,17 +271,16 @@ model:
 
 Подробнее — в разделе метрик; здесь только то, что ставят в конфиг.
 
-| таргет | использований | что считает |
-|---|---|---|
-| `avatar.metrics.RocAucScore` | 8 | ROC AUC, опционально с разбивкой по группе |
-| `avatar.metrics.ClassificationInferenceMetrics` | 4 | сохраняет предсказания на диск при инференсе |
-| `avatar.metrics.UpliftMetrics` | 2 | uplift@k, qini, с опциональной калибровкой |
-| `avatar.metrics.MultiLossMetric` | 2 | усредняет компоненты составной функции потерь |
-| `avatar.metrics.CollectEmbeddings` | 1 | выгружает эмбеддинги в parquet |
-| `avatar.metrics.MLPCampaignBenchmark` | 1 | обучает MLP по скрытым состояниям и меряет по кампаниям |
-| `avatar.metrics.RegressionMetrics` | — | MAE / MSE / R² |
-| `avatar.metrics.SequenceStats` | — | статистики длин последовательностей |
-| `avatar.metrics.ResponseMetrics` | — | метрики отклика в кампанейской постановке |
+| таргет | что считает |
+|---|---|
+| `avatar.metrics.UpliftMetrics` | uplift@k, qini, калиброванные варианты и диагностика калибровки |
+| `avatar.metrics.ResponseMetrics` | ROC AUC, precision@k и recall@k в кампанейской постановке |
+| `avatar.metrics.RegressionMetrics` | MSE / MAE / MAPE |
+| `avatar.metrics.MultiLossMetric` | компоненты составной функции потерь |
+| `avatar.metrics.UniversalLossesMetric` | все поля `*loss` выхода, найденные рефлексией |
+| `avatar.metrics.CollectEmbeddings` | выгружает эмбеддинги в parquet |
+| `avatar.metrics.InferenceMultiTaskCampaignMetrics` | выгружает вероятности обеих голов при инференсе кампании |
+| `avatar.metrics.InferenceSupervisedMetrics` | выгружает предсказание на запись при инференсе |
 
 ### Обёртки
 
@@ -309,11 +308,11 @@ metrics:
         columns_to_devide: [target_attr_2, target_attr_3]
         columns_desc: [channel, group]
         metric_class:
-          _target_: avatar.metrics.RocAucScore
+          _target_: avatar.metrics.ResponseMetrics
           _partial_: true          # обязательно: по экземпляру на группу
       avg_over_regulars:
-        avg_control_roc_auc: ^channel_\d+_group_1_roc_auc_score
-        avg_target_roc_auc: ^channel_\d+_group_0_roc_auc_score
+        avg_control_roc_auc: ^channel_\d+_group_1_.*roc_auc_score
+        avg_target_roc_auc: ^channel_\d+_group_0_.*roc_auc_score
 ```
 
 ---

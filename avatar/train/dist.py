@@ -2,7 +2,8 @@
 
 This replaces ``accelerate.Accelerator``'s distributed surface. Everything the
 training loop does across ranks goes through :class:`DistEnv`: ``all_reduce``
-for scalars, ``all_gather_object`` for metric payloads, and ``barrier``.
+for scalars, ``gather_object`` onto rank 0 for metric payloads, and
+``barrier``.
 """
 
 from __future__ import annotations
@@ -18,6 +19,33 @@ import torch
 import torch.distributed as dist
 
 DEFAULT_TIMEOUT_SEC = 36_000_000
+
+#: Gloo group used for pickled payloads, or ``None`` when the default group
+#: already speaks gloo. See :func:`object_group`.
+_OBJECT_GROUP: Any = None
+
+
+def object_group() -> Any:
+    """The process group to send pickled objects through.
+
+    ``gather_object`` lowers to ``gather``, and NCCL does not implement it —
+    only ``all_gather`` — so a payload path that wants ``dst=0`` needs a CPU
+    backend even on a run whose tensors travel over NCCL. A gloo group spanning
+    the same ranks costs one extra group at startup and nothing afterwards.
+
+    Returns ``None`` when the default group is already gloo, which is what the
+    collective calls read as "use the default group".
+    """
+    return _OBJECT_GROUP
+
+
+def _init_object_group() -> None:
+    """Create the gloo payload group. Collective: every rank must reach it."""
+    global _OBJECT_GROUP
+    if _OBJECT_GROUP is not None or not dist.is_initialized():
+        return
+    if dist.get_backend() != "gloo":
+        _OBJECT_GROUP = dist.new_group(backend="gloo")
 
 
 def default_backend(device: torch.device) -> str:
@@ -87,6 +115,9 @@ class DistEnv:
             # initialised elsewhere (tests, notebooks) wins over stale env vars.
             world_size = dist.get_world_size()
             rank = dist.get_rank()
+            # Built here rather than on first use so that every rank creates it
+            # at the same point — ``new_group`` is itself a collective.
+            _init_object_group()
 
         return cls(
             rank=rank, local_rank=local_rank, world_size=world_size, device=device
@@ -130,12 +161,20 @@ class DistEnv:
         return self.all_reduce_sum(float(bool(flag)) if self.is_main else 0.0) > 0.0
 
     def gather_objects(self, obj: Any) -> list[Any]:
-        """Gather one picklable object per rank onto every rank, in rank order."""
+        """Gather one picklable object per rank onto **rank 0**, in rank order.
+
+        Every rank must call this — it is a collective — but only rank 0 gets
+        the payloads; the others get an empty list. That is what the callers
+        want: metrics are computed on rank 0 alone, and ``all_gather_object``
+        used to hand the same payloads to every rank only for the other ranks
+        to throw them away, paying ``world_size`` times the bandwidth and the
+        peak memory for it.
+        """
         if not (self.distributed and dist.is_initialized()):
             return [obj]
-        gathered: list[Any] = [None] * self.world_size
-        dist.all_gather_object(gathered, obj)
-        return gathered
+        gathered: list[Any] | None = [None] * self.world_size if self.is_main else None
+        dist.gather_object(obj, gathered, dst=0, group=object_group())
+        return gathered if self.is_main else []
 
     def destroy(self) -> None:
         if dist.is_initialized():

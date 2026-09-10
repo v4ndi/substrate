@@ -1,10 +1,9 @@
-"""Categorical-attribute embedding for the MLP campaign benchmark.
+"""Categorical-attribute embedding for a downstream campaign model.
 
 Used as the ``tabular_model`` of
-:class:`~avatar.pipeline.tabular.TabularClassification` when
-:class:`~avatar.metrics.campaign.MLPCampaignBenchmark` runs with
-``cat_feature: True`` — that mode writes ``cat_features`` into the benchmark
-parquet, and this is what consumes them. See ``docs/mlp_benchmark/instruction.md``.
+:class:`~avatar.pipeline.tabular.TabularClassification` when the model is
+trained over dumped embeddings plus two categorical campaign attributes — the
+attributes go through this module, the embeddings go straight to the head.
 """
 
 import torch

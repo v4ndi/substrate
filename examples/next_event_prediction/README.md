@@ -95,5 +95,5 @@ python -m avatar.infer --config-dir=configs --config-name=inference
 
 * [../../docs/guides/models.md](../../docs/guides/models.md) — как собирается
   последовательностный стек.
-* [../tabular_hidden_states/](../tabular_hidden_states/) — как использовать
+* [../tabular_preprocessing/](../tabular_preprocessing/) — как использовать
   полученные эмбеддинги в табличной модели.

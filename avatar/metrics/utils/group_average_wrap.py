@@ -3,10 +3,10 @@
 import re
 from statistics import mean
 
-from avatar.metrics.base import BaseMetric
+from avatar.metrics.base import BaseMetric, ScalarMetric
 
 
-class GroupAverageMetricWrapper(BaseMetric):
+class GroupAverageMetricWrapper(ScalarMetric):
     """Add averages over the metrics the wrapped metric produced.
 
     Purely a post-processing step: ``update`` is forwarded untouched, and the
@@ -44,6 +44,16 @@ class GroupAverageMetricWrapper(BaseMetric):
         self.groups = groups if groups is not None else {}
         self.avg_over_regulars = avg_over_regulars
         self._init_groups_flag = False
+
+    @property
+    def required_inputs(self):
+        """Whatever the wrapped metric needs — this wrapper reads nothing itself."""
+        return self.metric.required_inputs
+
+    @property
+    def required_outputs(self):
+        """Whatever the wrapped metric needs — this wrapper reads nothing itself."""
+        return self.metric.required_outputs
 
     def init_groups(self, result):
         if self.avg_over_regulars is not None:
