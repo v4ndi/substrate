@@ -1,0 +1,84 @@
+Мёртвый код: машинная часть отчёта metrics_review.md
+==============================================================================
+
+Ревизия: 598799e
+
+Правило: символ достижим, если его имя встречается где-либо в репозитории вне
+собственного файла. Правило переоценивает достижимость, поэтому ноль ссылок —
+сильное свидетельство, а ненулевое число не доказывает ничего.
+
+
+1. НИ ОДНОЙ ССЫЛКИ НИГДЕ — кандидаты на удаление
+------------------------------------------------------------------------------
+  avatar/data/tabular/collate.py:12                  check_columns_to_tensor
+  avatar/metrics/supervised.py:731                   PLEResponseMetrics
+  avatar/outputs.py:201                              MMoeUpliftOutput
+  avatar/outputs.py:68                               BaseClassificationOutput
+  avatar/preprocessing/spark/utils.py:13             dump_tabular_meta
+
+2. ИСПОЛЬЗУЕТСЯ ТОЛЬКО ВНУТРИ СВОЕГО ФАЙЛА — сделать приватным или экспортировать
+------------------------------------------------------------------------------
+  avatar/cam_inference.py:27                         make_campaign_batches  (1 использований в файле)
+  avatar/data/base/filter_cache.py:42                SourceFilter  (2 использований в файле)
+  avatar/metrics/supervised.py:44                    calculate_response_metrics  (1 использований в файле)
+  avatar/metrics/supervised.py:57                    calculate_regression_metrics  (1 использований в файле)
+  avatar/metrics/supervised.py:587                   MMoEResponseMetrics  (1 использований в файле)
+  avatar/metrics/supervised.py:67                    apply_calculate_metrics  (4 использований в файле)
+  avatar/metrics/uplift.py:20                        calculate_uplift_metrics  (2 использований в файле)
+  avatar/metrics/uplift.py:41                        fit_calibrator  (2 использований в файле)
+  avatar/metrics/uplift.py:54                        apply_calibration_calculate_metrics  (2 использований в файле)
+  avatar/nn/utils/ffn.py:24                          init_normalization  (1 использований в файле)
+  avatar/nn/utils/ffn.py:7                           init_activation  (1 использований в файле)
+  avatar/outputs.py:121                              BaseUpliftOutput  (1 использований в файле)
+  avatar/pipeline/multi_task/mmoe.py:33              inverse_sigmoid  (2 использований в файле)
+  avatar/preprocessing/base/io.py:42                 as_dataset  (1 использований в файле)
+  avatar/train/dist.py:23                            default_backend  (1 использований в файле)
+  avatar/train/factory.py:57                         dataset_log_params  (1 использований в файле)
+  avatar/utils/init_modules.py:17                    get_params_group  (1 использований в файле)
+  avatar/utils/logging.py:22                         print_trainable_layers  (2 использований в файле)
+  avatar/utils/performance_metrics.py:88             LocalSystemSnapshot  (3 использований в файле)
+
+3. КЛАССЫ avatar.metrics ПО ИСТОЧНИКУ ССЫЛОК
+------------------------------------------------------------------------------
+   config       — experiments/ или examples/ (рабочие конфиги)
+   example-code — питон в examples/
+   lib          — код avatar/ вне avatar/metrics/
+   docs, test   — документация и тесты
+
+  DEAD  BaseInferenceMetric                avatar/metrics/base.py:81                         docs:1
+  LIVE  BaseMetric                         avatar/metrics/base.py:16                         docs:3, example-code:1, lib:5
+  DEAD  CatboostCampaignBenchmark          avatar/metrics/campaign.py:173                    docs:2
+  LIVE  ClassificationInferenceMetrics     avatar/metrics/base.py:128                        config:4, docs:5, example-code:1
+  LIVE  CollectEmbeddings                  avatar/metrics/campaign.py:72                     config:2, docs:4, example-code:1
+  LIVE  Entropy                            avatar/metrics/moe_reg.py:15                      docs:3, example-code:1, lib:1
+  DEAD  ExpertsWorkload                    avatar/metrics/sequence_stats.py:81               docs:2
+  LIVE  GroupAverageMetricWrapper          avatar/metrics/utils/group_average_wrap.py:9      config:21, docs:7
+  DEAD  GroupDevidedMetricsWrapper         avatar/metrics/utils/group_devided_wrap.py:11     docs:6
+  DEAD  HiddensNorm                        avatar/metrics/sequence_stats.py:126              docs:1
+  LIVE  Importance                         avatar/metrics/moe_reg.py:51                      docs:3, example-code:1, lib:1
+  DEAD  InferenceCampaignMetrics           avatar/metrics/campaign.py:601                    docs:1
+  LIVE  InferenceMultiTaskCampaignMetrics  avatar/metrics/campaign.py:398                    config:23, docs:2
+  DEAD  InferenceMultiTaskResponseMetrics  avatar/metrics/campaign.py:493                    docs:1
+  DEAD  InferenceSupervisedMetrics         avatar/metrics/supervised.py:467                  docs:1
+  DEAD  MLPCampaignBenchmark               avatar/metrics/campaign.py:685                    docs:6, lib:1
+  DEAD  MMoEResponseMetrics                avatar/metrics/supervised.py:587                  нигде
+  LIVE  MultiLossMetric                    avatar/metrics/multi_loss.py:15                   config:1, docs:6, example-code:2
+  DEAD  PLEResponseMetrics                 avatar/metrics/supervised.py:731                  нигде
+  DEAD  RegressionMetrics                  avatar/metrics/supervised.py:302                  docs:2
+  DEAD  ResponseMetrics                    avatar/metrics/supervised.py:120                  docs:3
+  LIVE  RocAucScore                        avatar/metrics/classification.py:15               config:6, docs:9, example-code:4
+  test  SequenceStats                      avatar/metrics/sequence_stats.py:16               docs:2, test:1
+  LIVE  UniversalLossesMetric              avatar/metrics/loss_logging.py:9                  docs:2, example-code:1
+  LIVE  UpliftMetrics                      avatar/metrics/uplift.py:104                      config:23, docs:4, example-code:1
+
+4. compute() БЕЗ ВОЗВРАЩАЕМОГО ЗНАЧЕНИЯ (падение на scores.update(None))
+------------------------------------------------------------------------------
+  avatar/metrics/base.py:57     BaseMetric.compute
+  avatar/metrics/base.py:187    ClassificationInferenceMetrics.compute
+  avatar/metrics/campaign.py:445    InferenceMultiTaskCampaignMetrics.compute
+  avatar/metrics/campaign.py:552    InferenceMultiTaskResponseMetrics.compute
+  avatar/metrics/supervised.py:541    InferenceSupervisedMetrics.compute
+
+5. МОДУЛИ, ИМЯ КОТОРЫХ НЕ ВСТРЕЧАЕТСЯ БОЛЬШЕ НИГДЕ
+------------------------------------------------------------------------------
+  avatar/training_agruments.py

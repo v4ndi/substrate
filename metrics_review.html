@@ -1,0 +1,1277 @@
+<title>Ревью avatar.metrics</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Serif:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    --paper: #f2f4f6;
+    --card: #ffffff;
+    --ink: #14161a;
+    --ink-soft: #3a414c;
+    --muted: #666f7d;
+    --rule: #dde2e8;
+    --rule-soft: #e8ecf1;
+    --signal: #1f5fa8;
+    --code-bg: #eef1f5;
+    --sev-block: #a8342a;
+    --sev-block-bg: #f7e6e4;
+    --sev-silent: #8a6113;
+    --sev-silent-bg: #f8efdd;
+    --sev-cost: #1f6480;
+    --sev-cost-bg: #e2eef3;
+    --sev-dead: #5b6472;
+    --sev-dead-bg: #e8ebef;
+    --shadow: 0 1px 2px rgba(20, 22, 26, .05), 0 8px 24px -18px rgba(20, 22, 26, .35);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #0e1013;
+      --card: #16191e;
+      --ink: #e7eaef;
+      --ink-soft: #c3cad4;
+      --muted: #8e98a6;
+      --rule: #262b33;
+      --rule-soft: #1e232a;
+      --signal: #6aa9e8;
+      --code-bg: #1c2027;
+      --sev-block: #e88b80;
+      --sev-block-bg: #2e1b18;
+      --sev-silent: #ddb264;
+      --sev-silent-bg: #2b2317;
+      --sev-cost: #79bcd8;
+      --sev-cost-bg: #16262d;
+      --sev-dead: #99a3b1;
+      --sev-dead-bg: #1e222a;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -18px rgba(0, 0, 0, .8);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --paper: #0e1013;
+    --card: #16191e;
+    --ink: #e7eaef;
+    --ink-soft: #c3cad4;
+    --muted: #8e98a6;
+    --rule: #262b33;
+    --rule-soft: #1e232a;
+    --signal: #6aa9e8;
+    --code-bg: #1c2027;
+    --sev-block: #e88b80;
+    --sev-block-bg: #2e1b18;
+    --sev-silent: #ddb264;
+    --sev-silent-bg: #2b2317;
+    --sev-cost: #79bcd8;
+    --sev-cost-bg: #16262d;
+    --sev-dead: #99a3b1;
+    --sev-dead-bg: #1e222a;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -18px rgba(0, 0, 0, .8);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "IBM Plex Serif", Georgia, "Times New Roman", serif;
+    font-size: 16.5px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .shell {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 24px 96px;
+    display: grid;
+    grid-template-columns: 210px minmax(0, 1fr);
+    gap: 48px;
+    align-items: start;
+  }
+
+  @media (max-width: 900px) {
+    .shell { grid-template-columns: minmax(0, 1fr); gap: 0; }
+    nav.toc { display: none; }
+  }
+
+  /* ---------- masthead ---------- */
+
+  header.masthead {
+    grid-column: 1 / -1;
+    border-bottom: 2px solid var(--ink);
+    padding: 44px 0 22px;
+    margin-bottom: 36px;
+  }
+
+  .eyebrow {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11.5px;
+    letter-spacing: .13em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 14px;
+  }
+
+  h1 {
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-weight: 600;
+    font-size: clamp(30px, 5vw, 46px);
+    line-height: 1.08;
+    letter-spacing: -.02em;
+    margin: 0 0 16px;
+    text-wrap: balance;
+  }
+
+  h1 code {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: .82em;
+    font-weight: 500;
+    background: none;
+    padding: 0;
+    color: var(--signal);
+  }
+
+  .standfirst {
+    max-width: 62ch;
+    color: var(--ink-soft);
+    font-size: 18px;
+    margin: 0 0 26px;
+  }
+
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 26px;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12.5px;
+    color: var(--muted);
+  }
+
+  .meta b { color: var(--ink-soft); font-weight: 500; }
+
+  /* ---------- scoreboard ---------- */
+
+  .scoreboard {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    margin: 32px 0 8px;
+  }
+
+  .score {
+    background: var(--card);
+    padding: 16px 18px 18px;
+  }
+
+  .score .n {
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-size: 34px;
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: -.02em;
+    font-variant-numeric: tabular-nums;
+    display: block;
+    margin-bottom: 8px;
+  }
+
+  .score.block .n { color: var(--sev-block); }
+  .score.silent .n { color: var(--sev-silent); }
+  .score.cost .n { color: var(--sev-cost); }
+  .score.dead .n { color: var(--sev-dead); }
+
+  .score .lbl {
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-size: 13px;
+    line-height: 1.35;
+    color: var(--ink-soft);
+    display: block;
+  }
+
+  .score .sub {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11px;
+    color: var(--muted);
+    display: block;
+    margin-top: 5px;
+  }
+
+  /* ---------- toc ---------- */
+
+  nav.toc {
+    position: sticky;
+    top: 24px;
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-size: 13px;
+    line-height: 1.5;
+    border-left: 1px solid var(--rule);
+    padding-left: 16px;
+  }
+
+  nav.toc p {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 10.5px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 10px;
+  }
+
+  nav.toc a {
+    display: block;
+    color: var(--ink-soft);
+    text-decoration: none;
+    padding: 4px 0;
+    border-bottom: 1px solid transparent;
+  }
+
+  nav.toc a:hover { color: var(--signal); }
+  nav.toc a:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+
+  /* ---------- prose ---------- */
+
+  main { min-width: 0; }
+
+  h2 {
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-weight: 600;
+    font-size: 24px;
+    letter-spacing: -.012em;
+    line-height: 1.2;
+    margin: 60px 0 18px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--ink);
+    text-wrap: balance;
+  }
+
+  h2:first-child { margin-top: 0; }
+
+  h3 {
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-weight: 600;
+    font-size: 17px;
+    margin: 34px 0 10px;
+    line-height: 1.3;
+    text-wrap: balance;
+  }
+
+  p { margin: 0 0 15px; max-width: 68ch; }
+  main > p, section > p { max-width: 68ch; }
+
+  ul, ol { max-width: 68ch; padding-left: 22px; margin: 0 0 16px; }
+  li { margin-bottom: 8px; }
+
+  a { color: var(--signal); }
+
+  code {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: .855em;
+    background: var(--code-bg);
+    padding: .1em .32em;
+    border-radius: 2px;
+  }
+
+  pre {
+    background: var(--code-bg);
+    border-left: 2px solid var(--rule);
+    padding: 13px 16px;
+    overflow-x: auto;
+    margin: 0 0 16px;
+    font-size: 13px;
+    line-height: 1.55;
+  }
+
+  pre code { background: none; padding: 0; font-size: 13px; }
+
+  strong { font-weight: 600; }
+
+  /* ---------- findings ---------- */
+
+  .finding {
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--sev-dead);
+    box-shadow: var(--shadow);
+    padding: 20px 22px 6px;
+    margin: 0 0 18px;
+  }
+
+  .finding.block { border-left-color: var(--sev-block); }
+  .finding.silent { border-left-color: var(--sev-silent); }
+  .finding.cost { border-left-color: var(--sev-cost); }
+
+  .finding > h3 { margin-top: 0; }
+
+  .fhead {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 4px;
+  }
+
+  .fid {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 2px 7px;
+    border-radius: 2px;
+    background: var(--sev-dead-bg);
+    color: var(--sev-dead);
+  }
+
+  .finding.block .fid { background: var(--sev-block-bg); color: var(--sev-block); }
+  .finding.silent .fid { background: var(--sev-silent-bg); color: var(--sev-silent); }
+  .finding.cost .fid { background: var(--sev-cost-bg); color: var(--sev-cost); }
+
+  .ftitle {
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-weight: 600;
+    font-size: 17px;
+    line-height: 1.3;
+    margin: 0;
+    flex: 1 1 320px;
+    min-width: 0;
+  }
+
+  .proof {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 10.5px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border: 1px solid var(--rule);
+    padding: 2px 6px;
+    border-radius: 2px;
+    white-space: nowrap;
+  }
+
+  .proof.run { color: var(--sev-cost); border-color: var(--sev-cost); }
+
+  .fix {
+    border-top: 1px solid var(--rule-soft);
+    margin: 4px -22px 0;
+    padding: 12px 22px;
+    font-size: 15px;
+    color: var(--ink-soft);
+  }
+
+  .fix b {
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-size: 12px;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-right: 8px;
+  }
+
+  /* ---------- tables ---------- */
+
+  .tablewrap { overflow-x: auto; margin: 0 0 20px; border: 1px solid var(--rule); }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-size: 13.5px;
+    background: var(--card);
+  }
+
+  th, td {
+    text-align: left;
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--rule-soft);
+    vertical-align: top;
+  }
+
+  th {
+    font-weight: 600;
+    font-size: 11.5px;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border-bottom: 1px solid var(--rule);
+    white-space: nowrap;
+  }
+
+  td code { font-size: 12.5px; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; font-family: "IBM Plex Mono", ui-monospace, monospace; }
+  tr:last-child td { border-bottom: none; }
+
+  .tag {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 10.5px;
+    letter-spacing: .06em;
+    padding: 1px 6px;
+    border-radius: 2px;
+  }
+
+  .tag.live { background: var(--sev-cost-bg); color: var(--sev-cost); }
+  .tag.gone { background: var(--sev-dead-bg); color: var(--sev-dead); }
+  .tag.none { background: var(--sev-block-bg); color: var(--sev-block); }
+
+  /* ---------- callout ---------- */
+
+  .callout {
+    border: 1px solid var(--rule);
+    border-top: 2px solid var(--signal);
+    background: var(--card);
+    padding: 16px 20px 4px;
+    margin: 0 0 22px;
+    max-width: 72ch;
+  }
+
+  .callout p:last-child { margin-bottom: 12px; }
+
+  .good {
+    display: grid;
+    gap: 14px;
+    margin: 0 0 20px;
+    max-width: 72ch;
+  }
+
+  .good > div {
+    border-left: 2px solid var(--sev-cost);
+    padding-left: 14px;
+  }
+
+  .good h4 {
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-size: 14.5px;
+    font-weight: 600;
+    margin: 0 0 4px;
+  }
+
+  .good p { margin: 0; font-size: 15px; color: var(--ink-soft); }
+
+  /* ---------- plan ---------- */
+
+  ol.plan { list-style: none; padding: 0; counter-reset: step; max-width: 72ch; }
+
+  ol.plan > li {
+    counter-increment: step;
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr);
+    gap: 14px;
+    padding: 11px 0;
+    border-bottom: 1px solid var(--rule-soft);
+    margin: 0;
+  }
+
+  ol.plan > li::before {
+    content: counter(step);
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12px;
+    color: var(--muted);
+    padding-top: 3px;
+  }
+
+  .stage {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: .11em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 26px 0 4px;
+    padding-top: 14px;
+    border-top: 1px solid var(--rule);
+  }
+
+  footer {
+    grid-column: 1 / -1;
+    margin-top: 56px;
+    padding-top: 18px;
+    border-top: 1px solid var(--rule);
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    html { scroll-behavior: smooth; }
+  }
+</style>
+
+<div class="shell">
+
+  <header class="masthead">
+    <p class="eyebrow">Код-ревью · avatar_fm</p>
+    <h1>Ревью модуля <code>avatar.metrics</code></h1>
+    <p class="standfirst">
+      Схема сведения метрик по рангам в новом трейне выбрана правильно. Но между
+      контрактом, докстрингами и кодом накопился разрыв, который некому было
+      поймать: на 3024 строки модуля приходится один тестовый файл.
+    </p>
+    <div class="meta">
+      <span><b>Ревизия</b> 598799e · refactor/data-sharding-hdfs</span>
+      <span><b>Объём</b> 3024 строки · 25 классов · 13 файлов</span>
+      <span><b>Дата</b> 10.09.2026</span>
+    </div>
+
+    <div class="scoreboard">
+      <div class="score block">
+        <span class="n">3</span>
+        <span class="lbl">дефекта роняют прогон</span>
+        <span class="sub">B1 – B3</span>
+      </div>
+      <div class="score silent">
+        <span class="n">12</span>
+        <span class="lbl">тихо портят числа</span>
+        <span class="sub">S1 – S12</span>
+      </div>
+      <div class="score cost">
+        <span class="n">6</span>
+        <span class="lbl">устойчивость и стоимость</span>
+        <span class="sub">P1 – P6</span>
+      </div>
+      <div class="score dead">
+        <span class="n">50%</span>
+        <span class="lbl">модуля не используется</span>
+        <span class="sub">12 из 25 классов</span>
+      </div>
+    </div>
+  </header>
+
+  <nav class="toc">
+    <p>Разделы</p>
+    <a href="#verdict">Резюме</a>
+    <a href="#good">Что сделано хорошо</a>
+    <a href="#blocking">Ломают прогон</a>
+    <a href="#silent">Портят числа</a>
+    <a href="#cost">Устойчивость</a>
+    <a href="#proposals">Предложения</a>
+    <a href="#dead">Мёртвый код</a>
+    <a href="#plan">Порядок работ</a>
+  </nav>
+
+  <main>
+
+    <section id="verdict">
+      <h2>1. Резюме</h2>
+
+      <p>
+        Модуль устроен правильно по крупному счёту: контракт <code>update</code> /
+        <code>compute</code> / <code>reset</code> описан в документации, отделены
+        считающие числа метрики от сборщиков файлов и от бенчмарков, композиция через
+        обёртки работает. Новый цикл <code>avatar/train/evaluate.py</code> решил самую
+        тяжёлую задачу верно: неаддитивные метрики (ROC AUC, qini) считаются по всей
+        популяции на ранге 0, а не по шардам с усреднением.
+      </p>
+
+      <p>
+        Проблема в другом. Ниже 3 дефекта, ломающих прогон, и 12, тихо портящих числа.
+        Половина воспроизводится в три строки — и это, собственно, диагноз: без тестов
+        расхождения между тем, что написано в докстринге, и тем, что считает код,
+        копились молча.
+      </p>
+
+      <div class="callout">
+        <p>
+          Всё, помеченное <span class="proof run">запущено</span>, воспроизведено на
+          этой ревизии скриптом <code>metrics_review_repro.py</code>, а не выведено
+          чтением. Помеченное <span class="proof">по коду</span> — вывод из чтения.
+        </p>
+      </div>
+
+      <div class="tablewrap">
+        <table>
+          <thead>
+            <tr><th>Часть модуля</th><th>Состояние</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Контракт <code>BaseMetric</code> и его место в трейне</td><td>хорошо, но не типизирован по видам метрик</td></tr>
+            <tr><td><code>avatar/train/evaluate.py</code> — сведение по рангам</td><td>правильная схема, дорогая реализация</td></tr>
+            <tr><td><code>RocAucScore</code>, обёртки групп</td><td>рабочие, есть краевые дефекты</td></tr>
+            <tr><td><code>UpliftMetrics</code></td><td>методологически некорректная калибровка + <code>assert</code> в проде</td></tr>
+            <tr><td><code>supervised.py</code></td><td>слабее всего: 2 из 5 классов мертвы, в живых — схлопывание ключей</td></tr>
+            <tr><td><code>campaign.py</code></td><td>сборщики рабочие, 3 из 6 классов мертвы</td></tr>
+            <tr><td><code>moe_reg</code>, <code>loss_logging</code>, <code>multi_loss</code></td><td>маленькие, и все три считают не то, что написано</td></tr>
+            <tr><td>Тесты</td><td>практически отсутствуют</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="good">
+      <h2>2. Что сделано хорошо</h2>
+      <p>Отмечаю, чтобы при правках это не потерялось.</p>
+
+      <div class="good">
+        <div>
+          <h4>Режим сведения выбирается по признаку шардирования датасета</h4>
+          <p>
+            Реплицированный датасет не собирается — иначе каждая запись попала бы в
+            метрику <code>world_size</code> раз. Форвард при этом выполняют все ранги,
+            чтобы никто не завис на коллективе. Тонкое место, сделано верно.
+          </p>
+        </div>
+        <div>
+          <h4><code>compute</code> только на ранге 0, и решения рассылаются оттуда же</h4>
+          <p>
+            Альтернатива — сводить «хотя бы один ранг сказал стоп» — привела бы к
+            рассинхрону чекпоинтов между рангами.
+          </p>
+        </div>
+        <div>
+          <h4>Обёртка групп требует <code>_partial_: true</code>, и это объяснено</h4>
+          <p>
+            Без фабрики все группы делили бы один накопитель. Ровно та ошибка, которую
+            легко сделать и невозможно заметить по логам.
+          </p>
+        </div>
+        <div>
+          <h4><code>UniversalLossesMetric</code> находит поля рефлексией</h4>
+          <p>
+            Новая вспомогательная функция потерь начинает логироваться без правки
+            конфига.
+          </p>
+        </div>
+        <div>
+          <h4>Документация модуля выше среднего по репозиторию</h4>
+          <p>
+            Описан и контракт, и оба режима сведения, и композиция обёрток. Именно
+            поэтому расхождения кода с ней так хорошо видны.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section id="blocking">
+      <h2>3. Дефекты, ломающие прогон</h2>
+
+      <article class="finding block">
+        <div class="fhead">
+          <span class="fid">B1</span>
+          <h3 class="ftitle">Четыре сборщика возвращают <code>None</code> из <code>compute()</code> — новый трейн падает на этом</h3>
+          <span class="proof run">запущено</span>
+        </div>
+        <p>
+          Цикл делает <code>scores.update(metric.compute())</code> в трёх местах:
+          валидация, инференс и train-метрики. А <code>compute()</code> не возвращает
+          ничего у четырёх классов:
+        </p>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Класс</th><th>Где</th><th>Ссылок в конфигах</th></tr></thead>
+            <tbody>
+              <tr><td><code>InferenceMultiTaskCampaignMetrics</code></td><td><code>campaign.py:445</code></td><td class="num">23</td></tr>
+              <tr><td><code>ClassificationInferenceMetrics</code></td><td><code>base.py:187</code></td><td class="num">4</td></tr>
+              <tr><td><code>InferenceMultiTaskResponseMetrics</code></td><td><code>campaign.py:552</code></td><td class="num">0</td></tr>
+              <tr><td><code>InferenceSupervisedMetrics</code></td><td><code>supervised.py:541</code></td><td class="num">0</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <pre><code>{}.update(None)  ->  TypeError: 'NoneType' object is not iterable</code></pre>
+        <p>
+          Это <strong>регрессия рефакторинга</strong>: в базовой ревизии
+          <code>7c96504</code> инференс делал <code>scores = metrics.compute()</code> и
+          спокойно жил с <code>None</code>. Новый <code>predict()</code> превратил это в
+          падение — в самом конце прогона, уже после того, как parquet записан. Данные
+          не теряются, но задача завершается с ненулевым кодом.
+        </p>
+        <p>
+          Соседний <code>CollectEmbeddings.compute</code> возвращает <code>{}</code> и
+          работает: правильный ответ в модуле уже есть, просто не везде.
+        </p>
+        <div class="fix"><b>Фикс</b><code>return {}</code> в четырёх местах — минута работы. Но настоящая причина в контракте, см. предложение 1.</div>
+      </article>
+
+      <article class="finding block">
+        <div class="fhead">
+          <span class="fid">B2</span>
+          <h3 class="ftitle"><code>assert</code> внутри метрики убивает обучение</h3>
+          <span class="proof run">на практике</span>
+        </div>
+        <p>Это ровно то, обо что споткнулась кампания сравнения обучений в прошлой задаче.</p>
+        <pre><code>assert abs(calib_c_roc_auc - c_roc_auc) &lt; 0.01
+assert abs(calib_t_roc_auc - t_roc_auc) &lt; 0.01</code></pre>
+        <p>
+          Проверка сама по себе разумная: бета-калибровка монотонна и не должна менять
+          ранжирование. Но недообученная модель выдаёт почти константные скоры, ROC AUC
+          на них шумит сильнее 0.01 — и <strong>валидация роняет весь прогон
+          обучения</strong>. Метрика не должна иметь права остановить обучение: её
+          задача — сообщить число.
+        </p>
+        <div class="fix"><b>Фикс</b>Превратить проверку в метрику: писать <code>calibration_rank_shift</code> в результат и предупреждать при превышении порога. Проблема видна в MLflow, прогон живёт.</div>
+      </article>
+
+      <article class="finding block">
+        <div class="fhead">
+          <span class="fid">B3</span>
+          <h3 class="ftitle"><code>RegressionMetrics</code> схлопывает все метрики в один ключ</h3>
+          <span class="proof run">запущено</span>
+        </div>
+        <p><code>supervised.py:433</code>:</p>
+        <pre><code>f"{task_name}_" if len(task_name) != 0 else "" + key: val</code></pre>
+        <p>
+          Приоритет операторов разбирает это как
+          <code>(f"{task_name}_") if cond else ("" + key)</code>. При непустом
+          <code>task_name</code> ключом становится <code>"prod_a_"</code> —
+          <strong>без имени метрики</strong>. Все три метрики пишутся в один ключ,
+          выживает последняя:
+        </p>
+        <pre><code>{'mse': 1.0, 'mae': 2.0, 'mape': 3.0}  ->  {'prod_a_': 3.0}</code></pre>
+        <p>
+          При пустом <code>task_name</code> ветка другая и всё корректно, поэтому дефект
+          виден только в многозадачном режиме.
+        </p>
+        <div class="fix"><b>Фикс</b>Как в соседних классах: <code>f"task_{task_name}_{key}" if len(str(task_name)) != 0 else key</code>.</div>
+      </article>
+    </section>
+
+    <section id="silent">
+      <h2>4. Дефекты, тихо портящие числа</h2>
+
+      <article class="finding silent">
+        <div class="fhead">
+          <span class="fid">S1</span>
+          <h3 class="ftitle"><code>Entropy</code> возвращает энтропию с обратным знаком</h3>
+          <span class="proof run">запущено</span>
+        </div>
+        <p>
+          <code>moe_reg.py:35</code> считает <code>sum(p·log p) / log(n)</code>, тогда
+          как нормированная энтропия — это <code>−sum(p·log p) / log(n)</code>:
+        </p>
+        <pre><code>равномерно по 4 экспертам -> -1.0000   докстринг обещает ~ +1
+коллапс на одного         -> -0.0000   докстринг обещает ~  0</code></pre>
+        <p>
+          Метрика монотонна и как индикатор работает, но знак и интервал не те, что
+          написаны: дашборд с «энтропией −1 = здорово» читается наоборот. Соседний
+          <code>ExpertsWorkload</code> берёт минус правильно — в модуле две реализации
+          одной величины с разным знаком.
+        </p>
+      </article>
+
+      <article class="finding silent">
+        <div class="fhead">
+          <span class="fid">S2</span>
+          <h3 class="ftitle"><code>MultiLossMetric</code>: среднее отношений вместо отношения сумм, и <code>compute</code> не идемпотентен</h3>
+          <span class="proof run">запущено</span>
+        </div>
+        <p>Три дефекта в двадцати строках:</p>
+        <ol>
+          <li>
+            Считается <code>mean(loss_i / n_i)</code> вместо
+            <code>sum(loss_i) / sum(n_i)</code>. На батчах <code>(2, 4)</code> и
+            <code>(4, 2)</code> получается <strong>1.25</strong> вместо корректной
+            <strong>1.0</strong> — ровно то смещение, которое докстринг обещает устранить.
+          </li>
+          <li>
+            <code>compute()</code> мутирует <code>self.losses</code>, подменяя список
+            числом. Второй вызов даёт <strong>0.46875</strong> — мусор. Контракт явно
+            требует «Should not modify internal state».
+          </li>
+          <li>
+            <code>if self.num_items[attribute] != 0</code> сравнивает <strong>список</strong>
+            с нулём — всегда истина, ветка <code>else</code> недостижима.
+          </li>
+        </ol>
+      </article>
+
+      <article class="finding silent">
+        <div class="fhead">
+          <span class="fid">S3</span>
+          <h3 class="ftitle"><code>UniversalLossesMetric</code> делит на глобальный счётчик батчей</h3>
+          <span class="proof run">запущено</span>
+        </div>
+        <p>
+          Докстринг обещает: потеря, применимая не ко всем батчам, усредняется по тем,
+          где она есть. Код использует общий <code>update_counter</code>. Потеря,
+          присутствующая в 1 батче из 4 и всегда равная 1.0, логируется как
+          <strong>0.25</strong>. Плюс среднее по батчам не взвешено размером батча —
+          последний неполный батч имеет тот же вес, что и полный.
+        </p>
+      </article>
+
+      <article class="finding silent">
+        <div class="fhead">
+          <span class="fid">S4</span>
+          <h3 class="ftitle"><code>RocAucScore</code> возвращает <code>nan</code>, и один <code>nan</code> навсегда выключает раннюю остановку</h3>
+          <span class="proof run">запущено</span>
+        </div>
+        <p>
+          Защита асимметрична: <code>sum(targets) &gt; 0</code> ловит срез без единого
+          позитива (возвращается 0.5), но не ловит срез <strong>из одних позитивов</strong> —
+          там sklearn предупреждает и возвращает <code>nan</code>. Дальше:
+        </p>
+        <pre><code>elif score &lt; self.best_score + self.delta:   # nan &lt; nan  ->  False</code></pre>
+        <p>
+          Сравнение с <code>nan</code> всегда ложно, поэтому исполняется ветка
+          «улучшение»: <code>best_score = nan</code>, счётчик обнуляется. После этого
+          <strong>любой</strong> следующий скор тоже даёт <code>False</code> — ранняя
+          остановка не сработает уже никогда, а <code>best_metric</code> останется
+          <code>nan</code>.
+        </p>
+        <div class="fix"><b>Фикс</b>Проверять <code>len(set(targets)) &gt; 1</code>, а не сумму; и научить <code>EarlyStopping</code> пропускать нечисловой скор вместо того, чтобы принимать его за рекорд.</div>
+      </article>
+
+      <article class="finding silent">
+        <div class="fhead">
+          <span class="fid">S5</span>
+          <h3 class="ftitle"><code>GroupAverageMetricWrapper</code> фиксирует regex-группы на первом <code>compute</code></h3>
+          <span class="proof run">запущено</span>
+        </div>
+        <p>
+          Список имён под регулярное выражение вычисляется один раз. А обёртка,
+          делящая популяцию, создаёт группы <strong>лениво, по мере появления в
+          данных</strong>:
+        </p>
+        <pre><code>эпоха 1 -> {'g_0_auc': 1.0, 'avg_auc': 1.0}
+эпоха 2 -> {'g_0_auc': 1.0, 'g_1_auc': 0.0, 'avg_auc': 1.0}</code></pre>
+        <p>
+          Среднее по определению не полное, и в логах это не видно. Обёртка используется
+          в 21 конфиге — самая популярная в модуле.
+        </p>
+        <div class="fix"><b>Фикс</b>Пересчитывать группы на каждом <code>compute</code> — это дешёвый поиск по десяткам имён, кэшировать нечего.</div>
+      </article>
+
+      <article class="finding silent">
+        <div class="fhead">
+          <span class="fid">S6</span>
+          <h3 class="ftitle"><code>UpliftMetrics</code>: калибратор обучается и проверяется на одних и тех же строках</h3>
+          <span class="proof">по коду</span>
+        </div>
+        <p>
+          Если в батче нет колонки <code>split_type</code> — а её нет во всех конфигах
+          пилота, — весь срез помечается как <code>"calib"</code>. Тогда тестовая маска
+          пуста, калибратор фитится на калибровочном срезе и на нём же оценивается, и в
+          главную метрику прогона уходит <strong>in-sample</strong> число. Проверка
+          <code>is_calib=True</code> при этом всегда проходит именно потому, что данные
+          те же — она проверяет не качество, а тождество.
+        </p>
+        <div class="fix"><b>Фикс</b>Без <code>split_type</code> либо не выдавать калиброванные метрики вовсе, либо считать их cross-fitting'ом. Второе честно и стоит одного лишнего прохода по массиву.</div>
+      </article>
+
+      <article class="finding silent">
+        <div class="fhead">
+          <span class="fid">S7</span>
+          <h3 class="ftitle"><code>require_calibration: False</code> не отключает калибровку</h3>
+          <span class="proof run">на практике</span>
+        </div>
+        <p>
+          Флаг влияет только на то, какая метрика попадает в <code>mean_*</code>.
+          Калибраторы фитятся всегда, ассерты из B2 выполняются всегда. Пользователь,
+          выключивший флаг, чтобы обойти падение, обнаружит, что оно осталось. Имя
+          параметра обещает не то, что он делает.
+        </p>
+      </article>
+
+      <article class="finding silent">
+        <div class="fhead">
+          <span class="fid">S8</span>
+          <h3 class="ftitle">При <code>require_calibration: True</code> две разные метрики получают одно значение</h3>
+          <span class="proof">по коду</span>
+        </div>
+        <p>
+          <code>mean_calibrated_X</code> и <code>mean_X</code> записываются из одного и
+          того же списка. Некалиброванное среднее в этом режиме получить невозможно,
+          хотя ключ для него в логе есть.
+        </p>
+      </article>
+
+      <article class="finding silent">
+        <div class="fhead">
+          <span class="fid">S9</span>
+          <h3 class="ftitle">Метрика молча дописывает в данные позитивный пример</h3>
+          <span class="proof">по коду</span>
+        </div>
+        <pre><code>if y_true.sum() == 0:
+    y_true[0] += 1</code></pre>
+        <p>
+          Мотив понятен и честно описан в докстринге. Но происходит это без единой
+          строчки в логе, а <code>+= 1</code> вместо <code>= 1</code> на неудачных
+          данных даст метку <code>2</code>. Правильнее вернуть <code>nan</code> или
+          пропустить группу — и <em>сказать об этом</em>.
+        </p>
+      </article>
+
+      <article class="finding silent">
+        <div class="fhead">
+          <span class="fid">S10</span>
+          <h3 class="ftitle"><code>PLEResponseMetrics</code>: ключ перезаписывается в цикле</h3>
+          <span class="proof">по коду</span>
+        </div>
+        <p>
+          В глобальной ветке <code>_any_specific_expert_mean</code> пишется внутри цикла
+          по индексу эксперта, а значение от этого индекса зависит. Все итерации, кроме
+          последней, выброшены; итоговое число — сумма по хвосту от последнего индекса,
+          а не «утилизация специфичных экспертов». Класс мёртв, но если его будут
+          оживлять — это первое, что нужно поправить.
+        </p>
+      </article>
+
+      <article class="finding silent">
+        <div class="fhead">
+          <span class="fid">S11</span>
+          <h3 class="ftitle"><code>SequenceStats</code> делит на размер первого батча</h3>
+          <span class="proof">по коду</span>
+        </div>
+        <p>
+          Знаменатель — <code>len(context_lengths) * self._batch_size</code>, где
+          <code>_batch_size</code> запомнен с первого батча. Последний батч почти всегда
+          неполный, значит средняя длина контекста систематически занижена.
+        </p>
+      </article>
+
+      <article class="finding silent">
+        <div class="fhead">
+          <span class="fid">S12</span>
+          <h3 class="ftitle">Обёртка групп не забывает группы при <code>reset()</code></h3>
+          <span class="proof">по коду</span>
+        </div>
+        <p>
+          Сбрасываются вложенные метрики, но не словарь групп. Группа, бывшая на первой
+          эпохе и исчезнувшая на второй, останется, и её пустая метрика попадёт в
+          <code>compute</code>. Контракт требует «as if newly instantiated».
+        </p>
+      </article>
+    </section>
+
+    <section id="cost">
+      <h2>5. Устойчивость и стоимость на новом трейне</h2>
+      <p>Здесь ничего не сломано, но новый трейн изменил цену этих решений.</p>
+
+      <article class="finding cost">
+        <div class="fhead">
+          <span class="fid">P1</span>
+          <h3 class="ftitle"><code>all_gather_object</code> там, где нужен <code>gather_object(dst=0)</code></h3>
+          <span class="proof">по коду</span>
+        </div>
+        <p>
+          <code>dist.py:132</code> собирает объект <strong>на все ранги</strong>, после
+          чего результат отбрасывается везде, кроме нулевого. Трафик и пиковая память
+          завышены в <code>world_size</code> раз без всякой пользы.
+        </p>
+      </article>
+
+      <article class="finding cost">
+        <div class="fhead">
+          <span class="fid">P2</span>
+          <h3 class="ftitle">Через сеть гоняются целые батчи, включая то, что метрике не нужно</h3>
+          <span class="proof">по коду</span>
+        </div>
+        <p>
+          Сериализуется <code>(batch, output)</code> целиком: все входные тензоры, все
+          скрытые состояния, все головы. <code>RocAucScore</code> читает из этого два
+          поля. При record-level шардировании это и есть главный потолок пропускной
+          способности валидации.
+        </p>
+        <p>
+          Отдельно: <code>TrainMetricsCallback</code> делает этот сбор <strong>на каждом
+          шаге обучения</strong>, а не раз в эпоху.
+        </p>
+        <div class="fix"><b>Дешёвый фикс</b>Дать метрике декларацию нужных полей — <code>required_inputs</code> / <code>required_outputs</code> — и собирать только их.</div>
+      </article>
+
+      <article class="finding cost">
+        <div class="fhead">
+          <span class="fid">P3</span>
+          <h3 class="ftitle"><code>os.makedirs(..., exist_ok=False)</code> роняет второй запуск</h3>
+          <span class="proof">по коду</span>
+        </div>
+        <p>
+          Директория от предыдущего прогона приводит к <code>FileExistsError</code> при
+          <em>создании</em> метрики — то есть до начала обучения. Соседние места в том же
+          модуле используют <code>exist_ok=True</code>. Разнобой.
+        </p>
+      </article>
+
+      <article class="finding cost">
+        <div class="fhead">
+          <span class="fid">P4</span>
+          <h3 class="ftitle">Имена файлов с точностью до секунды затирают друг друга</h3>
+          <span class="proof">по коду</span>
+        </div>
+        <p>
+          Пять мест строят имя из <code>datetime.now()</code> с точностью до секунды.
+          Сборщики сбрасывают буфер каждые <code>save_steps</code> батчей; два сброса
+          внутри одной секунды — обычное дело, и второй parquet <strong>молча затирает
+          первый</strong>. Нужен монотонный счётчик части.
+        </p>
+      </article>
+
+      <article class="finding cost">
+        <div class="fhead">
+          <span class="fid">P5</span>
+          <h3 class="ftitle">Обёртка групп не работает на train-метриках</h3>
+          <span class="proof run">запущено</span>
+        </div>
+        <p>
+          <code>copy.deepcopy(outputs)</code> безопасен на валидации
+          (<code>inference_mode</code>), но на выходе обучающего шага тензоры не листовые:
+        </p>
+        <pre><code>RuntimeError: Only Tensors created explicitly by the user
+(graph leaves) support the deepcopy protocol at the moment.</code></pre>
+        <p>
+          Плюс сам по себе deepcopy всего выхода на каждую группу и каждый батч — это
+          лишние копии порядка «групп × размер батча», тогда как нужен только срез
+          логитов.
+        </p>
+      </article>
+
+      <article class="finding cost">
+        <div class="fhead">
+          <span class="fid">P6</span>
+          <h3 class="ftitle"><code>print</code> вместо логгера в семи местах</h3>
+          <span class="proof">по коду</span>
+        </div>
+        <p>
+          В многоранговом прогоне это перемешанный вывод без отметки ранга. Один из семи
+          (<code>sequence_stats.py:69</code>) печатает весь словарь статистик на каждый
+          <code>compute</code> — отладочный вывод, забытый в коде.
+        </p>
+      </article>
+    </section>
+
+    <section id="proposals">
+      <h2>6. Что предлагаю поменять</h2>
+
+      <h3>1. Разделить контракт на «числа» и «файлы»</h3>
+      <p>
+        Сейчас <code>compute()</code> обязан возвращать <code>dict[str, float]</code>, но
+        половина наследников по смыслу возвращает файл. Отсюда четыре класса, забывшие
+        <code>return {}</code>, и падение на самом ходовом конфиге.
+      </p>
+      <pre><code>class ScalarMetric(BaseMetric):
+    def compute(self) -> dict[str, float]: ...
+
+class ArtifactMetric(BaseMetric):
+    def flush(self) -> None: ...          # пишет parquet
+    def compute(self) -> dict[str, float]:
+        self.flush()
+        return {}                          # один раз, в базовом классе</code></pre>
+      <p>
+        Цикл тогда не может получить <code>None</code> в принципе — не потому, что все
+        наследники аккуратны, а потому, что возвращать <code>None</code> неоткуда.
+        Дешевле, чем ловить это ревью.
+      </p>
+
+      <h3>2. Перейти на контракт torchmetrics для аддитивной части</h3>
+      <p>
+        Индустриальный стандарт для PyTorch — <code>torchmetrics.Metric</code>: состояние
+        объявляется через <code>add_state(..., dist_reduce_fx=...)</code>, синхронизация
+        между рангами происходит внутри <code>compute()</code>. Что это даёт здесь:
+      </p>
+      <ul>
+        <li>
+          <strong>аддитивные метрики</strong> сводятся <code>all_reduce</code> по
+          нескольким скалярам вместо пересылки батчей — это снимает P2 для большей части
+          метрик;
+        </li>
+        <li>
+          <strong>неаддитивные</strong> (<code>BinaryAUROC</code> есть готовый) гоняют по
+          сети <em>только</em> <code>preds</code> и <code>target</code>, а не весь батч с
+          эмбеддингами;
+        </li>
+        <li>исчезает целый класс дефектов S2 / S3 — накопители пишутся декларативно.</li>
+      </ul>
+      <p>
+        Специфичные для задачи метрики — uplift, qini, кампанейские сборщики — на
+        torchmetrics не переводятся и остаются своими. Их и стоит оставить: в них
+        ценность модуля. Реалистичный порядок: сначала предложения 1 и 3, потом
+        <code>RocAucScore</code> → <code>BinaryAUROC</code> как пилот.
+      </p>
+
+      <h3>3. Декларация нужных полей вместо пересылки всего батча</h3>
+      <p>
+        Самое выгодное соотношение «эффект / объём правки» из всего списка: две строки
+        на метрику плюс фильтр в цикле оценки и в train-колбэке.
+      </p>
+
+      <h3>4. Метрика не имеет права останавливать обучение</h3>
+      <p>
+        Убрать <code>assert</code> из <code>uplift.py</code> (B2) и из
+        <code>sequence_stats.py:105</code> — там <code>assert hasattr(...) is not None</code>,
+        выражение всегда истинно, проверка декоративная. Общее правило: невалидные данные
+        → предупреждение и пропуск ключа; исключение допустимо только при конструировании
+        метрики, до старта обучения.
+      </p>
+
+      <h3>5. Числовая гигиена на границе</h3>
+      <ul>
+        <li>Возвращать <code>float(...)</code>, а не <code>np.float64</code> и не внутренний <code>defaultdict</code> — две метрики отдают наружу собственное состояние, и вызывающий может его испортить.</li>
+        <li>Не писать <code>nan</code> в результат: пропускать ключ и предупреждать. Тогда S4 не сможет сломать раннюю остановку, даже если проскочит.</li>
+        <li><code>EarlyStopping</code> должен явно игнорировать нечисловой скор.</li>
+      </ul>
+
+      <h3>6. Убрать тройное дублирование блока task/group</h3>
+      <p>
+        <code>UpliftMetrics.compute</code>, <code>ResponseMetrics.compute</code> и
+        <code>RegressionMetrics.compute</code> — три копии одного ~100-строчного цикла с
+        одинаковым хвостом сохранения submit'а. B3 живёт ровно в той копии, куда
+        исправление не доехало. Общий <code>_TaskGroupScorer</code> убирает ~200 строк и
+        один класс дефектов.
+      </p>
+
+      <h3>7. Опечатки в публичном API</h3>
+      <p>
+        <code>GroupDevidedMetricsWrapper</code>, параметр <code>columns_to_devide</code>,
+        файл <code>group_devided_wrap.py</code> (правильно — divided). Переименовать с
+        шимом на один релиз — тем же приёмом, каким только что убрали шимы в
+        <code>avatar/nn</code>. Класс используется только в двух yaml внутри
+        <code>docs/</code>, так что цена сейчас минимальна; через полгода будет выше.
+      </p>
+
+      <h3>8. Тесты</h3>
+      <p>Главный пункт: без него остальные не удержатся. Минимум:</p>
+      <ul>
+        <li>
+          <strong>контрактные тесты, параметризованные по всем классам модуля</strong>:
+          <code>compute()</code> дважды подряд даёт одно и то же; <code>reset()</code>
+          возвращает в исходное состояние; <code>compute()</code> всегда возвращает
+          <code>dict</code>. Эти три теста ловят B1, S2 и S12 разом;
+        </li>
+        <li><strong>золотые значения</strong> против sklearn / sklift на фиксированном массиве — ловит S1, S2, S3, S11;</li>
+        <li><strong>краевые случаи</strong>: срез из одних позитивов, из одних негативов, пустой, группа появляется на второй эпохе — ловит S4 и S5.</li>
+      </ul>
+    </section>
+
+    <section id="dead">
+      <h2>7. Анализ мёртвого кода</h2>
+
+      <div class="callout">
+        <p>
+          <strong>Правило.</strong> Символ достижим, если его имя встречается где-либо в
+          репозитории вне собственного файла: в коде, в Hydra-конфиге, в тесте, в
+          документации. Правило заведомо переоценивает достижимость, поэтому
+          <strong>ноль ссылок — сильное свидетельство</strong>, а ненулевое число не
+          доказывает ничего.
+        </p>
+      </div>
+
+      <h3>Мёртвые классы в <code>avatar.metrics</code> — 12 из 25, 1507 строк из 3024</h3>
+
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Класс</th><th>Файл</th><th>Строк</th><th>Ссылки</th></tr></thead>
+          <tbody>
+            <tr><td><code>MMoEResponseMetrics</code></td><td><code>supervised.py:587</code></td><td class="num">142</td><td><span class="tag none">нигде</span></td></tr>
+            <tr><td><code>PLEResponseMetrics</code></td><td><code>supervised.py:731</code></td><td class="num">123</td><td><span class="tag none">нигде</span></td></tr>
+            <tr><td><code>CatboostCampaignBenchmark</code></td><td><code>campaign.py:173</code></td><td class="num">222</td><td><span class="tag gone">только docs</span></td></tr>
+            <tr><td><code>MLPCampaignBenchmark</code></td><td><code>campaign.py:685</code></td><td class="num">184</td><td><span class="tag gone">только docs</span></td></tr>
+            <tr><td><code>ResponseMetrics</code></td><td><code>supervised.py:120</code></td><td class="num">180</td><td><span class="tag gone">только docs</span></td></tr>
+            <tr><td><code>RegressionMetrics</code></td><td><code>supervised.py:302</code></td><td class="num">163</td><td><span class="tag gone">только docs</span></td></tr>
+            <tr><td><code>InferenceSupervisedMetrics</code></td><td><code>supervised.py:467</code></td><td class="num">118</td><td><span class="tag gone">только docs</span></td></tr>
+            <tr><td><code>InferenceMultiTaskResponseMetrics</code></td><td><code>campaign.py:493</code></td><td class="num">105</td><td><span class="tag gone">только docs</span></td></tr>
+            <tr><td><code>GroupDevidedMetricsWrapper</code></td><td><code>group_devided_wrap.py:11</code></td><td class="num">104</td><td><span class="tag gone">только docs</span></td></tr>
+            <tr><td><code>InferenceCampaignMetrics</code></td><td><code>campaign.py:601</code></td><td class="num">82</td><td><span class="tag gone">только docs</span></td></tr>
+            <tr><td><code>ExpertsWorkload</code></td><td><code>sequence_stats.py:81</code></td><td class="num">43</td><td><span class="tag gone">только docs</span></td></tr>
+            <tr><td><code>HiddensNorm</code></td><td><code>sequence_stats.py:126</code></td><td class="num">41</td><td><span class="tag gone">только docs</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>Два уточнения, чтобы таблицу не читали слишком буквально:</p>
+      <ul>
+        <li>
+          <code>BaseInferenceMetric</code> машина помечает мёртвым, но это ложное
+          срабатывание: правило не смотрит внутрь самого пакета, а его наследник
+          <code>ClassificationInferenceMetrics</code> живой. Класс нужен.
+        </li>
+        <li>
+          <code>SequenceStats</code> не мёртв и не жив: у него есть единственный на весь
+          модуль тест, но нет ни одного конфига.
+        </li>
+      </ul>
+
+      <p>Отдельно про два класса из таблицы:</p>
+      <ul>
+        <li>
+          <strong><code>ExpertsWorkload</code></strong> нельзя использовать, даже если
+          захотеть: его <code>compute</code> возвращает скаляр, а не словарь, и
+          <code>scores.update(...)</code> на нём упадёт. Это честно написано в его
+          собственном докстринге — класс документирован как неработающий и оставлен в
+          <code>__all__</code>.
+        </li>
+        <li>
+          <strong><code>GroupDevidedMetricsWrapper</code></strong> — единственный, кого
+          жалко: он описан в руководстве как одна из двух основных обёрток, а его пара
+          живёт в 21 конфиге. Но в рабочих конфигах он не встречается ни разу. Это не
+          «удалить», это расхождение документации с практикой: либо обёртку начать
+          использовать, либо переписать раздел документации.
+        </li>
+      </ul>
+
+      <div class="callout">
+        <p>
+          <strong>Что предлагаю удалить:</strong> <code>MMoEResponseMetrics</code>,
+          <code>PLEResponseMetrics</code>, <code>InferenceSupervisedMetrics</code>,
+          <code>InferenceCampaignMetrics</code>, <code>InferenceMultiTaskResponseMetrics</code>,
+          <code>ExpertsWorkload</code>, <code>HiddensNorm</code> — семь классов, 654 строки,
+          без единой ссылки за пределами документации; два из них вдобавок содержат
+          известные дефекты. Остальные четыре — обсудить: возможно, они нужны внешним
+          конфигам вне репозитория, как были нужны шимы <code>avatar.nn</code>.
+        </p>
+      </div>
+
+      <h3>Мёртвый код вне <code>avatar.metrics</code></h3>
+
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Символ</th><th>Где</th></tr></thead>
+          <tbody>
+            <tr><td><code>check_columns_to_tensor</code></td><td><code>avatar/data/tabular/collate.py:12</code></td></tr>
+            <tr><td><code>BaseClassificationOutput</code></td><td><code>avatar/outputs.py:68</code></td></tr>
+            <tr><td><code>MMoeUpliftOutput</code></td><td><code>avatar/outputs.py:201</code></td></tr>
+            <tr><td><code>dump_tabular_meta</code></td><td><code>avatar/preprocessing/spark/utils.py:13</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        Модуль целиком: <strong><code>avatar/training_agruments.py</code></strong>
+        (15 строк) — шим обратной совместимости для опечатки в имени модуля, из той же
+        семьи, что три пакета <code>avatar.nn</code>, удалённые в PR&nbsp;#6. Его имя не
+        встречается больше нигде в репозитории. Логично убрать вместе с ними, но это
+        внешне видимый путь — решение за вами.
+      </p>
+
+      <p>
+        Ещё 19 публичных символов используются только внутри своего файла и должны стать
+        приватными или попасть в <code>__all__</code>. Плюс закомментированный код в семи
+        местах, который ruff считает кодом, и ещё один блок из семи строк прямо внутри
+        словаря в <code>uplift.py</code>, который ruff не поймал.
+      </p>
+    </section>
+
+    <section id="plan">
+      <h2>8. Порядок работ</h2>
+      <p>Оценки — по объёму правки, не по календарю.</p>
+
+      <p class="stage">Сначала — правит поведение, полчаса на всё</p>
+      <ol class="plan">
+        <li><span><strong>B1</strong> — <code>return {}</code> в четырёх <code>compute</code>. Разблокирует 23 конфига кампании.</span></li>
+        <li><span><strong>B3</strong> — приоритет операторов в <code>supervised.py:433</code>.</span></li>
+        <li><span><strong>S4</strong> — проверка на два класса вместо суммы, плюс <code>EarlyStopping</code>, игнорирующий <code>nan</code>.</span></li>
+        <li><span><strong>B2</strong> — <code>assert</code> → предупреждение и метрика <code>calibration_rank_shift</code>.</span></li>
+      </ol>
+
+      <p class="stage">Потом — правит числа</p>
+      <ol class="plan" start="5">
+        <li><span><strong>S2, S3</strong> — накопители в <code>MultiLossMetric</code> и <code>UniversalLossesMetric</code>.</span></li>
+        <li><span><strong>S1</strong> — знак энтропии, и убрать вторую реализацию.</span></li>
+        <li><span><strong>S5</strong> — пересчёт regex-групп на каждом <code>compute</code>.</span></li>
+        <li><span><strong>S6, S7, S8</strong> — честная калибровка и осмысленный <code>require_calibration</code>.</span></li>
+      </ol>
+
+      <p class="stage">Параллельно — без этого предыдущее развалится обратно</p>
+      <ol class="plan" start="9">
+        <li><span>Контрактные тесты по всем классам модуля, золотые значения, краевые случаи.</span></li>
+      </ol>
+
+      <p class="stage">Затем — структура</p>
+      <ol class="plan" start="10">
+        <li><span>Удалить мёртвое.</span></li>
+        <li><span>Разделить <code>ScalarMetric</code> / <code>ArtifactMetric</code>.</span></li>
+        <li><span><code>required_inputs</code> / <code>required_outputs</code> и фильтрация перед сбором; <code>gather_object(dst=0)</code> вместо <code>all_gather_object</code>.</span></li>
+        <li><span>Общий <code>_TaskGroupScorer</code> вместо трёх копий.</span></li>
+        <li><span>Переименования с шимом; <code>RocAucScore</code> → <code>BinaryAUROC</code> как пилот на torchmetrics.</span></li>
+      </ol>
+    </section>
+  </main>
+
+  <footer>
+    Исходники отчёта в репозитории: metrics_review.md · metrics_review_repro.py · metrics_review_deadcode.txt
+  </footer>
+</div>
