@@ -1,11 +1,50 @@
 """Split a batch by column values and score each slice separately."""
 
 import copy
+import dataclasses
 
 import numpy as np
 import torch
 
 from avatar.metrics.base import ScalarMetric
+
+
+def slice_value(value, positions: np.ndarray, batch_size: int):
+    """Take ``positions`` out of one batch column, whatever it is made of.
+
+    Anything whose leading dimension is not the batch size is passed through
+    untouched — a scalar loss, a per-task constant, a string tag. Slicing those
+    would be meaningless, and dropping them (which is what the previous
+    type-by-type branching did to numpy columns) loses data the inner metric
+    may well need.
+    """
+    if value is None:
+        return None
+    if isinstance(value, dict):
+        return {
+            key: slice_value(inner, positions, batch_size)
+            for key, inner in value.items()
+        }
+    if isinstance(value, torch.Tensor):
+        if value.dim() == 0 or value.shape[0] != batch_size:
+            return value
+        return value[torch.as_tensor(positions, device=value.device)]
+    if isinstance(value, np.ndarray):
+        if value.ndim == 0 or value.shape[0] != batch_size:
+            return value
+        return value[positions]
+    if isinstance(value, (list, tuple)):
+        if len(value) != batch_size:
+            return value
+        return type(value)(value[position] for position in positions)
+    return value
+
+
+def output_fields(outputs) -> list[str]:
+    """Names of the fields on a model output object."""
+    if dataclasses.is_dataclass(outputs):
+        return [field.name for field in dataclasses.fields(outputs)]
+    return list(vars(outputs))
 
 
 class GroupDevidedMetricsWrapper(ScalarMetric):
@@ -36,7 +75,9 @@ class GroupDevidedMetricsWrapper(ScalarMetric):
     Note:
         Groups are discovered from the data, so a combination absent from
         validation simply produces no metric — the name will be missing rather
-        than zero.
+        than zero. :meth:`reset` drops the groups along with their metrics, so
+        each epoch rediscovers them; a group that has left the data leaves with
+        it instead of reaching ``compute`` with an empty accumulator.
 
         The inner metric is a factory, so this wrapper cannot ask it which
         fields it reads before the first group appears. Both
@@ -68,20 +109,29 @@ class GroupDevidedMetricsWrapper(ScalarMetric):
         return mask
 
     def _build_input_output_by_mask(self, inputs, outputs, mask):
-        device = outputs.logits.device
-        ids = torch.tensor(np.where(mask)[0]).to(device)
-        current_inputs = {}
-        current_outputs = copy.deepcopy(outputs)
-        for key in inputs.keys():
-            if isinstance(inputs[key], dict):
-                current_inputs[key] = {}
-                for inner_key in inputs[key].keys():
-                    current_inputs[key][inner_key] = inputs[key][inner_key][ids]
-            elif isinstance(inputs[key], list):
-                current_inputs[key] = [inputs[key][i] for i in ids]
-            elif isinstance(inputs[key], torch.Tensor):
-                current_inputs[key] = inputs[key][ids]
-        current_outputs.logits = outputs.logits[ids]
+        """Cut both sides of the batch down to the masked records.
+
+        The output object is copied shallowly and every field replaced by its
+        slice. It used to be ``copy.deepcopy(outputs)`` with only ``logits``
+        replaced, which meant a metric reading any other field got the whole
+        batch back — and a deepcopy of a training step's output raises, because
+        those tensors are not graph leaves.
+        """
+        positions = np.where(mask)[0]
+        batch_size = len(mask)
+
+        current_inputs = {
+            key: slice_value(value, positions, batch_size)
+            for key, value in inputs.items()
+        }
+
+        current_outputs = copy.copy(outputs)
+        for name in output_fields(outputs):
+            setattr(
+                current_outputs,
+                name,
+                slice_value(getattr(outputs, name), positions, batch_size),
+            )
 
         return current_inputs, current_outputs
 
@@ -119,5 +169,10 @@ class GroupDevidedMetricsWrapper(ScalarMetric):
         return result
 
     def reset(self):
-        for metric in self.group2metrics.values():
-            metric.reset()
+        """Return to the state of a freshly built wrapper.
+
+        The groups go with their metrics. Keeping them meant a group that
+        disappeared between epochs survived into the next ``compute`` with an
+        empty accumulator, where the inner metric raises.
+        """
+        self.group2metrics = {}

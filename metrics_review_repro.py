@@ -15,7 +15,6 @@ command.
 
 from __future__ import annotations
 
-import copy
 import os
 import sys
 from dataclasses import dataclass
@@ -28,7 +27,7 @@ import torch
 import avatar
 from avatar.metrics import ScalarMetric
 from avatar.metrics.supervised import calculate_response_metrics
-from avatar.metrics.utils import GroupAverageMetricWrapper, GroupDevidedMetricsWrapper
+from avatar.metrics.utils import GroupAverageMetricWrapper
 from avatar.train.early_stopping import EarlyStopping
 
 assert avatar.__file__.startswith(os.getcwd()), (
@@ -94,36 +93,11 @@ def s5_frozen_regex_groups() -> None:
     print("  g_1_auc появился, но в avg_auc не попал")
 
 
-def s12_reset_keeps_groups() -> None:
-    """S12: reset() clears the inner metrics but not the group dictionary."""
-    print("\n--- S12  GroupDevidedMetricsWrapper.reset не забывает группы ---")
-    wrapper = GroupDevidedMetricsWrapper(
-        metric_class=TwoGroupsOnSecondEpoch, columns_to_devide=["channel"]
-    )
-    wrapper.group2metrics["a",] = TwoGroupsOnSecondEpoch()
-    wrapper.reset()
-    print(f"  после reset() группы: {list(wrapper.group2metrics)}")
-    print("  контракт требует состояния «как после создания метрики»")
-
-
-def p5_deepcopy_on_train_outputs() -> None:
-    """P5: the group wrapper deep-copies outputs, which fails on non-leaf tensors."""
-    print("\n--- P5  GroupDevidedMetricsWrapper: deepcopy на train-выходе ---")
-    leaf = torch.randn(4, 3, requires_grad=True)
-    try:
-        copy.deepcopy(Output(logits=leaf * 2))
-        print("  deepcopy: OK")
-    except RuntimeError as error:
-        print(f"  deepcopy -> RuntimeError: {str(error).splitlines()[0]}")
-
-
 def main() -> None:
     """Run every reproduction in the order the review lists them."""
     print(f"avatar: {avatar.__file__}")
     s4_nan_erases_the_best_score()
     s5_frozen_regex_groups()
-    s12_reset_keeps_groups()
-    p5_deepcopy_on_train_outputs()
 
 
 if __name__ == "__main__":

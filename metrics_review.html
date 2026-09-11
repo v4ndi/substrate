@@ -502,17 +502,18 @@
       Половина модуля не использовалась — её больше нет. Контракт разделён на
       «числа» и «файлы», накопители потерь считают то, что обещают, а метрика
       больше не имеет права остановить обучение, а тройная копия цикла по группам
-      свёрнута в один базовый класс. Четыре находки осталось открытыми.
+      свёрнута в один базовый класс, а обёртка по группам научилась резать батч
+      целиком. Три находки осталось открытыми.
     </p>
     <div class="meta">
       <span><b>Ветка</b> refactor/data-sharding-hdfs</span>
-      <span><b>Диффа</b> +1421 / −7233 в 67 файлах</span>
-      <span><b>Тесты</b> 416 passed, 2 skipped</span>
+      <span><b>Диффа</b> +1865 / −7250 в 69 файлах</span>
+      <span><b>Тесты</b> 423 passed, 2 skipped</span>
     </div>
 
     <div class="scoreboard">
       <div class="score dead">
-        <span class="n"><span class="was">3024</span>1480</span>
+        <span class="n"><span class="was">3024</span>1535</span>
         <span class="lbl">строк в модуле</span>
         <span class="sub">25 → 11 классов</span>
       </div>
@@ -522,12 +523,12 @@
         <span class="sub">из 9 запрошенных</span>
       </div>
       <div class="score open">
-        <span class="n"><span class="was">15</span>4</span>
+        <span class="n"><span class="was">15</span>3</span>
         <span class="lbl">находок осталось открытыми</span>
-        <span class="sub">S4, S5, S6–S9, S12/P5</span>
+        <span class="sub">S4, S5, S6–S9</span>
       </div>
       <div class="score dead">
-        <span class="n"><span class="was">1</span>4</span>
+        <span class="n"><span class="was">1</span>5</span>
         <span class="lbl">тестовых файла модуля</span>
         <span class="sub">+ контрактные тесты</span>
       </div>
@@ -558,10 +559,10 @@
         <table>
           <thead><tr><th></th><th>было</th><th>стало</th></tr></thead>
           <tbody>
-            <tr><td>строк в модуле</td><td class="num was">3024</td><td class="num">1480</td></tr>
+            <tr><td>строк в модуле</td><td class="num was">3024</td><td class="num">1535</td></tr>
             <tr><td>публичных классов</td><td class="num was">25</td><td class="num">11 + 5 базовых</td></tr>
             <tr><td>недостижимых классов</td><td class="num was">12 (50% строк)</td><td class="num">0</td></tr>
-            <tr><td>тестовых файлов модуля</td><td class="num was">1</td><td class="num">4</td></tr>
+            <tr><td>тестовых файлов модуля</td><td class="num was">1</td><td class="num">5</td></tr>
             <tr><td>дефектов, роняющих прогон</td><td class="num was">3</td><td class="num">0</td></tr>
           </tbody>
         </table>
@@ -765,11 +766,44 @@
         </div>
 
         <div class="done-item">
-          <h4>Тесты <span class="tick">4 файла вместо 1</span></h4>
+          <h4>Обёртка по группам режет батч целиком <span class="tick">S12 · P5</span></h4>
+          <p>
+            <code>GroupDevidedMetricsWrapper</code> копировал выход модели через
+            <code>copy.deepcopy</code> и подменял в копии одни логиты. Отсюда три
+            дефекта сразу: на выходе обучающего шага тензоры не листовые и
+            копирование падало, так что обёртку нельзя было повесить как
+            train-метрику; копия всего выхода делалась на каждую группу каждого
+            батча; и любое поле выхода, кроме логитов, приезжало во вложенную
+            метрику <strong>во всю ширину батча</strong> — размеры не сходились у
+            всех, кто читает не только <code>logits</code>.
+          </p>
+          <p>
+            Теперь выход копируется поверхностно, а срез берётся из каждого поля,
+            чьё первое измерение равно размеру батча; остальное (скалярный лосс,
+            метка прогона) проходит без изменений. Заодно перестали теряться
+            колонки входа: прежний перебор по типам знал только <code>dict</code>,
+            <code>list</code> и <code>torch.Tensor</code>, и numpy-колонка
+            (<code>epk_id</code>, <code>split_type</code>) молча исчезала из среза.
+          </p>
+          <p>
+            <code>reset</code> теперь удаляет и сами группы. Это был не
+            косметический дефект: группа, бывшая на первой эпохе и исчезнувшая на
+            второй, доезжала до <code>compute</code> с пустым накопителем, где
+            <code>ResponseMetrics</code> падает на <code>preds[0]</code>:
+          </p>
+          <pre><code>эпоха 1 -> channel_a_*, channel_b_*
+после reset() группы: [('a',), ('b',)]
+эпоха 2, канала "b" в данных нет -> IndexError: list index out of range</code></pre>
+        </div>
+
+        <div class="done-item">
+          <h4>Тесты <span class="tick">5 файлов вместо 1</span></h4>
           <p>
             Появились контрактные тесты, параметризованные по всем классам модуля,
             золотые значения для обоих накопителей потерь, тесты имён и выбора
-            среза у метрик по группам и тесты сужения полезной нагрузки. Параметризация намеренная: дефекты, ради которых они
+            среза у метрик по группам, срез батча по группам и чистый <code>reset</code>
+            (пять из семи тестов падают на прежней реализации) и тесты сужения
+            полезной нагрузки. Параметризация намеренная: дефекты, ради которых они
             написаны, присутствовали сразу в нескольких классах, и тест на один
             класс написали бы для того, который и так был исправен.
           </p>
@@ -793,8 +827,9 @@
       <h2>3. Что осталось открытым</h2>
 
       <p>
-        Четыре находки, не входившие в объём этой чистки. Все воспроизводятся одной
-        командой — <code>python metrics_review_repro.py</code>.
+        Три находки, не входившие в объём этой чистки. S4 и S5 воспроизводятся одной
+        командой — <code>python metrics_review_repro.py</code>; S6–S9 разбирается
+        по коду.
       </p>
 
       <article class="finding block">
@@ -876,30 +911,6 @@ nan нет   best=0.9   early_stop=True</code></pre>
         <div class="fix"><b>Фикс</b>Cross-fitting либо отказ выдавать калиброванные метрики без <code>split_type</code>; развести <code>mean_X</code> и <code>mean_calibrated_X</code>; убрать дописывание метки в данные.</div>
       </article>
 
-      <article class="finding cost">
-        <div class="fhead">
-          <span class="fid">S12 · P5</span>
-          <h3 class="ftitle">Обёртка по группам: грязный <code>reset</code> и <code>deepcopy</code> всего выхода</h3>
-          <span class="proof">запущено</span>
-        </div>
-        <p>
-          <code>reset()</code> сбрасывает вложенные метрики, но не словарь групп:
-          группа, бывшая на первой эпохе и исчезнувшая на второй, остаётся, и её
-          пустая метрика попадает в <code>compute</code>. Контракт требует
-          состояния «как после создания метрики».
-        </p>
-        <p>
-          <code>copy.deepcopy(outputs)</code> безопасен на валидации
-          (<code>inference_mode</code>), но на выходе обучающего шага тензоры не
-          листовые, и обёртку нельзя использовать как train-метрику:
-        </p>
-        <pre><code>RuntimeError: Only Tensors created explicitly by the user
-(graph leaves) support the deepcopy protocol at the moment.</code></pre>
-        <p>
-          Плюс deepcopy всего выхода на каждую группу и каждый батч — лишние копии
-          порядка «групп × размер батча», тогда как нужен только срез логитов.
-        </p>
-      </article>
     </section>
 
     <section id="dead">
@@ -966,7 +977,6 @@ nan нет   best=0.9   early_stop=True</code></pre>
         <li><span><strong>S4</strong> — не выдавать <code>nan</code> из метрики и научить <code>EarlyStopping</code> его игнорировать. Пока это открыто, ранняя остановка ненадёжна.</span></li>
         <li><span><strong>S5</strong> — пересчёт regex-групп на каждом <code>compute</code>.</span></li>
         <li><span><strong>S6–S9</strong> — честная калибровка: cross-fitting или отказ выдавать калиброванные метрики без <code>split_type</code>; развести <code>mean_X</code> и <code>mean_calibrated_X</code>; убрать дописывание метки в данные.</span></li>
-        <li><span><strong>S12, P5</strong> — чистый <code>reset</code> и срез логитов вместо <code>deepcopy</code> всего выхода.</span></li>
         <li><span>Переименовать <code>GroupDevidedMetricsWrapper</code> и <code>columns_to_devide</code> (правильно — divided) с шимом на один релиз, тем же приёмом, каким убрали шимы в <code>avatar.nn</code>. Класс не встречается ни в одном рабочем конфиге, так что цена минимальна.</span></li>
       </ol>
     </section>
