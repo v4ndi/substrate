@@ -31,8 +31,10 @@ EXCLUDED_DIRS = frozenset({
 })
 EXCLUDED_RELATIVE_DIRS = ("docs/decisions",)
 
-#: Roadmap, not documentation: it describes work that has not happened yet.
-EXCLUDED_FILES = frozenset({"TODO.md"})
+#: Roadmaps, not documentation: they describe work that has not happened yet,
+#: so they name files, classes and configs that do not exist — that is the
+#: point of a plan. Reports of *finished* work stay in scope and are checked.
+EXCLUDED_FILES = frozenset({"TODO.md", "tabular_tasks_plan.md"})
 
 #: ``avatar`` followed by at least one dotted segment. ``avatar_fm`` does not
 #: match (the character after ``avatar`` must be a dot), and a sentence-final
