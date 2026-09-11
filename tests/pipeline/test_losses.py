@@ -54,6 +54,86 @@ def test_an_injected_criterion_overrides_the_default():
     assert isinstance(loss.loss_fn, nn.L1Loss)
 
 
+# -- a head of width one against a column of targets -------------------------
+#
+# The head emits (B, 1) and every collate function emits (B,). Left to the
+# criterion, BCE refuses the pair outright and MSE broadcasts it into (B, B) —
+# the error of every prediction against every other record's target.
+
+
+def test_a_one_wide_head_scores_each_record_against_its_own_target():
+    loss = ClassificationLoss(num_classes=1, task_type="regression")
+    logits = torch.randn(6, 1)
+    targets = torch.randn(6)
+
+    result = loss(logits, targets)
+
+    all_pairs = ((logits - targets.unsqueeze(0)) ** 2).mean()
+    assert torch.isclose(result.loss, nn.MSELoss()(logits.squeeze(1), targets))
+    assert not torch.isclose(result.loss, all_pairs)
+
+
+def test_the_regression_gradient_reaches_each_prediction_separately():
+    """Under broadcasting every prediction is pulled towards the batch mean."""
+    loss = ClassificationLoss(num_classes=1, task_type="regression")
+    logits = torch.randn(6, 1, requires_grad=True)
+    targets = torch.randn(6)
+
+    loss(logits, targets).loss.backward()
+
+    expected = 2 * (logits.detach().squeeze(1) - targets) / targets.numel()
+    assert torch.allclose(logits.grad.squeeze(1), expected, atol=1e-6)
+
+
+def test_binary_targets_arrive_as_class_ids_and_are_still_scored():
+    """``TabularCollateFn`` emits LongTensor for anything not marked regression."""
+    loss = ClassificationLoss(num_classes=1, task_type="classification")
+    logits = torch.randn(8, 1)
+    targets = torch.randint(0, 2, (8,))
+
+    result = loss(logits, targets)
+
+    expected = nn.BCEWithLogitsLoss()(logits.squeeze(1), targets.float())
+    assert torch.isclose(result.loss, expected)
+
+
+def test_a_target_column_shaped_like_the_head_is_accepted_too():
+    loss = ClassificationLoss(num_classes=1, task_type="regression")
+    logits = torch.randn(5, 1)
+    targets = torch.randn(5, 1)
+
+    result = loss(logits, targets)
+
+    assert torch.isclose(result.loss, nn.MSELoss()(logits.squeeze(1), targets.squeeze(1)))
+
+
+def test_a_wide_head_still_gets_class_indices():
+    """Cross-entropy wants (B, K) against (B,) integers; nothing to reconcile."""
+    loss = ClassificationLoss(num_classes=4, task_type="classification")
+    logits = torch.randn(7, 4)
+    targets = torch.randint(0, 4, (7,))
+
+    result = loss(logits, targets)
+
+    assert torch.isclose(result.loss, nn.CrossEntropyLoss()(logits, targets))
+
+
+def test_a_wide_head_accepts_indices_delivered_as_a_column():
+    loss = ClassificationLoss(num_classes=4, task_type="classification")
+    logits = torch.randn(7, 4)
+    targets = torch.randint(0, 4, (7, 1))
+
+    result = loss(logits, targets)
+
+    assert torch.isclose(result.loss, nn.CrossEntropyLoss()(logits, targets.squeeze(1)))
+
+
+def test_a_batch_that_cannot_line_up_is_an_explicit_error():
+    loss = ClassificationLoss(num_classes=1, task_type="regression")
+    with pytest.raises(ValueError, match="head of width 1"):
+        loss(torch.randn(4, 1), torch.randn(3))
+
+
 def test_l1_penalty_is_added_and_reported():
     model = nn.Sequential()
     model.add_module("embed", nn.Linear(2, 2, bias=False))

@@ -156,11 +156,57 @@ def test_regression_keeps_its_three_metrics_apart():
     )
     scores = metric.compute()
 
-    assert {"calib_group_0_mse", "calib_group_0_mae", "calib_group_0_mape"} <= set(
-        scores
-    )
+    assert {
+        "calib_group_0_mse",
+        "calib_group_0_rmse",
+        "calib_group_0_mae",
+        "calib_group_0_mape",
+        "calib_group_0_r2",
+    } <= set(scores)
     assert scores["calib_group_0_mae"] == pytest.approx(0.5)
     assert scores["mean_mae"] == pytest.approx(0.5)
+
+
+def test_mape_ignores_the_records_whose_target_is_zero(caplog):
+    """A zero target makes the percentage error meaningless, not enormous.
+
+    ``mean_absolute_percentage_error`` divides by ``max(|y|, eps)``, so one zero
+    target used to push the reported mape to about ``1e16``. Being finite, it
+    passed the undefined-value filter and went on to represent the model.
+    """
+    metric = RegressionMetrics()
+    metric.update(
+        *supervised_batch(
+            targets=[0.0, 0.0, 10.0, 20.0],
+            logits=[1.0, 2.0, 11.0, 18.0],
+            group=[0] * 4,
+            split_type=["calib"] * 4,
+        )
+    )
+    with caplog.at_level(logging.WARNING):
+        scores = metric.compute()
+
+    # |11 - 10| / 10 and |18 - 20| / 20, averaged.
+    assert scores["calib_group_0_mape"] == pytest.approx(0.1)
+    assert "skips 2 of 4" in caplog.text
+
+
+def test_a_target_column_of_zeros_reports_no_mape_at_all(caplog):
+    metric = RegressionMetrics()
+    metric.update(
+        *supervised_batch(
+            targets=[0.0, 0.0, 0.0, 0.0],
+            logits=[1.0, 2.0, 0.5, 0.0],
+            group=[0] * 4,
+            split_type=["calib"] * 4,
+        )
+    )
+    with caplog.at_level(logging.WARNING):
+        scores = metric.compute()
+
+    assert "calib_group_0_mape" not in scores
+    assert "calib_group_0_mae" in scores
+    assert "every target is zero" in caplog.text
 
 
 def test_batches_accumulate_and_reset_clears_them(two_split_response):

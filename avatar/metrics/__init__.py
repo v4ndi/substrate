@@ -9,7 +9,8 @@ Two kinds, told apart by their base class rather than by a convention:
 
 * :class:`~avatar.metrics.base.ScalarMetric` returns numbers —
   ``UpliftMetrics``, ``ResponseMetrics``, ``RegressionMetrics``,
-  ``MultiLossMetric``, ``UniversalLossesMetric`` and the two wrappers;
+  ``MultiClassMetrics``, ``MultiLossMetric``, ``UniversalLossesMetric`` and the
+  two wrappers;
 * :class:`~avatar.metrics.base.ArtifactMetric` returns a file —
   ``CollectEmbeddings``, ``InferenceMultiTaskCampaignMetrics``,
   ``InferenceSupervisedMetrics``.
@@ -22,6 +23,7 @@ from .campaign import CollectEmbeddings, InferenceMultiTaskCampaignMetrics
 from .multi_loss import MultiLossMetric
 from .supervised import (
     InferenceSupervisedMetrics,
+    MultiClassMetrics,
     RegressionMetrics,
     ResponseMetrics,
 )
@@ -40,6 +42,7 @@ __all__ = [
     "InferenceMultiTaskCampaignMetrics",
     "InferenceSupervisedMetrics",
     # Loss reporting
+    "MultiClassMetrics",
     "MultiLossMetric",
     "RegressionMetrics",
     # Scoring metrics — the product is numbers

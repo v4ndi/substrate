@@ -60,6 +60,7 @@ class ClassificationLoss(Loss):
         l1_apply_substr: str = "embed",
     ):
         super().__init__()
+        self.num_classes = num_classes
         self.loss_fn = (
             loss_fn
             if loss_fn is not None
@@ -67,6 +68,49 @@ class ClassificationLoss(Loss):
         )
         self.l1_weight = l1_weight
         self.l1_loss = L1RegularizationLoss(apply_substr=l1_apply_substr)
+
+    def align(
+        self, logits: torch.Tensor, targets: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Make the head's output and the target agree on what one record is.
+
+        A head of width one predicts a single number per record, so the two
+        sides mean the same thing shaped ``(B,)``. They do not arrive that way:
+        the head emits ``(B, 1)`` and the collate function emits ``(B,)``, and
+        the criterion is left to reconcile them. ``BCEWithLogitsLoss`` refuses
+        to — which is why binary classification could not run at all — and
+        ``MSELoss`` silently broadcasts the pair into ``(B, B)``, averaging the
+        error of every prediction against every *other* record's target. That
+        loss trains the head towards the mean of the batch, and the only sign
+        of it is a warning from torch.
+
+        A wide head is left alone: there ``(B, K)`` logits against ``(B,)``
+        class indices is exactly what cross-entropy wants.
+
+        Raises:
+            ValueError: The two still do not line up, which means the batch and
+                the configured ``num_classes`` disagree about the task.
+        """
+        if targets.ndim == logits.ndim and targets.shape[-1] == 1:
+            targets = targets.squeeze(-1)
+
+        if self.num_classes != 1:
+            return logits, targets
+
+        if logits.ndim == 2 and logits.shape[-1] == 1:
+            logits = logits.squeeze(-1)
+        # One number per record: a class index is no longer an index here, it
+        # is the value being predicted, and both criteria want it as a float.
+        targets = targets.to(logits.dtype)
+
+        if logits.shape != targets.shape:
+            raise ValueError(
+                f"a head of width 1 produced logits {tuple(logits.shape)} but "
+                f"the targets are {tuple(targets.shape)}. One value per record "
+                "is expected on both sides; check that num_classes matches the "
+                "target column."
+            )
+        return logits, targets
 
     def forward(
         self,
@@ -78,10 +122,13 @@ class ClassificationLoss(Loss):
 
         Args:
             logits: Raw head outputs.
-            targets: Ground truth, shaped as the criterion expects.
+            targets: Ground truth. Shapes are reconciled by :meth:`align`
+                first, so a ``(B,)`` target column works against a ``(B, 1)``
+                head.
             model: Module to regularise. Required when ``l1_weight`` is set;
                 the penalty walks its ``named_parameters``.
         """
+        logits, targets = self.align(logits, targets)
         loss = self.loss_fn(logits, targets)
         components: dict[str, torch.Tensor] = {}
         if self.l1_weight > 0:
