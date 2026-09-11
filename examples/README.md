@@ -10,6 +10,7 @@
 | [`eventsequence_preprocessing`](eventsequence_preprocessing/) | то же для событийных последовательностей | скрипт | синтетика, генерируется скриптом |
 | [`custom_callback`](custom_callback/) | своя точка расширения в цикле обучения | модуль + тесты | не нужны |
 | [`custom_loss`](custom_loss/) | своя функция потерь, подключаемая из конфига | модуль + тесты | не нужны |
+| [`tabular_tasks`](tabular_tasks/) | четыре типовые постановки — uplift, response, регрессия, multi-class — четырьмя конфигами | скрипт + конфиги | открытые, скачиваются скриптом |
 | [`basics`](basics/) | загрузка данных в датасет, своя метрика | ноутбуки | внутренние (HDFS) |
 | [`next_event_prediction`](next_event_prediction/) | self-supervised обучение на событиях, выгрузка эмбеддингов клиента | конфиги + ноутбук | скрипт выгрузки |
 | [`uplift_modeling/s_learner`](uplift_modeling/s_learner/) | uplift-постановка (S-Learner) поверх скрытых состояний | конфиги + ноутбук | скрипт выгрузки |
@@ -20,6 +21,10 @@
 # препроцессинг на обоих бэкендах
 python examples/tabular_preprocessing/generate_data.py
 python examples/tabular_preprocessing/run_both_backends.py
+
+# четыре постановки на открытых данных: выгрузка, затем обучение
+python examples/tabular_tasks/prepare_data.py --task all --scale smoke
+python -m avatar.train --config-dir=examples/tabular_tasks/configs --config-name=response
 
 # точки расширения
 python -m pytest tests/examples

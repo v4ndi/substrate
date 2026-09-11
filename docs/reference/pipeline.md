@@ -22,11 +22,28 @@
 представляющий стек: `embedding(batch) -> encoder -> aggregation`. Его ставят
 в `tabular_model` классификатора.
 
+`TabularClassification` — штатный путь для трёх постановок из четырёх. Они
+отличаются двумя ключами:
+
+| постановка | `num_classes` | `task_type` | метрика |
+|---|---|---|---|
+| бинарная классификация (response) | `1` | `classification` | `ResponseMetrics` |
+| регрессия | `1` | `regression` | `RegressionMetrics` |
+| многоклассовая классификация | `K > 1` | `classification` | `MultiClassMetrics` |
+
+`num_classes: 1` означает одно число на запись — одну вероятность или одно
+значение, — и именно это читают `ResponseMetrics` и `RegressionMetrics`.
+Бинарную задачу можно записать и как `num_classes: 2` с кросс-энтропией, но
+тогда на выходе распределение из двух столбцов, и мерить её нужно уже
+`MultiClassMetrics`. Формы головы и таргета согласует `ClassificationLoss`, так
+что колонка таргета `(B,)` из любой collate-функции подходит к голове `(B, 1)`.
+
 `TabularClassification` допускает `tabular_model: null` — тогда модель работает
 только по внешним скрытым состояниям. Так устроен MLP-бенчмарк.
 
 `SupervisedLearner` — та же форма, что у `SLearner`, но без флага воздействия:
-response-постановка с опциональным эмбеддингом группы.
+response-постановка с опциональным эмбеддингом группы. Рабочего конфига у него
+нет ни одного; для response берите `TabularClassification`.
 
 ## Uplift
 
