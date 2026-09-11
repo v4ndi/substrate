@@ -502,18 +502,19 @@
       Половина модуля не использовалась — её больше нет. Контракт разделён на
       «числа» и «файлы», накопители потерь считают то, что обещают, а метрика
       больше не имеет права остановить обучение, а тройная копия цикла по группам
-      свёрнута в один базовый класс, а обёртка по группам научилась резать батч
-      целиком. Три находки осталось открытыми.
+      свёрнута в один базовый класс, обёртка по группам научилась резать батч
+      целиком, а калибровка uplift перестала оценивать себя на собственных
+      строках. Две находки осталось открытыми.
     </p>
     <div class="meta">
       <span><b>Ветка</b> refactor/data-sharding-hdfs</span>
-      <span><b>Диффа</b> +1865 / −7250 в 69 файлах</span>
-      <span><b>Тесты</b> 423 passed, 2 skipped</span>
+      <span><b>Диффа</b> +2181 / −7252 в 71 файле</span>
+      <span><b>Тесты</b> 432 passed, 2 skipped</span>
     </div>
 
     <div class="scoreboard">
       <div class="score dead">
-        <span class="n"><span class="was">3024</span>1535</span>
+        <span class="n"><span class="was">3024</span>1622</span>
         <span class="lbl">строк в модуле</span>
         <span class="sub">25 → 11 классов</span>
       </div>
@@ -523,12 +524,12 @@
         <span class="sub">из 9 запрошенных</span>
       </div>
       <div class="score open">
-        <span class="n"><span class="was">15</span>3</span>
+        <span class="n"><span class="was">15</span>2</span>
         <span class="lbl">находок осталось открытыми</span>
-        <span class="sub">S4, S5, S6–S9</span>
+        <span class="sub">S4, S5</span>
       </div>
       <div class="score dead">
-        <span class="n"><span class="was">1</span>5</span>
+        <span class="n"><span class="was">1</span>6</span>
         <span class="lbl">тестовых файла модуля</span>
         <span class="sub">+ контрактные тесты</span>
       </div>
@@ -559,10 +560,10 @@
         <table>
           <thead><tr><th></th><th>было</th><th>стало</th></tr></thead>
           <tbody>
-            <tr><td>строк в модуле</td><td class="num was">3024</td><td class="num">1535</td></tr>
+            <tr><td>строк в модуле</td><td class="num was">3024</td><td class="num">1622</td></tr>
             <tr><td>публичных классов</td><td class="num was">25</td><td class="num">11 + 5 базовых</td></tr>
             <tr><td>недостижимых классов</td><td class="num was">12 (50% строк)</td><td class="num">0</td></tr>
-            <tr><td>тестовых файлов модуля</td><td class="num was">1</td><td class="num">5</td></tr>
+            <tr><td>тестовых файлов модуля</td><td class="num was">1</td><td class="num">6</td></tr>
             <tr><td>дефектов, роняющих прогон</td><td class="num was">3</td><td class="num">0</td></tr>
           </tbody>
         </table>
@@ -797,13 +798,49 @@
         </div>
 
         <div class="done-item">
-          <h4>Тесты <span class="tick">5 файлов вместо 1</span></h4>
+          <h4>Калибровка uplift стала честной <span class="tick">S6 · S7 · S8 · S9</span></h4>
+          <p>
+            Калибратор подгоняется на срезе <code>split_type == "calib"</code>, а
+            калиброванные метрики теперь возвращаются <strong>только для
+            отложенного среза</strong> <code>test</code>. Оценивать калибратор на
+            тех же строках, на которых он обучался, — это in-sample, и такие
+            числа льстят модели. Популяция без среза <code>test</code> — а это
+            любой батч без колонки <code>split_type</code>, то есть валидация в
+            обучении, где путь указывает внутрь партиции
+            <code>split_type=calib</code>, — получает только сырые метрики и
+            предупреждение в лог.
+          </p>
+          <p>
+            <code>mean_{main_metric}</code> и
+            <code>mean_calibrated_{main_metric}</code> стали двумя независимыми
+            числами: первое усредняет сырую метрику, второе — калиброванную, и
+            второй ключ появляется только тогда, когда калиброванные метрики
+            реально посчитаны. <code>require_calibration</code> теперь
+            действительно включает калибровку, а не выбирает, какое семейство
+            попадёт в <code>mean_*</code>.
+          </p>
+          <p>
+            Дописывание метки убрано. Было <code>y_true[0] += 1</code> на срезе
+            без конверсий — чтобы вызов не упал. Сломанный срез превращался в
+            правдоподобное число, метка при повторе становилась <code>2</code>, а
+            на срезе из одной группы код всё равно падал:
+          </p>
+          <pre><code>IndexError: index 0 is out of bounds for axis 0 with size 0</code></pre>
+          <p>
+            Теперь вырожденный срез не даёт метрик вовсе, причина пишется в лог, а
+            калибратор, который не на чем подогнать, просто не создаётся — группа
+            при этом сохраняет свои сырые метрики.
+          </p>
+        </div>
+
+        <div class="done-item">
+          <h4>Тесты <span class="tick">6 файлов вместо 1</span></h4>
           <p>
             Появились контрактные тесты, параметризованные по всем классам модуля,
             золотые значения для обоих накопителей потерь, тесты имён и выбора
             среза у метрик по группам, срез батча по группам и чистый <code>reset</code>
-            (пять из семи тестов падают на прежней реализации) и тесты сужения
-            полезной нагрузки. Параметризация намеренная: дефекты, ради которых они
+            (пять из семи тестов падают на прежней реализации), честность калибровки
+            uplift (семь из девяти) и тесты сужения полезной нагрузки. Параметризация намеренная: дефекты, ради которых они
             написаны, присутствовали сразу в нескольких классах, и тест на один
             класс написали бы для того, который и так был исправен.
           </p>
@@ -827,9 +864,8 @@
       <h2>3. Что осталось открытым</h2>
 
       <p>
-        Три находки, не входившие в объём этой чистки. S4 и S5 воспроизводятся одной
-        командой — <code>python metrics_review_repro.py</code>; S6–S9 разбирается
-        по коду.
+        Две находки, не входившие в объём этой чистки. Обе воспроизводятся одной
+        командой — <code>python metrics_review_repro.py</code>.
       </p>
 
       <article class="finding block">
@@ -876,39 +912,6 @@ nan нет   best=0.9   early_stop=True</code></pre>
           используется в 21 конфиге — самая популярная в модуле.
         </p>
         <div class="fix"><b>Фикс</b>Пересчитывать группы на каждом <code>compute</code>: это дешёвый поиск по десяткам имён, кэшировать нечего.</div>
-      </article>
-
-      <article class="finding">
-        <div class="fhead">
-          <span class="fid">S6–S9</span>
-          <h3 class="ftitle">Калибровка и вырожденные данные в <code>UpliftMetrics</code></h3>
-          <span class="proof">по коду</span>
-        </div>
-        <ul>
-          <li>
-            <strong>S6.</strong> Без колонки <code>split_type</code> — а её нет ни
-            в одном конфиге пилота — весь срез помечается как <code>calib</code>, и
-            калибратор подгоняется и оценивается на одних и тех же строках. Главная
-            метрика прогона получается in-sample.
-          </li>
-          <li>
-            <strong>S7.</strong> <code>require_calibration: False</code>
-            по-прежнему не отключает калибровку — он только выбирает, что попадёт в
-            <code>mean_*</code>. Поведение теперь честно описано, но не изменено.
-          </li>
-          <li>
-            <strong>S8.</strong> При <code>require_calibration: True</code>
-            <code>mean_X</code> и <code>mean_calibrated_X</code> пишутся из одного
-            списка, и некалиброванное среднее получить нельзя.
-          </li>
-          <li>
-            <strong>S9.</strong> <code>y_true[0] += 1</code> на срезе без конверсий
-            молча дописывает в данные позитивный пример. Мотив описан в докстринге,
-            но в логе не остаётся ни строки, а <code>+= 1</code> вместо
-            <code>= 1</code> на неудачных данных даст метку <code>2</code>.
-          </li>
-        </ul>
-        <div class="fix"><b>Фикс</b>Cross-fitting либо отказ выдавать калиброванные метрики без <code>split_type</code>; развести <code>mean_X</code> и <code>mean_calibrated_X</code>; убрать дописывание метки в данные.</div>
       </article>
 
     </section>
@@ -976,7 +979,6 @@ nan нет   best=0.9   early_stop=True</code></pre>
       <ol class="plan">
         <li><span><strong>S4</strong> — не выдавать <code>nan</code> из метрики и научить <code>EarlyStopping</code> его игнорировать. Пока это открыто, ранняя остановка ненадёжна.</span></li>
         <li><span><strong>S5</strong> — пересчёт regex-групп на каждом <code>compute</code>.</span></li>
-        <li><span><strong>S6–S9</strong> — честная калибровка: cross-fitting или отказ выдавать калиброванные метрики без <code>split_type</code>; развести <code>mean_X</code> и <code>mean_calibrated_X</code>; убрать дописывание метки в данные.</span></li>
         <li><span>Переименовать <code>GroupDevidedMetricsWrapper</code> и <code>columns_to_devide</code> (правильно — divided) с шимом на один релиз, тем же приёмом, каким убрали шимы в <code>avatar.nn</code>. Класс не встречается ни в одном рабочем конфиге, так что цена минимальна.</span></li>
       </ol>
     </section>

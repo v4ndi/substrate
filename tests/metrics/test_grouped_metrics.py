@@ -186,28 +186,31 @@ def uplift_population():
     )
 
 
-def test_uplift_reports_both_families_per_split(uplift_population):
-    """Raw and calibrated numbers come back side by side."""
+def test_uplift_reports_the_raw_family_on_both_splits(uplift_population):
+    """Raw metrics need no calibrator and are reported wherever there is data."""
     metric = UpliftMetrics()
     metric.update(*uplift_population)
     scores = metric.compute()
 
     assert "calib_group_0_qini_auc_score" in scores
-    assert "test_group_0_calibrated_qini_auc_score" in scores
-    assert "calib_group_0_calibration_gap_control" in scores
+    assert "test_group_0_qini_auc_score" in scores
     assert not [name for name in scores if name.startswith("task_")]
 
 
-def test_require_calibration_picks_the_calibrated_family(uplift_population):
-    """The alias is the same number, taken from the calibrated metrics."""
+def test_the_raw_and_calibrated_means_are_separate_numbers(uplift_population):
+    """``mean_X`` follows the raw family, ``mean_calibrated_X`` the calibrated one.
+
+    They used to be written from the same list, so the run could not report an
+    uncalibrated summary at all.
+    """
     metric = UpliftMetrics(require_calibration=True)
     metric.update(*uplift_population)
     scores = metric.compute()
 
     assert scores["mean_qini_auc_score"] == pytest.approx(
-        scores["mean_calibrated_qini_auc_score"]
+        scores["test_group_0_qini_auc_score"]
     )
-    assert scores["mean_qini_auc_score"] == pytest.approx(
+    assert scores["mean_calibrated_qini_auc_score"] == pytest.approx(
         scores["test_group_0_calibrated_qini_auc_score"]
     )
 
@@ -216,7 +219,9 @@ def test_uplift_writes_a_submit_file(uplift_population, tmp_path):
     """The submit carries the calibrated uplift the group loop filled in."""
     import pandas as pd
 
-    metric = UpliftMetrics(save_submit_path=str(tmp_path / "submit"))
+    metric = UpliftMetrics(
+        require_calibration=True, save_submit_path=str(tmp_path / "submit")
+    )
     metric.update(*uplift_population)
     metric.compute()
 

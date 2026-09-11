@@ -99,6 +99,14 @@ metrics:
     require_calibration: True
 ```
 
+`require_calibration: True` включает бета-калибровку обеих голов. Калиброванные
+метрики возвращаются только для отложенного среза — строк, у которых в колонке
+`split_type` стоит `test`. В этом примере такой колонки в данных нет, поэтому
+калибровка не выполняется, в лог пишется предупреждение, а прогон отчитывается
+сырыми метриками: `mean_qini_auc_score` и `{calib}_group_{группа}_*`. Чтобы
+получить `mean_calibrated_qini_auc_score`, добавьте в валидационный набор
+колонку `split_type` со значениями `calib` и `test`.
+
 ## Запуск обучения
 ```bash
 torchrun --standalone --nproc_per_node=1 -m avatar.train --config-dir=configs --config-name=train
