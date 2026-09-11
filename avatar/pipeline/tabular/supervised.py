@@ -132,10 +132,6 @@ class SupervisedLearner(nn.Module):
         last_hidden_states = self.tabular_backbone(embeddings)
         aggregated_states = self.agg_layer(last_hidden_states)
 
-        # Initialize full logits tensor
-        device = aggregated_states.device
-        logits = torch.zeros((targets.shape[0], 1), device=device)  # [bs, 2]
-
         # Late Fusion Concat
         if hidden_state is not None and self.hidden_state_dim is not None:
             combined_features = torch.cat(
@@ -157,7 +153,13 @@ class SupervisedLearner(nn.Module):
         group: torch.LongTensor = None,
         **kwargs,
     ):
-        _ = targets.device
+        """Score the batch, and compute the loss when targets are given.
+
+        ``targets`` is optional, as the signature has always said: inference has
+        no labels. Logits come back from training too, so ``train_metrics`` can
+        read them — the same thing
+        :class:`~avatar.pipeline.tabular.TabularClassification` does.
+        """
         hidden_state = tab_features.hidden_states
 
         if self.external_embeddings_normalize is not None:
@@ -169,21 +171,10 @@ class SupervisedLearner(nn.Module):
         else:
             hidden_state = None
 
-        logits, loss = None, None
-        if self.training:
-            _, loss = self._forward_branch(
-                tab_features=tab_features,
-                targets=targets,
-                group=group,
-                hidden_state=hidden_state,
-            )
-
-        if not self.training:
-            with torch.no_grad():
-                logits, loss = self._forward_branch(
-                    tab_features=tab_features,
-                    targets=targets,
-                    group=group,
-                    hidden_state=hidden_state,
-                )
+        logits, loss = self._forward_branch(
+            tab_features=tab_features,
+            targets=targets,
+            group=group,
+            hidden_state=hidden_state,
+        )
         return TabularOutput(logits=logits, loss=loss)

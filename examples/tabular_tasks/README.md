@@ -49,10 +49,6 @@ python -m avatar.train --config-dir=examples/tabular_tasks/configs --config-name
 python -m avatar.infer --config-dir=examples/tabular_tasks/configs --config-name=response_inference
 ```
 
-Полный масштаб — `--scale full`; тогда в конфигах нужно поправить пути
-(`*_smoke` → `*_full`) и три размерности из файла dims.json, который скрипт
-кладёт рядом с данными: словарь категорий на всей выборке другой.
-
 Многокарточный запуск — та же команда под `torchrun`:
 
 ```bash
@@ -67,20 +63,49 @@ torchrun --standalone --nproc_per_node=2 -m avatar.train \
 улучшении, поэтому нужен последний сохранённый, а его номер зависит от того,
 где сработала ранняя остановка.
 
+### Полный масштаб
+
+Данные строятся тем же скриптом с `--scale full`, а конфиг править не нужно:
+любой ключ переопределяется из командной строки.
+
+```bash
+python examples/tabular_tasks/prepare_data.py --task regression --scale full
+
+D=examples/tabular_tasks/data
+python -m avatar.train --config-dir=examples/tabular_tasks/configs \
+    --config-name=regression \
+    train_dataloader.dataset.path=$D/regression_full/train \
+    valid_dataloader.dataset.path=$D/regression_full/valid \
+    mlflow.run_name=regression_full
+```
+
+Одну размерность всё же надо передать отдельно, и это не формальность: словарь
+категорий зависит от выборки. У multi-class на всей выборке `vocab_size` равен
+133 против 132 на smoke — одно значение просто не попало в подвыборку, — так что
+к команде добавляется
+`model.tabular_model.embedding.vocab_size=133`. Точные числа печатает
+`prepare_data.py`.
+
 ## Что получается
 
-Smoke-прогон, 10 эпох, ранняя остановка с `patience: 3`:
+Десять эпох, ранняя остановка с `patience: 3`, модель из двух слоёв шириной 64.
+В колонках — лучшее значение главной метрики за прогон.
 
-| задача | главная метрика | значение |
-|---|---|---|
-| uplift | `mean_calibrated_qini_auc_score` | 0.081 |
-| response | `mean_roc_auc_score` | 0.647 |
-| регрессия | `mean_mae` (шкала `log1p`) | 1.92 |
-| multi-class | `mean_balanced_accuracy` | 0.385 |
+| задача | главная метрика | smoke (~20k) | full |
+|---|---|---|---|
+| uplift | `mean_calibrated_qini_auc_score` | 0.081 | 0.068 |
+| response | `mean_roc_auc_score` | 0.647 | 0.632 |
+| регрессия | `mean_mae`, шкала `log1p` (меньше — лучше) | 1.92 | **1.14** |
+| multi-class | `mean_balanced_accuracy` | 0.385 | **0.575** |
 
-Это числа отладочного масштаба на модели из двух слоёв — они показывают, что
-связка «конфиг → пайплайн → метрика» работает, а не чего можно добиться на этих
-данных.
+Две задачи, у которых smoke-выборка была в тридцать раз меньше полной, от
+полных данных заметно выигрывают. Две другие живут на Hillstrom, где и полный
+набор — 64 000 строк, поэтому разницы почти нет: smoke там и есть почти весь
+датасет.
+
+Это по-прежнему числа отладочного масштаба. Они показывают, что связка
+«конфиг → пайплайн → метрика» работает и что данные в неё приходят
+осмысленные, а не то, чего можно добиться на этих датасетах.
 
 ## Общая раскладка данных
 

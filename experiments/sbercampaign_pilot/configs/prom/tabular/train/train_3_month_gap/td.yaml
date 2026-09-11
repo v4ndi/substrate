@@ -112,7 +112,7 @@ metrics:
         avg_test_calibrated_uplift_at_20: ^test_group_\d+_calibrated_uplift_at_20$
 
         avg_calib_qini_auc_score: ^calib_group_\d+_qini_auc_score$
-        avg_test_calibrated_qini_auc_score: ^cc_test_group_\d+_calibrated_qini_auc_score$
+        avg_test_calibrated_qini_auc_score: ^test_group_\d+_calibrated_qini_auc_score$
 
         avg_calib_treatment_roc_auc_score: ^calib_group_\d+_treatment_roc_auc_score$
         avg_test_treatment_roc_auc_score: ^test_group_\d+_treatment_roc_auc_score$
