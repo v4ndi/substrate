@@ -15,7 +15,7 @@ import pandas as pd
 import pytest
 import torch
 
-from avatar.metrics import MultiClassMetrics
+from avatar.metrics import InferenceSupervisedMetrics, MultiClassMetrics
 
 NUM_CLASSES = 3
 
@@ -27,7 +27,9 @@ def multiclass_batch(targets, logits, group=None, split_type=None):
         "epk_id": np.arange(size),
         "targets": torch.tensor(targets, dtype=torch.long),
         "group": torch.tensor(group if group is not None else [0] * size),
-        "split_type": np.array(split_type if split_type is not None else ["calib"] * size),
+        "split_type": np.array(
+            split_type if split_type is not None else ["calib"] * size
+        ),
     }
     outputs = types.SimpleNamespace(logits=torch.tensor(logits, dtype=torch.float32))
     return inputs, outputs
@@ -70,10 +72,18 @@ def test_every_metric_is_named_per_group_and_split(perfect_population):
 
 def test_a_perfect_classifier_scores_one_and_a_confused_one_does_not():
     right = MultiClassMetrics(num_classes=NUM_CLASSES)
-    right.update(*multiclass_batch([0, 1, 2, 0, 1, 2], [confident(c) for c in [0, 1, 2, 0, 1, 2]]))
+    right.update(
+        *multiclass_batch(
+            [0, 1, 2, 0, 1, 2], [confident(c) for c in [0, 1, 2, 0, 1, 2]]
+        )
+    )
 
     wrong = MultiClassMetrics(num_classes=NUM_CLASSES)
-    wrong.update(*multiclass_batch([0, 1, 2, 0, 1, 2], [confident(c) for c in [1, 2, 0, 1, 2, 0]]))
+    wrong.update(
+        *multiclass_batch(
+            [0, 1, 2, 0, 1, 2], [confident(c) for c in [1, 2, 0, 1, 2, 0]]
+        )
+    )
 
     assert right.compute()["calib_group_0_accuracy"] == pytest.approx(1.0)
     assert wrong.compute()["calib_group_0_accuracy"] == pytest.approx(0.0)
@@ -98,7 +108,8 @@ def test_groups_are_scored_independently():
         *multiclass_batch(
             targets=targets,
             # Group 0 is right, group 1 is wrong.
-            logits=[confident(c) for c in [0, 1, 2]] + [confident(c) for c in [1, 2, 0]],
+            logits=[confident(c) for c in [0, 1, 2]]
+            + [confident(c) for c in [1, 2, 0]],
             group=[0, 0, 0, 1, 1, 1],
         )
     )
@@ -145,7 +156,8 @@ def test_the_held_out_slice_is_the_one_that_feeds_the_mean():
     metric.update(
         *multiclass_batch(
             targets=targets,
-            logits=[confident(c) for c in [0, 1, 2]] + [confident(c) for c in [1, 2, 0]],
+            logits=[confident(c) for c in [0, 1, 2]]
+            + [confident(c) for c in [1, 2, 0]],
             split_type=["calib"] * 3 + ["test"] * 3,
         )
     )
@@ -171,9 +183,76 @@ def test_the_submit_file_spreads_the_probabilities_into_one_column_per_class(
         name for name in frame.columns if name.startswith("y_pred")
     ]
     assert len(frame) == 30
-    assert frame[[f"y_pred_{i}" for i in range(NUM_CLASSES)]].sum(axis=1).round(5).eq(1).all()
+    assert (
+        frame[[f"y_pred_{i}" for i in range(NUM_CLASSES)]]
+        .sum(axis=1)
+        .round(5)
+        .eq(1)
+        .all()
+    )
 
 
 def test_a_one_wide_head_is_the_response_setting_and_says_so():
     with pytest.raises(ValueError, match="ResponseMetrics"):
         MultiClassMetrics(num_classes=1)
+
+
+# -- the inference collector -------------------------------------------------
+
+
+def test_inference_saves_the_chosen_class_and_the_whole_distribution(tmp_path):
+    """Which class won is rarely all a downstream campaign wants to know."""
+    metric = InferenceSupervisedMetrics(
+        path_to_save=str(tmp_path), save_steps=10, task_type="multi_clf"
+    )
+    metric.update(
+        inputs={"epk_id": [1, 2, 3]},
+        outputs=types.SimpleNamespace(
+            logits=torch.tensor(
+                [confident(0), confident(2), confident(1)], dtype=torch.float32
+            )
+        ),
+    )
+
+    metric.flush()
+
+    frame = pd.read_parquet(next(tmp_path.glob("*.parquet")))
+    assert list(frame["prediction"]) == [0, 2, 1]
+    assert [f"probability_{index}" for index in range(NUM_CLASSES)] == [
+        name for name in frame.columns if name.startswith("probability")
+    ]
+    assert (
+        frame[[f"probability_{i}" for i in range(NUM_CLASSES)]]
+        .sum(axis=1)
+        .round(5)
+        .eq(1)
+        .all()
+    )
+
+
+def test_inference_takes_an_id_column_that_arrived_as_a_tensor(tmp_path):
+    """``add_extra_columns`` makes tensors, and by now they live on the device."""
+    metric = InferenceSupervisedMetrics(
+        path_to_save=str(tmp_path), save_steps=10, task_type="binary_clf"
+    )
+    metric.update(
+        inputs={
+            "epk_id": torch.tensor([7, 8]),
+            "target_attr_2": torch.tensor([1, 0]),
+        },
+        outputs=types.SimpleNamespace(logits=torch.zeros(2, 1)),
+    )
+
+    metric.flush()
+
+    frame = pd.read_parquet(next(tmp_path.glob("*.parquet")))
+    assert list(frame["epk_id"]) == [7, 8]
+    assert list(frame["target_attr_2"]) == [1, 0]
+    assert frame["prediction"].tolist() == pytest.approx([0.5, 0.5])
+
+
+def test_an_unknown_task_type_is_rejected_by_name(tmp_path):
+    with pytest.raises(ValueError, match="Unknown task_type"):
+        InferenceSupervisedMetrics(
+            path_to_save=str(tmp_path), save_steps=1, task_type="ranking"
+        )

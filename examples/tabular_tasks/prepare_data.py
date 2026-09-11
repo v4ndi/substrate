@@ -46,7 +46,7 @@ import yaml
 
 sys.path.insert(0, os.getcwd())
 
-from avatar.preprocessing.local import TabularPreprocessor  # noqa: E402
+from avatar.preprocessing.local import TabularPreprocessor
 
 HERE = pathlib.Path(__file__).resolve().parent
 
@@ -202,7 +202,9 @@ def stratum(frame: pd.DataFrame, task_type: str) -> np.ndarray:
         parts.append(frame["treatment"].astype(str))
     if task_type == "regression":
         # Deciles of the target: a continuous column has no classes to balance.
-        parts.append(pd.qcut(frame["target"], 10, labels=False, duplicates="drop").astype(str))
+        parts.append(
+            pd.qcut(frame["target"], 10, labels=False, duplicates="drop").astype(str)
+        )
     else:
         parts.append(frame["target"].astype(str))
     return parts[0].str.cat(parts[1:], sep="_").to_numpy()
@@ -244,13 +246,19 @@ def write_shards(table: pa.Table, out_dir: pathlib.Path, shards: int) -> int:
 
 
 def build(task: str, scale: str, out_root: pathlib.Path, cache: pathlib.Path) -> dict:
+    """Load, split, preprocess and shard one task's data.
+
+    Returns the dimensions its training config needs.
+    """
     spec = TASKS[task]
     print(f"\n=== {task} ({scale}) — {spec['doc']}")
 
     frame, columns = spec["dataset"](cache)
     if "transform" in spec:
         frame, dropped = spec["transform"](frame)
-        print(f"[{task}] dropped {len(dropped)} columns that leak the target: {dropped}")
+        print(
+            f"[{task}] dropped {len(dropped)} columns that leak the target: {dropped}"
+        )
 
     if not spec["keeps_treatment"]:
         frame = frame.drop(columns=[c for c in ("treatment",) if c in frame])
@@ -269,9 +277,7 @@ def build(task: str, scale: str, out_root: pathlib.Path, cache: pathlib.Path) ->
     if spec["keeps_treatment"]:
         identity.append("treatment")
     cat_cols = [c for c in columns["categorical"] if c in frame.columns]
-    num_cols = [
-        c for c in frame.columns if c not in cat_cols and c not in identity
-    ]
+    num_cols = [c for c in frame.columns if c not in cat_cols and c not in identity]
 
     print(
         f"[{task}] {len(frame)} rows, {len(num_cols)} numeric, "
@@ -358,12 +364,15 @@ def build(task: str, scale: str, out_root: pathlib.Path, cache: pathlib.Path) ->
     print(f"[{task}] config needs:")
     print(f"    embedding.vocab_size:               {dims['vocab_size']}")
     print(f"    embedding.num_numerical_features:   {dims['num_numerical_features']}")
-    print(f"    aggregation_config.num_features:    {dims['num_features']}"
-          " (+1 per extra token: treatment, group)")
+    print(
+        f"    aggregation_config.num_features:    {dims['num_features']}"
+        " (+1 per extra token: treatment, group)"
+    )
     return dims
 
 
 def main() -> None:
+    """Build the tasks named on the command line."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--task", default="all", choices=[*TASKS, "all"], help="which set to build"

@@ -400,13 +400,23 @@ class InferenceSupervisedMetrics(ArtifactMetric):
     Args:
         path_to_save: Directory for the parquet parts; created if missing.
         save_steps: Flush every this many batches.
-        task_type: ``binary_clf`` or ``reg`` — selects how logits become the
-            saved prediction.
+        task_type: ``binary_clf``, ``reg`` or ``multi_clf`` — selects how logits
+            become the saved prediction. A multiclass run saves the chosen class
+            in ``prediction`` and the whole distribution alongside it, as
+            ``probability_0 … probability_{k-1}``: which class won is rarely the
+            only thing a downstream campaign wants to know.
         prefix: Optional tag in the filename, to tell runs apart.
 
+    The second saved column is ``target_attr_2``, the campaign group of the
+    pilot's schema. A dataset that calls that column something else maps it
+    across in the collate function —
+    ``add_extra_columns: {target_attr_2: group}`` — rather than here.
+
     Raises:
-        ValueError: ``task_type`` is neither ``binary_clf`` nor ``reg``.
+        ValueError: ``task_type`` is not one of the three.
     """
+
+    TASK_TYPES = ("binary_clf", "reg", "multi_clf")
 
     required_inputs = ("epk_id", "target_attr_2", "report_month")
     required_outputs = ("logits",)
@@ -415,30 +425,63 @@ class InferenceSupervisedMetrics(ArtifactMetric):
         self,
         path_to_save: str,
         save_steps: int,
-        task_type: Literal["binary_clf", "reg"],
+        task_type: Literal["binary_clf", "reg", "multi_clf"],
         prefix: str | None = None,
     ):
         super().__init__(path_to_save=path_to_save, prefix=prefix)
         self.preds: list[dict] = []
         self.save_steps = save_steps
-        if task_type not in ("binary_clf", "reg"):
-            raise ValueError(f"Unknown task_type: {task_type}")
+        if task_type not in self.TASK_TYPES:
+            raise ValueError(
+                f"Unknown task_type: {task_type}. One of {self.TASK_TYPES}."
+            )
         self.task_type = task_type
+
+    def predicted_columns(self, logits: torch.Tensor) -> dict[str, np.ndarray]:
+        """The prediction columns this task saves per record."""
+        if self.task_type == "multi_clf":
+            probabilities = (
+                torch.nn.functional
+                .softmax(logits, dim=1)
+                .detach()
+                .contiguous()
+                .cpu()
+                .numpy()
+            )
+            columns = {"prediction": probabilities.argmax(axis=1)}
+            columns.update({
+                f"probability_{index}": probabilities[:, index]
+                for index in range(probabilities.shape[1])
+            })
+            return columns
+
+        values = logits.squeeze(1)
+        if self.task_type == "binary_clf":
+            values = torch.nn.functional.sigmoid(values)
+        return {"prediction": values.detach().contiguous().cpu().numpy()}
+
+    @staticmethod
+    def as_column(values):
+        """Whatever the batch carried for an id column, as something a frame holds.
+
+        A column reaches the batch either as a plain list or as a tensor —
+        ``add_extra_columns`` makes tensors — and a tensor has been moved to the
+        accelerator by the time a metric sees it. pandas cannot read device
+        memory, so it comes back here.
+        """
+        if isinstance(values, torch.Tensor):
+            return values.detach().contiguous().cpu().numpy()
+        return values
 
     def update(self, inputs, outputs):
         """Accumulate one batch of predictions, flushing when the buffer is full."""
-        epk_id = inputs["epk_id"]
-        target_attr_2 = inputs.get("target_attr_2", len(epk_id) * [-1])
-
-        logits = outputs.logits.squeeze(1)
-        if self.task_type == "binary_clf":
-            logits = torch.nn.functional.sigmoid(logits)
-        prediction = logits.detach().contiguous().cpu().numpy()
+        epk_id = self.as_column(inputs["epk_id"])
+        target_attr_2 = self.as_column(inputs.get("target_attr_2", len(epk_id) * [-1]))
 
         pred_dict = {
             "epk_id": epk_id,
             "target_attr_2": target_attr_2,
-            "prediction": prediction,
+            **self.predicted_columns(outputs.logits),
         }
         if "report_month" in inputs:
             pred_dict["report_month"] = inputs["report_month"]
@@ -453,7 +496,10 @@ class InferenceSupervisedMetrics(ArtifactMetric):
         if not self.preds:
             return
 
-        columns = ["epk_id", "target_attr_2", "prediction"]
+        # The first batch fixes the schema: how many probability columns a
+        # multiclass run writes is the head's width, and that does not change
+        # between batches.
+        columns = [name for name in self.preds[0] if name != "report_month"]
         predict: dict[str, list] = {column: [] for column in columns}
 
         has_report_month = any("report_month" in item for item in self.preds)
