@@ -18,8 +18,14 @@
 `k` в `precision_at_k` и `recall_at_k` — **процент** популяции, а не число
 записей.
 
-Обе метрики режут популяцию по `group`, `task_name` и `split_type`, если эти
-колонки есть в батче, и добавляют `mean_{main_metric}` поверх групп.
+Обе метрики режут популяцию по `group` и `split_type`, если эти колонки есть в
+батче, и добавляют `mean_{main_metric}` поверх групп. Имя каждого числа —
+`{calib,test}_group_{группа}_{метрика}`; когда у группы есть отложенный срез
+`test`, в среднее идёт именно он, иначе `calib`.
+
+Резать ещё и по задаче (`task_name`) метрики больше не умеют — эта сущность
+удалена. Разбиение по любой колонке делается снаружи,
+`GroupDevidedMetricsWrapper`.
 
 ## Uplift
 
@@ -65,7 +71,7 @@
 |---|---|---|
 | `CollectEmbeddings` | `seq_hidden_state` + дополнительные колонки | каждые `save_steps` батчей |
 | `InferenceMultiTaskCampaignMetrics` | вероятности обеих голов, задача, группа | каждые `save_steps` |
-| `InferenceSupervisedMetrics` | предсказание, задача, `target_attr_2` | каждые `save_steps` |
+| `InferenceSupervisedMetrics` | предсказание, `target_attr_2`, `report_month` | каждые `save_steps` |
 
 Имя части — `<время старта>_part-00000[_<prefix>].parquet`. Номер части
 монотонный, поэтому два сброса в одну секунду не затирают друг друга, а разные
@@ -94,3 +100,11 @@
 | `BaseMetric` | контракт `update` / `compute` / `reset` и объявление читаемых полей |
 | `ScalarMetric` | метрика, чей результат — числа |
 | `ArtifactMetric` | метрика, чей результат — файл; наследник реализует `flush`, `compute` даётся базовым классом |
+
+Uplift- и supervised-метрики устроены одинаково: накопить колонки по батчам,
+слить их, разрезать по `group` и `split_type`, назвать числа. Этот скелет
+вынесен в `avatar.metrics.grouped.GroupedPredictionMetric`; наследник
+реализует только `collect` (что оставить от батча) и `score_group` (как
+оценить срез). `avatar.metrics.supervised.SupervisedMetric` — ещё один шаг
+вниз: `ResponseMetrics` и `RegressionMetrics` отличаются от него лишь
+`task_type` и тем, как логит становится предсказанием.

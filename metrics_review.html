@@ -501,17 +501,18 @@
     <p class="standfirst">
       Половина модуля не использовалась — её больше нет. Контракт разделён на
       «числа» и «файлы», накопители потерь считают то, что обещают, а метрика
-      больше не имеет права остановить обучение. Пять находок осталось открытыми.
+      больше не имеет права остановить обучение, а тройная копия цикла по группам
+      свёрнута в один базовый класс. Четыре находки осталось открытыми.
     </p>
     <div class="meta">
       <span><b>Ветка</b> refactor/data-sharding-hdfs</span>
-      <span><b>Диффа</b> +1221 / −6762 в 69 файлах</span>
-      <span><b>Тесты</b> 405 passed, 2 skipped</span>
+      <span><b>Диффа</b> +1421 / −7233 в 67 файлах</span>
+      <span><b>Тесты</b> 416 passed, 2 skipped</span>
     </div>
 
     <div class="scoreboard">
       <div class="score dead">
-        <span class="n"><span class="was">3024</span>1712</span>
+        <span class="n"><span class="was">3024</span>1480</span>
         <span class="lbl">строк в модуле</span>
         <span class="sub">25 → 11 классов</span>
       </div>
@@ -521,12 +522,12 @@
         <span class="sub">из 9 запрошенных</span>
       </div>
       <div class="score open">
-        <span class="n"><span class="was">15</span>5</span>
+        <span class="n"><span class="was">15</span>4</span>
         <span class="lbl">находок осталось открытыми</span>
-        <span class="sub">B3, S4, S5, S6–S9, S12/P5</span>
+        <span class="sub">S4, S5, S6–S9, S12/P5</span>
       </div>
       <div class="score dead">
-        <span class="n"><span class="was">1</span>3</span>
+        <span class="n"><span class="was">1</span>4</span>
         <span class="lbl">тестовых файла модуля</span>
         <span class="sub">+ контрактные тесты</span>
       </div>
@@ -557,11 +558,11 @@
         <table>
           <thead><tr><th></th><th>было</th><th>стало</th></tr></thead>
           <tbody>
-            <tr><td>строк в модуле</td><td class="num was">3024</td><td class="num">1712</td></tr>
-            <tr><td>публичных классов</td><td class="num was">25</td><td class="num">11 + 3 базовых</td></tr>
+            <tr><td>строк в модуле</td><td class="num was">3024</td><td class="num">1480</td></tr>
+            <tr><td>публичных классов</td><td class="num was">25</td><td class="num">11 + 5 базовых</td></tr>
             <tr><td>недостижимых классов</td><td class="num was">12 (50% строк)</td><td class="num">0</td></tr>
-            <tr><td>тестовых файлов модуля</td><td class="num was">1</td><td class="num">3</td></tr>
-            <tr><td>дефектов, роняющих прогон</td><td class="num was">3</td><td class="num">1</td></tr>
+            <tr><td>тестовых файлов модуля</td><td class="num was">1</td><td class="num">4</td></tr>
+            <tr><td>дефектов, роняющих прогон</td><td class="num was">3</td><td class="num">0</td></tr>
           </tbody>
         </table>
       </div>
@@ -735,11 +736,40 @@
         </div>
 
         <div class="done-item">
-          <h4>Тесты <span class="tick">3 файла вместо 1</span></h4>
+          <h4><code>task_name</code> удалён, три копии цикла стали одной <span class="tick">B3</span></h4>
+          <p>
+            Uplift-, response- и regression-метрики были тремя копиями одного
+            ~100-строчного цикла: накопить колонки по батчам, слить, разрезать по
+            задаче, группе и <code>split_type</code>, назвать числа. Сущность
+            задачи убрана целиком, а скелет вынесен в один базовый класс —
+            наследник реализует только <code>collect</code> (что оставить от
+            батча) и <code>score_group</code> (как оценить срез).
+          </p>
+          <pre><code>class GroupedPredictionMetric(ScalarMetric):
+    def collect(self, inputs, outputs) -&gt; dict: ...
+    def score_group(self, merged, group, calib_mask, test_mask): ...</code></pre>
+          <p>
+            <code>ResponseMetrics</code> и <code>RegressionMetrics</code>
+            съехались ещё на шаг ниже и отличаются друг от друга только
+            <code>task_type</code> и тем, как логит становится предсказанием.
+            Вместе с задачей ушёл <strong>B3</strong>: имя метрики теперь строит
+            одна общая функция, и расхождению между копиями взяться неоткуда.
+          </p>
+          <p>
+            Побочные следствия: из метрик и submit-файлов исчезли колонка и
+            префикс <code>task_name</code>; <code>product</code> больше не нужен
+            ни одной из трёх метрик; группа по умолчанию у uplift стала
+            <code>-1</code>, как у соседей. Резать по задаче по-прежнему можно
+            снаружи — <code>GroupDevidedMetricsWrapper</code>.
+          </p>
+        </div>
+
+        <div class="done-item">
+          <h4>Тесты <span class="tick">4 файла вместо 1</span></h4>
           <p>
             Появились контрактные тесты, параметризованные по всем классам модуля,
-            золотые значения для обоих накопителей потерь и тесты сужения полезной
-            нагрузки. Параметризация намеренная: дефекты, ради которых они
+            золотые значения для обоих накопителей потерь, тесты имён и выбора
+            среза у метрик по группам и тесты сужения полезной нагрузки. Параметризация намеренная: дефекты, ради которых они
             написаны, присутствовали сразу в нескольких классах, и тест на один
             класс написали бы для того, который и так был исправен.
           </p>
@@ -763,31 +793,9 @@
       <h2>3. Что осталось открытым</h2>
 
       <p>
-        Пять находок, не входивших в объём этой чистки. Все воспроизводятся одной
+        Четыре находки, не входившие в объём этой чистки. Все воспроизводятся одной
         командой — <code>python metrics_review_repro.py</code>.
       </p>
-
-      <article class="finding block">
-        <div class="fhead">
-          <span class="fid">B3</span>
-          <h3 class="ftitle"><code>RegressionMetrics</code> схлопывает все метрики в один ключ</h3>
-          <span class="proof">запущено</span>
-        </div>
-        <pre><code>f"{task_name}_" if len(task_name) != 0 else "" + key: val</code></pre>
-        <p>
-          Приоритет операторов разбирает это как
-          <code>(f"{task_name}_") if cond else ("" + key)</code>. При непустом
-          <code>task_name</code> ключом становится <code>"prod_a_"</code> —
-          <strong>без имени метрики</strong>, и все три метрики пишутся в один
-          ключ:
-        </p>
-        <pre><code>{'mse': 1.0, 'mae': 2.0, 'mape': 3.0}  ->  {'prod_a_': 3.0}</code></pre>
-        <p>
-          При пустом <code>task_name</code> ветка другая и всё корректно, поэтому
-          дефект виден только в многозадачном режиме.
-        </p>
-        <div class="fix"><b>Фикс</b>Как в соседнем <code>ResponseMetrics</code>: <code>f"task_{task_name}_{key}" if len(str(task_name)) != 0 else key</code>.</div>
-      </article>
 
       <article class="finding block">
         <div class="fhead">
@@ -955,13 +963,11 @@ nan нет   best=0.9   early_stop=True</code></pre>
       <h2>5. Порядок дальнейших работ</h2>
 
       <ol class="plan">
-        <li><span><strong>B3</strong> — приоритет операторов в <code>RegressionMetrics</code>. Одна строка.</span></li>
         <li><span><strong>S4</strong> — не выдавать <code>nan</code> из метрики и научить <code>EarlyStopping</code> его игнорировать. Пока это открыто, ранняя остановка ненадёжна.</span></li>
         <li><span><strong>S5</strong> — пересчёт regex-групп на каждом <code>compute</code>.</span></li>
         <li><span><strong>S6–S9</strong> — честная калибровка: cross-fitting или отказ выдавать калиброванные метрики без <code>split_type</code>; развести <code>mean_X</code> и <code>mean_calibrated_X</code>; убрать дописывание метки в данные.</span></li>
         <li><span><strong>S12, P5</strong> — чистый <code>reset</code> и срез логитов вместо <code>deepcopy</code> всего выхода.</span></li>
         <li><span>Переименовать <code>GroupDevidedMetricsWrapper</code> и <code>columns_to_devide</code> (правильно — divided) с шимом на один релиз, тем же приёмом, каким убрали шимы в <code>avatar.nn</code>. Класс не встречается ни в одном рабочем конфиге, так что цена минимальна.</span></li>
-        <li><span>Убрать тройное дублирование блока task/group в <code>UpliftMetrics</code>, <code>ResponseMetrics</code> и <code>RegressionMetrics</code> — три копии одного ~100-строчного цикла. B3 живёт ровно в той копии, куда исправление не доехало.</span></li>
       </ol>
     </section>
   </main>

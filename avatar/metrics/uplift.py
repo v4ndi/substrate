@@ -8,16 +8,18 @@ ranking.
 """
 
 import logging
-import os
 
 import numpy as np
-import pandas as pd
-import torch
 from betacal import BetaCalibration
 from sklearn.metrics import roc_auc_score
 from sklift.metrics import qini_auc_score, uplift_at_k, uplift_auc_score
 
-from avatar.metrics.base import ScalarMetric
+from avatar.metrics.grouped import (
+    CALIB_SPLIT,
+    TEST_SPLIT,
+    GroupedPredictionMetric,
+    group_prefixed,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -136,13 +138,14 @@ def apply_calibration_calculate_metrics(
     return metrics, calibrated_uplift
 
 
-class UpliftMetrics(ScalarMetric):
+class UpliftMetrics(GroupedPredictionMetric):
     """Campaign uplift metrics, optionally over beta-calibrated probabilities.
 
     Consumes ``outputs.uplift`` (or ``treatment_probs - control_probs`` when
     ``uplift`` is None), ``outputs.treatment``, ``outputs.conversion`` and
-    ``outputs.group``. When the batch carries a task or ``product`` column,
-    metrics are additionally reported per task.
+    ``outputs.group``. The population is split by ``group`` and by
+    ``split_type``: calibrators are fitted on the ``calib`` slice and the
+    ``test`` slice, when present, is what ``mean_{main_metric}`` reports.
 
     Args:
         require_calibration: Which of the two metric families feeds
@@ -155,8 +158,8 @@ class UpliftMetrics(ScalarMetric):
             ``qini_auc_score``.
 
     Returns from :meth:`compute`:
-        Per task and group, the raw and calibrated uplift metrics, the per-head
-        ROC AUC, and the calibration diagnostics
+        Per group, the raw and calibrated uplift metrics, the per-head ROC AUC,
+        and the calibration diagnostics
         ``calibration_rank_shift_{control,treatment}`` and
         ``calibration_gap_{control,treatment}``. A rank shift far from zero
         means the calibrated numbers should not be read.
@@ -168,7 +171,7 @@ class UpliftMetrics(ScalarMetric):
         before reading them.
     """
 
-    required_inputs = ("epk_id", "split_type", "product")
+    required_inputs = ("epk_id", "split_type")
     required_outputs = (
         "uplift",
         "treatment",
@@ -176,7 +179,6 @@ class UpliftMetrics(ScalarMetric):
         "control_probs",
         "treatment_probs",
         "group",
-        "task_name",
     )
 
     def __init__(
@@ -185,228 +187,84 @@ class UpliftMetrics(ScalarMetric):
         save_submit_path: str | None = None,
         main_metric: str = "qini_auc_score",
     ):
-        self.preds = []
+        super().__init__(save_submit_path=save_submit_path, main_metric=main_metric)
         self.require_calibration = require_calibration
-        self.save_submit = save_submit_path
-        self.main_metric = main_metric
 
-    def update(self, inputs, outputs):
-        """Stores model predictions for later computation.
-
-        Args:
-            inputs: Dict[str, any] - epk_id - optional field
-            outputs: Dict[str, torch.Tensor] - uplift, treatment, conversion,
-                control_probs, treatment_probs, group required fields;
-                each field is a torch.Tensor with dim = 1
-        """
+    def collect(self, inputs, outputs) -> dict:
+        """Keep both heads' probabilities, the assignment and the conversion."""
         if outputs.uplift is None:
             uplift = (
                 outputs.treatment_probs.detach().contiguous().cpu().numpy()
                 - outputs.control_probs.detach().contiguous().cpu().numpy()
             )
         else:
-            uplift = None
+            uplift = outputs.uplift.detach().contiguous().cpu().numpy()
 
-        if hasattr(outputs, "task_name") and outputs.task_name is not None:
-            if torch.is_tensor(outputs.task_name):
-                task_name = outputs.task_name.detach().contiguous().cpu().numpy()
-            else:
-                task_name = outputs.task_name
-        elif "product" in inputs:
-            task_name = inputs["product"]
-        else:
-            task_name = None
-
-        self.preds.append({
+        return {
             "epk_id": inputs["epk_id"] if "epk_id" in inputs else None,
-            "uplift": outputs.uplift.detach().contiguous().cpu().numpy()
-            if outputs.uplift is not None
-            else uplift,
+            "uplift": uplift,
             "group": outputs.group.detach().contiguous().cpu().numpy()
             if outputs.group is not None
             else None,
-            "task_name": task_name,
-            # "task_name": outputs.task_name.detach().contiguous().cpu().numpy()
-            # if torch.is_tensor(outputs.task_name)
-            # else outputs.task_name
-            # if (hasattr(outputs, "task_name") and outputs.task_name is not None)
-            # else inputs["product"]
-            # if ("product" in inputs)
-            # else None,
             "split_type": inputs["split_type"] if "split_type" in inputs else None,
             "treatment": outputs.treatment.detach().contiguous().cpu().numpy(),
             "y_true": outputs.conversion.detach().contiguous().cpu().numpy(),
             "c_probs": outputs.control_probs.detach().contiguous().cpu().numpy(),
             "t_probs": outputs.treatment_probs.detach().contiguous().cpu().numpy(),
-        })
-
-    def compute(self) -> dict[str, float]:
-        """Computes uplift and classification metrics."""
-        merged_preds = {
-            key: np.concatenate([p[key] for p in self.preds])
-            for key in self.preds[0]
-            if self.preds[0][key] is not None
         }
 
-        result = {}
-        mean_main_metric = []
-        merged_preds["calibrated_uplift"] = np.full_like(
-            merged_preds["y_true"], np.nan, dtype=float
+    def prepare(self, merged: dict) -> None:
+        """Make room for the calibrated uplift the group loop fills in."""
+        merged["calibrated_uplift"] = np.full_like(
+            merged["y_true"], np.nan, dtype=float
         )
 
-        if "group" not in merged_preds:
-            merged_preds["group"] = -1 * np.zeros(
-                merged_preds["y_true"].shape[0]
-            ).astype(np.int32)
+    def score_group(self, merged, group, calib_mask, test_mask):
+        """Fit the two calibrators on ``calib``, then score both slices."""
+        t_calibrator = fit_calibrator(
+            scores=merged["t_probs"][calib_mask & (merged["treatment"] == 1)],
+            y_true=merged["y_true"][calib_mask & (merged["treatment"] == 1)],
+        )
+        c_calibrator = fit_calibrator(
+            scores=merged["c_probs"][calib_mask & (merged["treatment"] == 0)],
+            y_true=merged["y_true"][calib_mask & (merged["treatment"] == 0)],
+        )
 
-        if "task_name" not in merged_preds:
-            task_names = [""]
-            merged_preds["task_name"] = np.array(
-                task_names * merged_preds["y_true"].shape[0]
+        main_metric = (
+            f"calibrated_{self.main_metric}"
+            if self.require_calibration
+            else self.main_metric
+        )
+
+        scores: dict[str, float] = {}
+        main_value = None
+        for split, mask in ((CALIB_SPLIT, calib_mask), (TEST_SPLIT, test_mask)):
+            if not mask.any():
+                continue
+            slice_scores, calibrated_uplift = apply_calibration_calculate_metrics(
+                y_true=merged["y_true"][mask],
+                t_probs=merged["t_probs"][mask],
+                c_probs=merged["c_probs"][mask],
+                treatment=merged["treatment"][mask],
+                t_calibrator=t_calibrator,
+                c_calibrator=c_calibrator,
+                is_calib=split == CALIB_SPLIT,
             )
-        else:
-            task_names = np.unique(merged_preds["task_name"])
+            merged["calibrated_uplift"][mask] = calibrated_uplift
+            scores.update(group_prefixed(slice_scores, split, group))
+            # ``test`` comes second, so a held-out slice overrides the
+            # in-sample one as the group's contribution to the mean.
+            main_value = slice_scores[main_metric]
+        return scores, main_value
 
-        if "split_type" not in merged_preds:
-            merged_preds["split_type"] = np.array(
-                ["calib"] * merged_preds["y_true"].shape[0]
-            )
+    def aggregate(self, result: dict, main_values: list[float]) -> None:
+        """Report the mean under both names when calibration is required.
 
-        for task in task_names:
-            task_mask = merged_preds["task_name"] == task
-            task_groups = np.unique(merged_preds["group"][task_mask])
-            for group in task_groups:
-                t_group_mask = (
-                    (merged_preds["group"] == group)
-                    & (merged_preds["treatment"] == 1)
-                    & (merged_preds["split_type"] == "calib")
-                    & task_mask
-                )
-                c_group_mask = (
-                    (merged_preds["group"] == group)
-                    & (merged_preds["treatment"] == 0)
-                    & (merged_preds["split_type"] == "calib")
-                    & task_mask
-                )
-
-                t_calibrator = fit_calibrator(
-                    scores=merged_preds["t_probs"][t_group_mask],
-                    y_true=merged_preds["y_true"][t_group_mask],
-                )
-
-                c_calibrator = fit_calibrator(
-                    scores=merged_preds["c_probs"][c_group_mask],
-                    y_true=merged_preds["y_true"][c_group_mask],
-                )
-
-                calib_group_mask = (
-                    (merged_preds["group"] == group)
-                    & (merged_preds["split_type"] == "calib")
-                    & task_mask
-                )
-                test_group_mask = (
-                    (merged_preds["group"] == group)
-                    & (merged_preds["split_type"] == "test")
-                    & task_mask
-                )
-
-                calib_scores, calib_calibrated_uplift = (
-                    apply_calibration_calculate_metrics(
-                        y_true=merged_preds["y_true"][calib_group_mask],
-                        t_probs=merged_preds["t_probs"][calib_group_mask],
-                        c_probs=merged_preds["c_probs"][calib_group_mask],
-                        treatment=merged_preds["treatment"][calib_group_mask],
-                        t_calibrator=t_calibrator,
-                        c_calibrator=c_calibrator,
-                        is_calib=True,
-                    )
-                )
-
-                merged_preds["calibrated_uplift"][calib_group_mask] = (
-                    calib_calibrated_uplift
-                )
-
-                if merged_preds["y_true"][test_group_mask].shape[0] > 0:
-                    test_scores, test_calibrated_uplift = (
-                        apply_calibration_calculate_metrics(
-                            y_true=merged_preds["y_true"][test_group_mask],
-                            t_probs=merged_preds["t_probs"][test_group_mask],
-                            c_probs=merged_preds["c_probs"][test_group_mask],
-                            treatment=merged_preds["treatment"][test_group_mask],
-                            t_calibrator=t_calibrator,
-                            c_calibrator=c_calibrator,
-                            is_calib=False,
-                        )
-                    )
-                    merged_preds["calibrated_uplift"][test_group_mask] = (
-                        test_calibrated_uplift
-                    )
-                    test_scores = {
-                        f"test_group_{group}_{key}": val
-                        for key, val in test_scores.items()
-                    }
-                else:
-                    test_scores = {}
-
-                calib_scores = {
-                    f"calib_group_{group}_{key}": val
-                    for key, val in calib_scores.items()
-                }
-
-                if merged_preds["y_true"][test_group_mask].shape[0] > 0:
-                    if self.require_calibration:
-                        mean_main_metric.append(
-                            test_scores[
-                                f"test_group_{group}_calibrated_{self.main_metric}"
-                            ]
-                        )
-                    else:
-                        mean_main_metric.append(
-                            test_scores[f"test_group_{group}_{self.main_metric}"]
-                        )
-                else:
-                    if self.require_calibration:
-                        mean_main_metric.append(
-                            calib_scores[
-                                f"calib_group_{group}_calibrated_{self.main_metric}"
-                            ]
-                        )
-                    else:
-                        mean_main_metric.append(
-                            calib_scores[f"calib_group_{group}_{self.main_metric}"]
-                        )
-                if len(task_names) > 0:
-
-                    def task_name_prefix(scores, task_name):
-                        return {
-                            (
-                                f"task_{task_name!s}_{key}"
-                                if len(str(task_name)) != 0
-                                else key
-                            ): val
-                            for key, val in scores.items()
-                        }
-
-                    result = {
-                        **result,
-                        **task_name_prefix(scores=calib_scores, task_name=task),
-                        **task_name_prefix(scores=test_scores, task_name=task),
-                    }
-                else:
-                    result = {**result, **calib_scores, **test_scores}
-        if self.require_calibration:
-            result[f"mean_calibrated_{self.main_metric}"] = np.mean(mean_main_metric)
-            result[f"mean_{self.main_metric}"] = np.mean(mean_main_metric)
-        else:
-            result[f"mean_{self.main_metric}"] = np.mean(mean_main_metric)
-
-        if self.save_submit is not None:
-            os.makedirs(self.save_submit, exist_ok=True)
-            submit_path = os.path.join(self.save_submit, "predict.parquet")
-            pd.DataFrame(merged_preds).to_parquet(submit_path, index=False)
-            logger.info("submit written to %s", submit_path)
-        return result
-
-    def reset(self):
-        """Clears stored predictions."""
-        self.preds = []
+        ``mean_calibrated_{main_metric}`` is an alias, not a second number: the
+        per-group values were already taken from the calibrated family.
+        """
+        super().aggregate(result, main_values)
+        if self.require_calibration and main_values:
+            result[f"mean_calibrated_{self.main_metric}"] = result[
+                f"mean_{self.main_metric}"
+            ]

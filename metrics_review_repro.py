@@ -64,19 +64,6 @@ class TwoGroupsOnSecondEpoch(ScalarMetric):
         """Nothing to reset."""
 
 
-def b3_regression_key_collapse() -> None:
-    """B3: operator precedence collapses every regression metric into one key."""
-    print("\n--- B3  RegressionMetrics: схлопывание ключей ---")
-    scores = {"mse": 1.0, "mae": 2.0, "mape": 3.0}
-    task_name = "prod_a"
-    collapsed = {
-        f"{task_name}_" if len(task_name) != 0 else "" + key: value
-        for key, value in scores.items()
-    }
-    print(f"  было: {scores}")
-    print(f"  стало: {collapsed}   — ожидались три ключа, названные по метрикам")
-
-
 def s4_nan_erases_the_best_score() -> None:
     """S4: a one-class slice yields nan, and a nan wipes the early-stopping record."""
     print("\n--- S4  nan из вырожденного среза стирает рекорд ---")
@@ -133,7 +120,6 @@ def p5_deepcopy_on_train_outputs() -> None:
 def main() -> None:
     """Run every reproduction in the order the review lists them."""
     print(f"avatar: {avatar.__file__}")
-    b3_regression_key_collapse()
     s4_nan_erases_the_best_score()
     s5_frozen_regex_groups()
     s12_reset_keeps_groups()
