@@ -1,0 +1,105 @@
+# Regression: predict log1p of a customer's yearly spend in one category.
+#
+# Two keys separate this from response.yaml — `task_type: regression` on the
+# model and `is_regression: True` on the collate function, which is what makes
+# the targets float instead of class ids.
+distributed:
+  backend: null
+  gradient_accumulation_steps: 1
+amp: no
+ddp:
+  find_unused_parameters: False
+
+train_dataloader:
+  _target_: torch.utils.data.DataLoader
+  dataset:
+    _target_: avatar.data.TabularDataset
+    path: examples/tabular_tasks/data/regression_smoke/train
+    shuffle_files: True
+    shuffle_pq: True
+  batch_size: 1024
+  pin_memory: True
+  drop_last: False
+  num_workers: 2
+  collate_fn:
+    _target_: avatar.data.SupervisedCollateFn
+    target_column: target
+    is_regression: True
+    add_extra_columns:
+      group: group
+
+valid_dataloader:
+  _target_: torch.utils.data.DataLoader
+  dataset:
+    _target_: avatar.data.TabularDataset
+    path: examples/tabular_tasks/data/regression_smoke/valid
+    shuffle_files: False
+    shuffle_pq: False
+  batch_size: 1024
+  pin_memory: True
+  drop_last: False
+  num_workers: 2
+  collate_fn:
+    _target_: avatar.data.SupervisedCollateFn
+    target_column: target
+    is_regression: True
+    add_extra_columns:
+      group: group
+
+model:
+  _target_: avatar.pipeline.tabular.TabularClassification
+  tabular_model:
+    _target_: avatar.pipeline.tabular.TabularWithAggregatedStates
+    embedding:
+      _target_: avatar.nn.embedding.TabularEmbedding
+      num_numerical_features: 175
+      hidden_size: 64
+      vocab_size: 8
+    encoder:
+      _target_: avatar.nn.tabular.TabularTransformer
+      hidden_size: ${model.tabular_model.embedding.hidden_size}
+      num_heads: 4
+      num_layers: 2
+      attn_dropout: 0.15
+    aggregation_config:
+      name: linear
+      num_features: 177
+      emb_dim: ${model.tabular_model.embedding.hidden_size}
+  num_classes: 1
+  task_type: regression
+  dropout_p: 0.2
+
+mlflow:
+  experiment_name: tabular_tasks
+  run_name: regression_smoke
+  logging_dir: ./mlruns
+
+optimizer:
+  _target_: torch.optim.AdamW
+  _partial_: True
+  lr: 0.001
+  weight_decay: 0.01
+
+scheduler:
+  _target_: transformers.optimization.get_scheduler
+  _partial_: True
+  name: cosine
+  num_warmup_steps: 50
+  num_training_steps: null
+
+train:
+  seed: 42
+  num_epochs: 10
+  max_saved_checkpoints: 2
+  early_stopping:
+    _target_: avatar.train.EarlyStopping
+    main_metric: mean_mae
+    patience: 3
+    strategy: min # less error is better
+
+metrics:
+  valid_metrics:
+    _target_: avatar.metrics.RegressionMetrics
+    # mape is reported over the records whose target is not zero — 18% of this
+    # column is zero, and a percentage error there is not a number.
+    main_metric: mae

@@ -1,0 +1,104 @@
+# Multi-class: seven forest cover types.
+#
+# The only structural difference from response.yaml is the width of the head —
+# `num_classes: 7` picks cross-entropy and gives the metric a distribution per
+# record instead of a single probability.
+distributed:
+  backend: null
+  gradient_accumulation_steps: 1
+amp: no
+ddp:
+  find_unused_parameters: False
+
+train_dataloader:
+  _target_: torch.utils.data.DataLoader
+  dataset:
+    _target_: avatar.data.TabularDataset
+    path: examples/tabular_tasks/data/multiclass_smoke/train
+    shuffle_files: True
+    shuffle_pq: True
+  batch_size: 1024
+  pin_memory: True
+  drop_last: False
+  num_workers: 2
+  collate_fn:
+    _target_: avatar.data.SupervisedCollateFn
+    target_column: target
+    add_extra_columns:
+      group: group
+
+valid_dataloader:
+  _target_: torch.utils.data.DataLoader
+  dataset:
+    _target_: avatar.data.TabularDataset
+    path: examples/tabular_tasks/data/multiclass_smoke/valid
+    shuffle_files: False
+    shuffle_pq: False
+  batch_size: 1024
+  pin_memory: True
+  drop_last: False
+  num_workers: 2
+  collate_fn:
+    _target_: avatar.data.SupervisedCollateFn
+    target_column: target
+    add_extra_columns:
+      group: group
+
+model:
+  _target_: avatar.pipeline.tabular.TabularClassification
+  tabular_model:
+    _target_: avatar.pipeline.tabular.TabularWithAggregatedStates
+    embedding:
+      _target_: avatar.nn.embedding.TabularEmbedding
+      num_numerical_features: 10
+      hidden_size: 64
+      vocab_size: 132
+    encoder:
+      _target_: avatar.nn.tabular.TabularTransformer
+      hidden_size: ${model.tabular_model.embedding.hidden_size}
+      num_heads: 4
+      num_layers: 2
+      attn_dropout: 0.15
+    aggregation_config:
+      name: linear
+      num_features: 54
+      emb_dim: ${model.tabular_model.embedding.hidden_size}
+  num_classes: 7
+  task_type: classification
+  dropout_p: 0.2
+
+mlflow:
+  experiment_name: tabular_tasks
+  run_name: multiclass_smoke
+  logging_dir: ./mlruns
+
+optimizer:
+  _target_: torch.optim.AdamW
+  _partial_: True
+  lr: 0.001
+  weight_decay: 0.01
+
+scheduler:
+  _target_: transformers.optimization.get_scheduler
+  _partial_: True
+  name: cosine
+  num_warmup_steps: 50
+  num_training_steps: null
+
+train:
+  seed: 42
+  num_epochs: 10
+  max_saved_checkpoints: 2
+  early_stopping:
+    _target_: avatar.train.EarlyStopping
+    # Class 2 is 49% of this target and class 4 is 0.5%: plain accuracy would
+    # report the size of the majority class rather than the model.
+    main_metric: mean_balanced_accuracy
+    patience: 3
+    strategy: max
+
+metrics:
+  valid_metrics:
+    _target_: avatar.metrics.MultiClassMetrics
+    num_classes: 7
+    main_metric: balanced_accuracy
