@@ -7,6 +7,7 @@ that ``reset`` leaves the wrapper as if it had just been built.
 """
 
 import dataclasses
+import logging
 import types
 
 import numpy as np
@@ -15,7 +16,10 @@ import torch
 
 from avatar.metrics import ResponseMetrics
 from avatar.metrics.base import ScalarMetric
-from avatar.metrics.utils import GroupDevidedMetricsWrapper
+from avatar.metrics.utils import (
+    GroupAverageMetricWrapper,
+    GroupDevidedMetricsWrapper,
+)
 
 #: The group key for channel "a" — a one-column group is keyed by a 1-tuple.
 CHANNEL_A = ("a",)
@@ -195,3 +199,82 @@ def test_a_group_that_leaves_the_data_does_not_break_the_next_epoch():
 
     assert any(name.startswith("channel_a_") for name in second)
     assert not [name for name in second if name.startswith("channel_b_")]
+
+
+class ScriptedMetric(ScalarMetric):
+    """Returns the next canned result on every ``compute``."""
+
+    def __init__(self, results):
+        self.results = list(results)
+
+    def update(self, inputs, outputs) -> None:
+        """Nothing to accumulate."""
+
+    def compute(self) -> dict[str, float]:
+        return dict(self.results.pop(0))
+
+    def reset(self) -> None:
+        """Nothing to reset."""
+
+
+def test_a_group_that_appears_later_joins_the_average():
+    """The regular expression is resolved against every result, not the first.
+
+    The inner wrapper discovers its groups from the data, so a channel that
+    first shows up in the second epoch used to stay out of the average for the
+    rest of the run — and nothing said so.
+    """
+    inner = ScriptedMetric([
+        {"g_0_auc": 1.0},
+        {"g_0_auc": 1.0, "g_1_auc": 0.0},
+    ])
+    wrapper = GroupAverageMetricWrapper(
+        inner, avg_over_regulars={"avg_auc": r"g_\d+_auc"}
+    )
+
+    assert wrapper.compute()["avg_auc"] == pytest.approx(1.0)
+    assert wrapper.compute()["avg_auc"] == pytest.approx(0.5)
+
+
+def test_a_group_that_leaves_drops_out_of_the_average():
+    """Resolution works in both directions."""
+    inner = ScriptedMetric([
+        {"g_0_auc": 1.0, "g_1_auc": 0.0},
+        {"g_0_auc": 1.0},
+    ])
+    wrapper = GroupAverageMetricWrapper(
+        inner, avg_over_regulars={"avg_auc": r"g_\d+_auc"}
+    )
+
+    assert wrapper.compute()["avg_auc"] == pytest.approx(0.5)
+    assert wrapper.compute()["avg_auc"] == pytest.approx(1.0)
+
+
+def test_an_average_over_nothing_is_not_reported(caplog):
+    """It used to be reported as ``0``, which reads as a collapse."""
+    inner = ScriptedMetric([{"unrelated": 1.0}])
+    wrapper = GroupAverageMetricWrapper(
+        inner, avg_over_regulars={"avg_auc": r"g_\d+_auc"}
+    )
+
+    with caplog.at_level(
+        logging.WARNING, logger="avatar.metrics.utils.group_average_wrap"
+    ):
+        result = wrapper.compute()
+
+    assert "avg_auc" not in result
+    assert any("matched nothing" in record.message for record in caplog.records)
+
+
+def test_an_explicit_group_survives_a_missing_member(caplog):
+    """A metric may now omit a name it cannot compute; the average goes on."""
+    inner = ScriptedMetric([{"a": 1.0}])
+    wrapper = GroupAverageMetricWrapper(inner, groups={"avg": ["a", "b"]})
+
+    with caplog.at_level(
+        logging.WARNING, logger="avatar.metrics.utils.group_average_wrap"
+    ):
+        result = wrapper.compute()
+
+    assert result["avg"] == pytest.approx(1.0)
+    assert any("did not produce" in record.message for record in caplog.records)

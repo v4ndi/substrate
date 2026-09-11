@@ -1,6 +1,11 @@
-"""Metric-plateau detection, unchanged in behaviour from ``avatar.train_utils``."""
+"""Metric-plateau detection."""
 
 from __future__ import annotations
+
+import logging
+import math
+
+logger = logging.getLogger(__name__)
 
 
 class EarlyStopping:
@@ -9,6 +14,14 @@ class EarlyStopping:
     Monitors a specified metric and stops training when the metric hasn't improved
     for a given number of consecutive evaluations (patience). Supports both
     maximization and minimization objectives.
+
+    An evaluation that does not produce a comparable number — the metric is
+    missing, ``None`` or ``nan`` — counts as **no improvement**: the record
+    stands and patience ticks. A ``nan`` used to be treated as an improvement,
+    because every comparison against it is false: it overwrote the best score,
+    reset the counter and, since the checkpoint callback saves whenever the
+    counter is zero, also wrote a checkpoint labelled best. One undefined epoch
+    was enough for a later collapse to go unnoticed.
 
     Attributes:
         main_metric (str): Name of the metric to monitor for early stopping.
@@ -49,7 +62,7 @@ class EarlyStopping:
                 "min" to minimize the metric. Defaults to "max".
 
         Raises:
-            ValueError: If strategy is neither "max" nor "min".
+            AssertionError: If strategy is neither "max" nor "min".
         """
         assert strategy in ["min", "max"], (
             f"Unsupported value for strategy: {strategy=}"
@@ -62,6 +75,44 @@ class EarlyStopping:
         self.early_stop = False
         self.strategy = strategy
 
+    def read_score(self, scores) -> float | None:
+        """The monitored value, or ``None`` when this evaluation has none.
+
+        A metric that cannot be computed omits its key rather than reporting
+        ``nan``, so both cases arrive here and both are reported in the log —
+        a monitored name that never appears is usually a typo in the config.
+        """
+        if self.main_metric not in scores:
+            logger.warning(
+                "%s is not among the reported metrics (%s); this evaluation counts "
+                "as no improvement",
+                self.main_metric,
+                ", ".join(sorted(scores)[:5]) or "none at all",
+            )
+            return None
+
+        value = scores[self.main_metric]
+        try:
+            comparable = math.isfinite(value)
+        except (TypeError, ValueError):
+            comparable = False
+        if not comparable:
+            logger.warning(
+                "%s is %r and cannot be compared; this evaluation counts as no "
+                "improvement and the best score of %r stands",
+                self.main_metric,
+                value,
+                self.best_score,
+            )
+            return None
+        return float(value)
+
+    def register_no_improvement(self) -> None:
+        """Tick patience, and stop the run once it runs out."""
+        self.counter += 1
+        if self.counter >= self.patience:
+            self.early_stop = True
+
     def __call__(self, scores):
         """Evaluates whether to stop training based on current metric scores.
 
@@ -70,22 +121,18 @@ class EarlyStopping:
 
         Returns:
             None: Updates internal state (counter, best_score, early_stop).
-
-        Raises:
-            AssertionError: If main_metric is not found in scores dictionary.
         """
-        assert self.main_metric in scores, (
-            f"Not found metric: {self.main_metric} in scores"
-        )
-        score = scores[self.main_metric]
+        score = self.read_score(scores)
+        if score is None:
+            self.register_no_improvement()
+            return
+
         if self.strategy == "min":
             score *= -1
         if self.best_score is None:
             self.best_score = score
         elif score < self.best_score + self.delta:
-            self.counter += 1
-            if self.counter >= self.patience:
-                self.early_stop = True
+            self.register_no_improvement()
         else:
             self.best_score = score
             self.counter = 0

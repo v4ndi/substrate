@@ -500,21 +500,20 @@
     <h1>Ревью модуля <code>avatar.metrics</code></h1>
     <p class="standfirst">
       Половина модуля не использовалась — её больше нет. Контракт разделён на
-      «числа» и «файлы», накопители потерь считают то, что обещают, а метрика
-      больше не имеет права остановить обучение, а тройная копия цикла по группам
-      свёрнута в один базовый класс, обёртка по группам научилась резать батч
-      целиком, а калибровка uplift перестала оценивать себя на собственных
-      строках. Две находки осталось открытыми.
+      «числа» и «файлы», тройная копия цикла по группам свёрнута в один базовый
+      класс, калибровка uplift перестала оценивать себя на собственных строках,
+      а метрика больше не имеет права ни остановить обучение, ни подсунуть
+      ранней остановке <code>nan</code>. Открытых находок не осталось.
     </p>
     <div class="meta">
       <span><b>Ветка</b> refactor/data-sharding-hdfs</span>
-      <span><b>Диффа</b> +2181 / −7252 в 71 файле</span>
-      <span><b>Тесты</b> 432 passed, 2 skipped</span>
+      <span><b>Диффа</b> +2666 / −7296 в 73 файлах</span>
+      <span><b>Тесты</b> 444 passed, 2 skipped</span>
     </div>
 
     <div class="scoreboard">
       <div class="score dead">
-        <span class="n"><span class="was">3024</span>1622</span>
+        <span class="n"><span class="was">3024</span>1697</span>
         <span class="lbl">строк в модуле</span>
         <span class="sub">25 → 11 классов</span>
       </div>
@@ -523,14 +522,14 @@
         <span class="lbl">пунктов плана выполнено</span>
         <span class="sub">из 9 запрошенных</span>
       </div>
-      <div class="score open">
-        <span class="n"><span class="was">15</span>2</span>
+      <div class="score done">
+        <span class="n"><span class="was">15</span>0</span>
         <span class="lbl">находок осталось открытыми</span>
-        <span class="sub">S4, S5</span>
+        <span class="sub">каждая закрыта тестом</span>
       </div>
       <div class="score dead">
-        <span class="n"><span class="was">1</span>6</span>
-        <span class="lbl">тестовых файла модуля</span>
+        <span class="n"><span class="was">1</span>7</span>
+        <span class="lbl">тестовых файла</span>
         <span class="sub">+ контрактные тесты</span>
       </div>
     </div>
@@ -560,11 +559,12 @@
         <table>
           <thead><tr><th></th><th>было</th><th>стало</th></tr></thead>
           <tbody>
-            <tr><td>строк в модуле</td><td class="num was">3024</td><td class="num">1622</td></tr>
+            <tr><td>строк в модуле</td><td class="num was">3024</td><td class="num">1697</td></tr>
             <tr><td>публичных классов</td><td class="num was">25</td><td class="num">11 + 5 базовых</td></tr>
             <tr><td>недостижимых классов</td><td class="num was">12 (50% строк)</td><td class="num">0</td></tr>
-            <tr><td>тестовых файлов модуля</td><td class="num was">1</td><td class="num">6</td></tr>
-            <tr><td>дефектов, роняющих прогон</td><td class="num was">3</td><td class="num">0</td></tr>
+            <tr><td>открытых находок</td><td class="num was">15</td><td class="num">0</td></tr>
+            <tr><td>тестовых файлов</td><td class="num was">1</td><td class="num">7</td></tr>
+            <tr><td>дефектов, роняющих прогон</td><td class="num was">6</td><td class="num">0</td></tr>
           </tbody>
         </table>
       </div>
@@ -834,13 +834,62 @@
         </div>
 
         <div class="done-item">
-          <h4>Тесты <span class="tick">6 файлов вместо 1</span></h4>
+          <h4><code>nan</code> не выходит из метрики и не стирает рекорд <span class="tick">S4</span></h4>
+          <p>
+            <code>roc_auc_score</code> на срезе из одного класса возвращает
+            <code>nan</code>, а <code>precision_at_k</code> делит на
+            <code>k</code>, который на маленьком срезе округляется до нуля. Такие
+            числа больше не выдаются: ключ пропускается, причина пишется в лог.
+          </p>
+          <p>
+            Это была половина дефекта. Вторая — в <code>EarlyStopping</code>:
+            сравнение <code>score &lt; best + delta</code> с <code>nan</code>
+            всегда ложно, поэтому исполнялась ветка «улучшение». <code>nan</code>
+            переписывал рекорд, обнулял счётчик терпения и — поскольку чекпоинт
+            сохраняется ровно при нулевом счётчике — записывал эпоху как лучшую.
+          </p>
+          <pre><code>nan есть  best=0.1   early_stop=False
+nan нет   best=0.9   early_stop=True</code></pre>
+          <p>
+            Теперь валидация, не давшая сравнимого числа — метрика отсутствует,
+            <code>None</code> или <code>nan</code>, — считается
+            <strong>отсутствием улучшения</strong>: рекорд стоит, терпение тикает,
+            чекпоинт не пишется. Отсутствующий ключ перестал быть смертельным:
+            раньше <code>assert self.main_metric in scores</code> убивал обучение,
+            а метрика теперь имеет право не выдать число.
+          </p>
+        </div>
+
+        <div class="done-item">
+          <h4>Среднее по группам пересчитывается каждую эпоху <span class="tick">S5</span></h4>
+          <p>
+            <code>GroupAverageMetricWrapper</code> раскрывал регулярные выражения
+            один раз, на первом <code>compute</code>, а
+            <code>GroupDevidedMetricsWrapper</code> открывает группы лениво, по
+            мере их появления в данных. Группа, впервые встретившаяся на второй
+            эпохе, не попадала в среднее до конца прогона, и в логах это не было
+            видно. Обёртка стоит в 21 конфиге — самая популярная в модуле.
+          </p>
+          <pre><code>эпоха 1 -> {'g_0_auc': 1.0, 'avg_auc': 1.0}
+эпоха 2 -> {'g_0_auc': 1.0, 'g_1_auc': 0.0, 'avg_auc': 1.0}</code></pre>
+          <p>
+            Теперь выражения раскрываются на каждом <code>compute</code>. В
+            обратную сторону это чинит и падение: на прежней реализации
+            исчезнувшая группа давала <code>KeyError</code> прямо в
+            <code>compute</code>. Среднее, под которое не подошло ни одно имя,
+            больше не выдаётся нулём — ключа просто нет, и причина в логе.
+          </p>
+        </div>
+
+        <div class="done-item">
+          <h4>Тесты <span class="tick">7 файлов вместо 1</span></h4>
           <p>
             Появились контрактные тесты, параметризованные по всем классам модуля,
             золотые значения для обоих накопителей потерь, тесты имён и выбора
             среза у метрик по группам, срез батча по группам и чистый <code>reset</code>
             (пять из семи тестов падают на прежней реализации), честность калибровки
-            uplift (семь из девяти) и тесты сужения полезной нагрузки. Параметризация намеренная: дефекты, ради которых они
+            uplift (семь из девяти), сужение полезной нагрузки и поведение ранней
+            остановки на скоре, который не с чем сравнить (пять из семи). Параметризация намеренная: дефекты, ради которых они
             написаны, присутствовали сразу в нескольких классах, и тест на один
             класс написали бы для того, который и так был исправен.
           </p>
@@ -863,57 +912,19 @@
     <section id="open">
       <h2>3. Что осталось открытым</h2>
 
-      <p>
-        Две находки, не входившие в объём этой чистки. Обе воспроизводятся одной
-        командой — <code>python metrics_review_repro.py</code>.
-      </p>
-
-      <article class="finding block">
-        <div class="fhead">
-          <span class="fid">S4</span>
-          <h3 class="ftitle"><code>nan</code> из вырожденного среза стирает рекорд ранней остановки</h3>
-          <span class="proof">запущено</span>
-        </div>
+      <div class="callout">
         <p>
-          Находка пережила чистку: она перешла с удалённого
-          <code>RocAucScore</code> на <code>ResponseMetrics</code>. На срезе из
-          одних позитивов <code>roc_auc_score</code> возвращает <code>nan</code>, а
-          <code>precision_at_k</code> — <code>nan</code> от деления на ноль.
+          <strong>Ничего.</strong> Все пятнадцать находок закрыты, каждая —
+          тестом, который падает на прежней реализации. Воспроизводящий скрипт
+          больше не нужен и удалён: тест, который падает, стоит дороже скрипта,
+          который печатает.
         </p>
         <p>
-          Дальше <code>nan</code> попадает в <code>EarlyStopping</code>, где
-          сравнение <code>score &lt; best + delta</code> с <code>nan</code> всегда
-          ложно, поэтому исполняется ветка «улучшение» и рекорд переписывается:
+          Открытым остаётся один пункт, но он не находка, а опечатка в именах:
+          <code>GroupDevidedMetricsWrapper</code> и
+          <code>columns_to_devide</code> (правильно — divided).
         </p>
-        <pre><code>nan есть  best=0.1   early_stop=False
-nan нет   best=0.9   early_stop=True</code></pre>
-        <p>
-          Один <code>nan</code> забывает рекорд 0.9, и просадка до 0.1, которую
-          ранняя остановка обязана была поймать, проходит незамеченной.
-        </p>
-        <div class="fix"><b>Фикс</b>В двух местах: не выдавать <code>nan</code> из метрики (пропускать ключ и предупреждать) и научить <code>EarlyStopping</code> игнорировать нечисловой скор.</div>
-      </article>
-
-      <article class="finding">
-        <div class="fhead">
-          <span class="fid">S5</span>
-          <h3 class="ftitle"><code>GroupAverageMetricWrapper</code> фиксирует regex-группы на первом <code>compute</code></h3>
-          <span class="proof">запущено</span>
-        </div>
-        <p>
-          Список имён под регулярное выражение вычисляется один раз, а
-          <code>GroupDevidedMetricsWrapper</code> создаёт группы лениво, по мере
-          появления в данных:
-        </p>
-        <pre><code>эпоха 1 -> {'g_0_auc': 1.0, 'avg_auc': 1.0}
-эпоха 2 -> {'g_0_auc': 1.0, 'g_1_auc': 0.0, 'avg_auc': 1.0}</code></pre>
-        <p>
-          Среднее по определению неполное, и в логах это не видно. Обёртка
-          используется в 21 конфиге — самая популярная в модуле.
-        </p>
-        <div class="fix"><b>Фикс</b>Пересчитывать группы на каждом <code>compute</code>: это дешёвый поиск по десяткам имён, кэшировать нечего.</div>
-      </article>
-
+      </div>
     </section>
 
     <section id="dead">
@@ -977,14 +988,14 @@ nan нет   best=0.9   early_stop=True</code></pre>
       <h2>5. Порядок дальнейших работ</h2>
 
       <ol class="plan">
-        <li><span><strong>S4</strong> — не выдавать <code>nan</code> из метрики и научить <code>EarlyStopping</code> его игнорировать. Пока это открыто, ранняя остановка ненадёжна.</span></li>
-        <li><span><strong>S5</strong> — пересчёт regex-групп на каждом <code>compute</code>.</span></li>
         <li><span>Переименовать <code>GroupDevidedMetricsWrapper</code> и <code>columns_to_devide</code> (правильно — divided) с шимом на один релиз, тем же приёмом, каким убрали шимы в <code>avatar.nn</code>. Класс не встречается ни в одном рабочем конфиге, так что цена минимальна.</span></li>
+        <li><span>Вернуть пример multi-task, если постановка нужна: пайплайн и его тесты на месте, но рабочего конфига для него в репозитории больше нет.</span></li>
+        <li><span>Добавить колонку <code>split_type</code> в валидационные наборы пилота — без неё калиброванные uplift-метрики не считаются вовсе, и это правильно, но и нежелательно.</span></li>
       </ol>
     </section>
   </main>
 
   <footer>
-    Исходники отчёта в репозитории: metrics_review.md · metrics_review_repro.py · metrics_review_deadcode.txt
+    Исходники отчёта в репозитории: metrics_review.md · metrics_review_deadcode.txt
   </footer>
 </div>

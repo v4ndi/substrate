@@ -10,6 +10,7 @@ keeps and how it scores a slice — the two hooks below.
 
 import abc
 import logging
+import math
 import os
 
 import numpy as np
@@ -25,6 +26,28 @@ CALIB_SPLIT = "calib"
 
 #: The held-out slice. When it is present its numbers are the ones that count.
 TEST_SPLIT = "test"
+
+
+def defined_scores(scores: dict, context: str) -> dict[str, float]:
+    """Keep only the numbers that are actually numbers.
+
+    ``roc_auc_score`` on a one-class slice returns ``nan``, and
+    ``precision_at_k`` divides by a ``k`` that rounds to zero. A ``nan`` that
+    reaches the training loop is worse than a missing key: every comparison
+    against it is false, so :class:`~avatar.train.early_stopping.EarlyStopping`
+    took it for an improvement and overwrote the record it should have kept.
+    """
+    defined = {}
+    for name, value in scores.items():
+        try:
+            comparable = math.isfinite(value)
+        except (TypeError, ValueError):
+            comparable = False
+        if comparable:
+            defined[name] = value
+        else:
+            logger.warning("%s: %s is %r and is not reported", context, name, value)
+    return defined
 
 
 def group_prefixed(scores: dict, split: str, group) -> dict:
@@ -84,6 +107,12 @@ class GroupedPredictionMetric(ScalarMetric):
         """
         if main_values:
             result[f"mean_{self.main_metric}"] = float(np.mean(main_values))
+        elif result:
+            logger.warning(
+                "no group produced %s, so no mean is reported — check that it is "
+                "one of the metrics this class computes",
+                self.main_metric,
+            )
 
     def update(self, inputs, outputs) -> None:
         """Buffer one batch."""

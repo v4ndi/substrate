@@ -24,6 +24,7 @@ from avatar.metrics.grouped import (
     CALIB_SPLIT,
     TEST_SPLIT,
     GroupedPredictionMetric,
+    defined_scores,
     group_prefixed,
 )
 
@@ -31,18 +32,31 @@ logger = logging.getLogger(__name__)
 
 
 def precision_at_k(y_true, y_pred, k_pnt):
-    """Share of positives among the top ``k_pnt`` **percent** by score."""
+    """Share of positives among the top ``k_pnt`` **percent** by score.
+
+    ``nan`` when the slice is too small for ``k_pnt`` percent to be a whole
+    record: there is no top-k to look at. The caller drops undefined numbers
+    rather than reporting them.
+    """
     assert y_true.ndim == 1
     k = int(y_true.shape[0] * k_pnt / 100)
+    if k == 0:
+        return float("nan")
     top_k_indices = np.argsort(-y_pred)[:k]
     relevant = np.take(y_true, top_k_indices)
     return relevant.sum() / k
 
 
 def recall_at_k(y_true, y_pred, k_pnt):
-    """Share of all positives captured by the top ``k_pnt`` percent by score."""
+    """Share of all positives captured by the top ``k_pnt`` percent by score.
+
+    ``nan`` when the slice has no positives to capture, or is too small for
+    ``k_pnt`` percent to be a whole record.
+    """
     assert y_true.ndim == 1
     k = int(y_true.shape[0] * k_pnt / 100)
+    if k == 0 or y_true.sum() == 0:
+        return float("nan")
     top_k_indices = np.argsort(-y_pred)[:k]
     relevant = np.take(y_true, top_k_indices)
     return relevant.sum() / y_true.sum()
@@ -132,15 +146,19 @@ class SupervisedMetric(GroupedPredictionMetric):
         for split, mask in ((CALIB_SPLIT, calib_mask), (TEST_SPLIT, test_mask)):
             if not mask.any():
                 continue
-            slice_scores = apply_calculate_metrics(
-                y_true=merged["y_true"][mask],
-                y_pred=merged["y_pred"][mask],
-                task_type=self.task_type,
+            slice_scores = defined_scores(
+                apply_calculate_metrics(
+                    y_true=merged["y_true"][mask],
+                    y_pred=merged["y_pred"][mask],
+                    task_type=self.task_type,
+                ),
+                f"{split} slice of group {group}",
             )
             scores.update(group_prefixed(slice_scores, split, group))
-            # ``test`` comes second, so when the group has a held-out slice its
-            # number is the one that survives into the mean.
-            main_value = slice_scores[self.main_metric]
+            if self.main_metric in slice_scores:
+                # ``test`` comes second, so when the group has a held-out slice
+                # its number is the one that survives into the mean.
+                main_value = slice_scores[self.main_metric]
         return scores, main_value
 
 

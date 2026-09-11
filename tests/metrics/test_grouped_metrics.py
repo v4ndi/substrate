@@ -5,6 +5,8 @@ so what is worth pinning down is the naming — one key per metric per group per
 split — and the choice of which slice feeds ``mean_{main_metric}``.
 """
 
+import logging
+import math
 import types
 
 import numpy as np
@@ -47,12 +49,18 @@ def uplift_batch(conversion, t_probs, c_probs, treatment, group, split_type):
 
 @pytest.fixture
 def two_split_response():
-    """Eight records in one group, split into calib and test halves."""
+    """Eighty records in one group, split into calib and test halves.
+
+    Big enough that the top five percent is a whole record — below that
+    ``precision_at_5`` has no top-k to look at and is not reported at all.
+    """
+    half = 40
+    targets = [index % 2 for index in range(2 * half)]
     return supervised_batch(
-        targets=[0, 1, 0, 1, 0, 1, 0, 1],
-        logits=[-2.0, 2.0, -1.0, 1.0, -2.0, 2.0, -1.0, 1.0],
-        group=[0, 0, 0, 0, 0, 0, 0, 0],
-        split_type=["calib"] * 4 + ["test"] * 4,
+        targets=targets,
+        logits=[2.0 if target else -2.0 for target in targets],
+        group=[0] * (2 * half),
+        split_type=["calib"] * half + ["test"] * half,
     )
 
 
@@ -229,3 +237,28 @@ def test_uplift_writes_a_submit_file(uplift_population, tmp_path):
     assert "calibrated_uplift" in frame.columns
     assert "task_name" not in frame.columns
     assert not frame["calibrated_uplift"].isna().any()
+
+
+def test_a_metric_that_cannot_be_computed_is_not_reported(caplog):
+    """An undefined number is dropped, not published as ``nan``.
+
+    ``precision_at_k`` divides by a ``k`` that rounds to zero on a small slice.
+    The ``nan`` used to travel into the training loop, where every comparison
+    against it is false and early stopping took it for an improvement.
+    """
+    metric = ResponseMetrics()
+    metric.update(
+        *supervised_batch(
+            targets=[0, 1, 0, 1],
+            logits=[-1.0, 1.0, -1.0, 1.0],
+            group=[0] * 4,
+            split_type=["calib"] * 4,
+        )
+    )
+    with caplog.at_level(logging.WARNING, logger="avatar.metrics.grouped"):
+        scores = metric.compute()
+
+    assert "calib_group_0_roc_auc_score" in scores
+    assert "calib_group_0_precision_at_5" not in scores
+    assert not [name for name, value in scores.items() if math.isnan(value)]
+    assert any("is not reported" in record.message for record in caplog.records)

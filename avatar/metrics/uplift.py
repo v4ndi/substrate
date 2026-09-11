@@ -22,6 +22,7 @@ from avatar.metrics.grouped import (
     CALIB_SPLIT,
     TEST_SPLIT,
     GroupedPredictionMetric,
+    defined_scores,
     group_prefixed,
 )
 
@@ -299,10 +300,14 @@ class UpliftMetrics(GroupedPredictionMetric):
             t_probs = merged["t_probs"][mask]
             c_probs = merged["c_probs"][mask]
 
-            slice_scores = calculate_uplift_metrics(
-                y_true=y_true, uplift=t_probs - c_probs, treatment=treatment
+            context = f"{split} slice of group {group}"
+            slice_scores = defined_scores(
+                calculate_uplift_metrics(
+                    y_true=y_true, uplift=t_probs - c_probs, treatment=treatment
+                ),
+                context,
             )
-            if slice_scores:
+            if self.main_metric in slice_scores:
                 # ``test`` comes second, so a held-out slice overrides the
                 # in-sample one as the group's contribution to the mean.
                 main_value = slice_scores[self.main_metric]
@@ -314,29 +319,34 @@ class UpliftMetrics(GroupedPredictionMetric):
                 in_sample = split == CALIB_SPLIT
 
                 slice_scores.update(
-                    calibration_diagnostics(
-                        y_true,
-                        treatment,
-                        [
-                            ("treatment", 1, t_probs, t_calibrated),
-                            ("control", 0, c_probs, c_calibrated),
-                        ],
-                        in_sample=in_sample,
+                    defined_scores(
+                        calibration_diagnostics(
+                            y_true,
+                            treatment,
+                            [
+                                ("treatment", 1, t_probs, t_calibrated),
+                                ("control", 0, c_probs, c_calibrated),
+                            ],
+                            in_sample=in_sample,
+                        ),
+                        context,
                     )
                 )
 
                 if not in_sample:
-                    calibrated_scores = calculate_uplift_metrics(
-                        y_true=y_true,
-                        uplift=t_calibrated - c_calibrated,
-                        treatment=treatment,
-                        calibrated=True,
+                    calibrated_scores = defined_scores(
+                        calculate_uplift_metrics(
+                            y_true=y_true,
+                            uplift=t_calibrated - c_calibrated,
+                            treatment=treatment,
+                            calibrated=True,
+                        ),
+                        context,
                     )
                     slice_scores.update(calibrated_scores)
-                    if calibrated_scores:
-                        self.calibrated_mains.append(
-                            calibrated_scores[f"calibrated_{self.main_metric}"]
-                        )
+                    calibrated_main = f"calibrated_{self.main_metric}"
+                    if calibrated_main in calibrated_scores:
+                        self.calibrated_mains.append(calibrated_scores[calibrated_main])
 
             scores.update(group_prefixed(slice_scores, split, group))
         return scores, main_value
