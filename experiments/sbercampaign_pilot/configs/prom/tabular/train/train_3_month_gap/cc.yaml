@@ -49,7 +49,7 @@ valid_dataloader:
     inverse_treatment: True # если True то в treatment_column 0 заменяется на 1  и наоборот (В данном наборе данных 1 - КГ, 0 - ЦГ, поэтому необходимо сделать 1 - treatment_column)
     group_column: target_attr_2
 model:
-  _target_: avatar.pipeline.uplift.SLearner
+  _target_: avatar.pipeline.tabular.SLearner
   embedding:
     _target_: avatar.nn.embedding.TabularEmbedding
     num_numerical_features: 261
@@ -64,7 +64,7 @@ model:
     attn_dropout: 0.15
   exchange_treatment_group: false
   # treatment_interaction:
-  #   _target_: avatar.pipeline.uplift.treatment_interaction.IgnoreTreatmentInteraction
+  #   _target_: avatar.pipeline.tabular.interaction.IgnoreTreatmentInteraction
   aggregation_config:
     name: linear
     num_features: 314

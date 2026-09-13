@@ -19,23 +19,21 @@
 
 ```yaml
 model:
-  _target_: avatar.pipeline.tabular.TabularClassification
-  tabular_model:
-    _target_: avatar.pipeline.tabular.TabularWithAggregatedStates
-    embedding:
-      _target_: avatar.nn.embedding.TabularEmbedding
-      num_numerical_features: 189
-      vocab_size: 172
-      hidden_size: 64
-    encoder:
-      _target_: avatar.nn.tabular.TabularTransformer
-      hidden_size: ${model.tabular_model.embedding.hidden_size}
-      num_heads: 4
-      num_layers: 3
-    aggregation_config:
-      name: linear
-      num_features: 243
-      emb_dim: ${model.tabular_model.embedding.hidden_size}
+  _target_: avatar.pipeline.tabular.SupervisedLearner
+  embedding:
+    _target_: avatar.nn.embedding.TabularEmbedding
+    num_numerical_features: 189
+    vocab_size: 172
+    hidden_size: 64
+  tabular_encoder:
+    _target_: avatar.nn.tabular.TabularTransformer
+    hidden_size: ${model.embedding.hidden_size}
+    num_heads: 4
+    num_layers: 3
+  aggregation_config:
+    name: linear
+    num_features: 243
+    emb_dim: ${model.embedding.hidden_size}
   num_classes: 2
   task_type: classification
 ```
@@ -74,19 +72,20 @@ embedding:
   hidden_state_aggregator:
     _target_: avatar.nn.embedding.LayerNormConcatenate
     hidden_state_dim: 128
-    embedding_dim: ${model.tabular_model.embedding.hidden_size}
+    embedding_dim: ${model.embedding.hidden_size}
 ```
 
 Внешний вектор становится обычным токеном, и внимание работает с ним наравне с
 признаками. Не забудьте увеличить `num_features` в `aggregation_config`.
 
 **Late fusion** — после агрегации, прямо перед головой. Задаётся на пайплайне
-через `extra_hidden_dim`:
+через `hidden_state_dim`:
 
 ```yaml
 model:
-  _target_: avatar.pipeline.tabular.TabularClassification
-  extra_hidden_dim: 128
+  _target_: avatar.pipeline.tabular.SupervisedLearner
+  hidden_state_dim: 128
+  proj_hiddens_to_dim: 64 # необязательно: проецировать, а не только нормировать
 ```
 
 Early fusion даёт модели больше свободы, late — дешевле и устойчивее. Выбор
@@ -136,7 +135,7 @@ Early fusion даёт модели больше свободы, late — деш�
 
 ```yaml
 model:
-  _target_: avatar.pipeline.tabular.TabularClassification
+  _target_: avatar.pipeline.tabular.SupervisedLearner
   num_classes: 2
   loss:
     _target_: avatar.losses.ClassificationLoss
@@ -156,7 +155,7 @@ model:
   `(B, F, D)`, возвращайте `BaseTabularOutput`.
 * Свою агрегацию — наследуйте `avatar.nn.utils.BaseAggregation`.
 * Своё взаимодействие с воздействием — наследуйте
-  `avatar.pipeline.uplift.treatment_interaction.BaseTreatmentInteraction`.
+  `avatar.pipeline.tabular.interaction.BaseTreatmentInteraction`.
 
 Всё это подставляется в конфиг как обычный `_target_` — регистрировать ничего
 не нужно.

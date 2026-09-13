@@ -183,37 +183,27 @@ encoder:
 
 Пайплайн — то, что стоит в `model:`. Он связывает блоки и считает функцию потерь.
 
-### `avatar.pipeline.tabular.TabularClassification` (10)
+### `avatar.pipeline.tabular.SupervisedLearner` (6)
 
-Классификация или регрессия по табличным данным.
+Обучение с учителем по табличным данным: бинарная классификация, регрессия и
+многоклассовая — различаются только `num_classes` и `task_type`.
 
 ```yaml
 model:
-  _target_: avatar.pipeline.tabular.TabularClassification
-  tabular_model: ...            # обычно TabularWithAggregatedStates
-  num_classes: 2
-  dropout_p: 0.15
-  task_type: classification     # classification | regression
-  extra_hidden_dim: 0           # размер внешнего эмбеддинга для late fusion
-  out_head_hidden_dim: 256
-```
-
-`tabular_model: null` — допустимо: тогда модель работает только по внешним
-скрытым состояниям (так устроен MLP-бенчмарк).
-
-### `avatar.pipeline.tabular.TabularWithAggregatedStates` (8)
-
-Стандартный табличный стек: `embedding(batch) -> encoder(embeds) -> агрегация`.
-
-```yaml
-tabular_model:
-  _target_: avatar.pipeline.tabular.TabularWithAggregatedStates
-  embedding: ...
-  encoder: ...
+  _target_: avatar.pipeline.tabular.SupervisedLearner
+  embedding: ...                # avatar.nn.embedding.TabularEmbedding
+  tabular_encoder: ...          # avatar.nn.tabular.TabularTransformer
   aggregation_config:
     name: linear                # sum | sum_layernorm | mean | last | linear | conv
     num_features: 243           # столько токенов приходит на агрегацию
     emb_dim: 64
+  num_classes: 1                # 1 -> одно число на запись; K > 1 -> распределение
+  task_type: classification     # classification | regression
+  dropout_p: 0.15
+  out_head_hidden_dim: 256      # по умолчанию — ширина входа головы
+  hidden_state_dim: null        # late fusion: ширина внешнего эмбеддинга
+  proj_hiddens_to_dim: null     # проецировать его, а не только нормировать
+  n_groups: null                # эмбеддинг группы как ещё один токен
 ```
 
 `aggregation_config` — не `_target_`, а словарь, который разбирает
@@ -221,19 +211,28 @@ tabular_model:
 остальные ключи уходят в его конструктор; `linear` требует `num_features` и
 `emb_dim`, `last` не требует ничего.
 
-### `avatar.pipeline.uplift.SLearner` (2)
+`num_features` — число токенов **на входе агрегации**, а не признаков в
+данных. Каждый добавляющий токен механизм увеличивает его на единицу:
+`n_groups`, признак воздействия в `SLearner`, внешний эмбеддинг через
+`LayerNormConcatenate`.
 
-Uplift в постановке S-Learner: признак воздействия подаётся в модель наравне с
-остальными. Ключевые аргументы: `embedding`, `tabular_encoder`,
-`aggregation_config`, `hidden_state_dim`, `separate_heads`,
-`treatment_interaction`.
+`embedding: null` вместе с `tabular_encoder: null` — допустимо: тогда модель
+работает только по внешним скрытым состояниям (так устроен MLP-бенчмарк), и
+`hidden_state_dim` обязателен.
 
-`avatar.pipeline.uplift.IgnoreTreatmentInteraction` — заглушка взаимодействия с
-воздействием, без параметров.
+### `avatar.pipeline.tabular.SLearner` (48)
 
-### `avatar.pipeline.tabular.SupervisedLearner`
+Uplift в постановке S-Learner: тот же `SupervisedLearner`, но признак
+воздействия подаётся в модель наравне с остальными, голова шириной 2, а на
+валидации батч прогоняется дважды. Принимает всё перечисленное выше плюс
+`separate_heads`, `treatment_interaction`, `calculate_train_uplift`,
+`exchange_treatment_group` и `loss_fn`.
 
-Близок к `SLearner`, но в response-постановке, без флага воздействия.
+`avatar.pipeline.tabular.IgnoreTreatmentInteraction` — заглушка взаимодействия
+с воздействием, без параметров.
+
+Старый путь `avatar.pipeline.uplift.*` ещё работает и предупреждает об
+устаревании; он будет удалён в следующем релизе.
 
 ---
 

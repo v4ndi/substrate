@@ -24,7 +24,7 @@ test_dataloader:
   collate_fn:
     _target_: avatar.data.TabularCollateFn
 model:
-  _target_: avatar.pipeline.uplift.SLearner
+  _target_: avatar.pipeline.tabular.SLearner
   embedding:
     _target_: avatar.nn.embedding.TabularEmbedding
     num_numerical_features: 261

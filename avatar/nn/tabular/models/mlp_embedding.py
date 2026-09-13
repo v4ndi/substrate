@@ -1,7 +1,7 @@
 """Categorical-attribute embedding for a downstream campaign model.
 
-Used as the ``tabular_model`` of
-:class:`~avatar.pipeline.tabular.TabularClassification` when the model is
+Used as the ``tabular_encoder`` of
+:class:`~avatar.pipeline.tabular.SupervisedLearner` when the model is
 trained over dumped embeddings plus two categorical campaign attributes — the
 attributes go through this module, the embeddings go straight to the head.
 """

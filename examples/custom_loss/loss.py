@@ -9,12 +9,12 @@ it: the argument list. That is the pipeline's business, so a replacement loss
 must accept what the pipeline it plugs into passes. Here that is
 ``(logits, targets, model=None)``, matching
 :class:`~avatar.losses.ClassificationLoss`, which is what
-:class:`~avatar.pipeline.tabular.TabularClassification` calls.
+:class:`~avatar.pipeline.tabular.SupervisedLearner` calls.
 
 Inject it from a config::
 
     model:
-      _target_: avatar.pipeline.tabular.TabularClassification
+      _target_: avatar.pipeline.tabular.SupervisedLearner
       num_classes: 2
       loss:
         _target_: examples.custom_loss.loss.FocalLoss

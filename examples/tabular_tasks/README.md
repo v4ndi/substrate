@@ -18,9 +18,9 @@ Uplift, response, регрессия и многоклассовая класс�
 | задача | датасет | строк | таргет | пайплайн | метрика |
 |---|---|---|---|---|---|
 | uplift | Hillstrom | 64 000 | `visit`, с контрольной группой | `uplift.SLearner` | `UpliftMetrics` |
-| response | Hillstrom | 64 000 | тот же `visit`, воздействие не учитывается | `TabularClassification` | `ResponseMetrics` |
-| регрессия | Lenta | 687 029 | `log1p` годовых трат в одной категории | `TabularClassification` | `RegressionMetrics` |
-| multi-class | Covertype | 581 012 | тип лесного покрова, 7 классов | `TabularClassification` | `MultiClassMetrics` |
+| response | Hillstrom | 64 000 | тот же `visit`, воздействие не учитывается | `SupervisedLearner` | `ResponseMetrics` |
+| регрессия | Lenta | 687 029 | `log1p` годовых трат в одной категории | `SupervisedLearner` | `RegressionMetrics` |
+| multi-class | Covertype | 581 012 | тип лесного покрова, 7 классов | `SupervisedLearner` | `MultiClassMetrics` |
 
 Uplift и response делят один датасет намеренно: разница между «кто купит» и
 «кого стоит трогать» видна, только если популяция одна и та же.
@@ -83,7 +83,7 @@ python -m avatar.train --config-dir=examples/tabular_tasks/configs \
 категорий зависит от выборки. У multi-class на всей выборке `vocab_size` равен
 133 против 132 на smoke — одно значение просто не попало в подвыборку, — так что
 к команде добавляется
-`model.tabular_model.embedding.vocab_size=133`. Точные числа печатает
+`model.embedding.vocab_size=133`. Точные числа печатает
 `prepare_data.py`.
 
 ## Что получается
@@ -97,6 +97,11 @@ python -m avatar.train --config-dir=examples/tabular_tasks/configs \
 | response | `mean_roc_auc_score` | 0.647 | 0.632 |
 | регрессия | `mean_mae`, шкала `log1p` (меньше — лучше) | 1.92 | **1.14** |
 | multi-class | `mean_balanced_accuracy` | 0.385 | **0.575** |
+
+Uplift-строку не стоит читать как точное число: на smoke-выборке та же
+конфигурация с сидами 1, 2, 3 даёт 0.082, 0.069 и 0.059, а с сидом из конфига —
+0.099. Qini на двадцати тысячах записей — шумная величина, и разброс здесь
+больше любой разницы, которую на этих данных можно было бы объяснить моделью.
 
 Две задачи, у которых smoke-выборка была в тридцать раз меньше полной, от
 полных данных заметно выигрывают. Две другие живут на Hillstrom, где и полный
@@ -142,14 +147,14 @@ collate_fn:
   group_column: group
   inverse_treatment: True
 model:
-  _target_: avatar.pipeline.uplift.SLearner
+  _target_: avatar.pipeline.tabular.SLearner
   n_groups: 4                # 3 канала плюс идентификатор под контроль
   exchange_treatment_group: true
   aggregation_config:
     num_features: 10         # 8 признаков + токен воздействия + токен группы
 ```
 
-Остальные три — один и тот же `TabularClassification`, и различие целиком в
+Остальные три — один и тот же `SupervisedLearner`, и различие целиком в
 трёх строчках:
 
 | | response | регрессия | multi-class |

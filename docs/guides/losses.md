@@ -70,7 +70,7 @@ loss_head = loss_head_local * world_size / сумма_по_рангам(num_item
 
 ```yaml
 model:
-  _target_: avatar.pipeline.tabular.TabularClassification
+  _target_: avatar.pipeline.tabular.SupervisedLearner
   num_classes: 2
   loss:
     _target_: avatar.losses.ClassificationLoss
@@ -139,7 +139,7 @@ class FocalLoss(Loss):
 
 ```yaml
 model:
-  _target_: avatar.pipeline.tabular.TabularClassification
+  _target_: avatar.pipeline.tabular.SupervisedLearner
   num_classes: 2
   loss:
     _target_: mypackage.losses.FocalLoss
@@ -176,7 +176,7 @@ CrossEntropy. Прочие сочетания — `ValueError`.
 ## Два протокола
 
 Всё выше описывает один протокол: наследник `Loss`, возвращающий `LossOutput`,
-подставляемый в ключ `loss:`. Ему следует `TabularClassification`.
+подставляемый в ключ `loss:`. Ему следует `SupervisedLearner`.
 
 `SLearner` устроен иначе. У него ключ называется `loss_fn:`, ожидается голый
 `nn.Module`, возвращающий тензор, а вызывается он по результату проверки типа:

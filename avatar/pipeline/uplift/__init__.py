@@ -1,16 +1,51 @@
-"""Uplift pipelines: model the effect of treatment, not the outcome.
+"""Deprecated import path. Uplift lives in :mod:`avatar.pipeline.tabular`.
 
-The S-Learner approach — one model, with the treatment flag fed in as a
-feature. How that flag reaches the representation is pluggable
-(:mod:`~avatar.pipeline.uplift.treatment_interaction`), which is what lets the
-same backbone serve concat, sum and elementwise variants.
+``SLearner`` consumes a ``TabularBatch`` and is built from tabular blocks, so
+``tabular`` — the shape of the batch — is where it belongs; ``uplift`` named
+the task, which is a different axis. The class, its arguments and its
+checkpoint keys are unchanged.
+
+This shim exists because ``avatar.pipeline.uplift.SLearner`` is named by some
+forty-five configs, several of them records of production runs, and by cluster
+configs outside the repository. Configs in the repository have been updated;
+this path is kept for one release.
+
+Names are resolved lazily, so importing the module warns about nothing — only
+reaching a class through it does.
 """
 
-from avatar.pipeline.uplift.treatment_interaction import IgnoreTreatmentInteraction
+from __future__ import annotations
 
-from .s_learner import SLearner
+import warnings
+from typing import TYPE_CHECKING, Any
 
-__all__ = [
-    "IgnoreTreatmentInteraction",
-    "SLearner",
-]
+if TYPE_CHECKING:  # resolved lazily below; declared here for static tools
+    from avatar.pipeline.tabular import SLearner
+    from avatar.pipeline.tabular.interaction import IgnoreTreatmentInteraction
+
+__all__ = ["IgnoreTreatmentInteraction", "SLearner"]
+
+
+def __getattr__(name: str) -> Any:
+    """Resolve a name from the new location, with a deprecation warning.
+
+    Raises:
+        AttributeError: The name was never part of this package.
+    """
+    if name not in __all__:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+    from avatar.pipeline import tabular
+
+    warnings.warn(
+        f"avatar.pipeline.uplift.{name} has moved to "
+        f"avatar.pipeline.tabular.{name}; the old path will be removed in the "
+        "next release.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return getattr(tabular, name)
+
+
+def __dir__() -> list[str]:
+    return sorted(__all__)

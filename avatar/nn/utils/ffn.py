@@ -59,11 +59,14 @@ class FeedForwardNetwork(nn.Module):
         activation_before_normalization: bool = False,
         need_output_linear: bool = True,
     ):
+        # ``None`` means "same as input_dim" and is resolved a few lines below,
+        # so it has to be tested before the comparison, not after it: the old
+        # order raised TypeError on the very value the docstring allows.
         assert input_dim > 0, "Input dimension must be greater than 0"
-        assert output_dim > 0 or output_dim is None, (
+        assert output_dim is None or output_dim > 0, (
             "Output dimension must be greater than 0"
         )
-        assert hidden_dim > 0 or hidden_dim is None, (
+        assert hidden_dim is None or hidden_dim > 0, (
             "Hidden dimension must be greater than 0"
         )
         assert need_output_linear or not end_normalization, (
