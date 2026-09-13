@@ -68,48 +68,12 @@ response-постановка с опциональным эмбеддингом
 `n_groups - 1`, и калиброванный контрольный проход использует тот же
 идентификатор.
 
-## Последовательностные
+## Чего здесь больше нет
 
-| класс | батч | выход |
-|---|---|---|
-| `NextKTokensPrediction` | `EventSequenceCollateFn` | `SequenceOutput` |
-| `SequenceModelWithAggregation` | `EventSequenceCollateFn` | `BaseSequenceOutput` |
-| `SequenceClassification` | `EventSequenceCollateFn` | `SequenceOutput` |
-
-`NextKTokensPrediction` — предобучение: по одной голове на признак, на каждый
-шаг горизонта. Горизонты взвешиваются как `loss_k / k ** horizion_loss_weight`;
-ноль означает равный вес.
-
-`SequenceModelWithAggregation` — без головы и без потерь: даёт эмбеддинг
-клиента для табличных моделей. Аргумент `model_weights` загружает результат
-предобучения.
-
-## Multi-task
-
-| класс | как разделяет | выход |
-|---|---|---|
-| `MultiTaskResponse` | структурно: общий модуль либо словарь по задачам | `MultiTaskxGroupResponseOutput` |
-| `MultiTaskUplift` | то же, плюс двухпроходное скоринговое поведение S-Learner | `MultiTaskxGroupUpliftOutput` |
-| `MMoE` | гейт на задачу над общим пулом экспертов | `MMoEOutput` |
-| `PLE` | гейт видит `[общие эксперты] + [свои]` | `MMoEOutput` |
-
-Вспомогательные классы:
-
-| класс | роль |
-|---|---|
-| `MMoEBackbone` | пул экспертов плюс гейт на задачу |
-| `PLEBackbone` | пул, разделённый на общих и приватных экспертов |
-| `TaskHead` | голова одной задачи; размер выставляется пайплайном через `init_head` |
-| `MLPExpert` | дешёвый эксперт: остаточный feed-forward блок |
-| `TabBackboneExpert` | эксперт целиком из табличного энкодера |
-| `HierarchicalFeatureGate` | обучаемый гейт по признакам: общая и задачная компоненты |
-
-`PLE` — `MMoE` с `PLEBackbone`; тело класса пустое намеренно, отдельное имя
-нужно, чтобы называть архитектуру в конфигах и чтобы PLE-специфичные метрики
-узнавали прогон.
-
-Число экспертов в PLE — `num_shared_experts + num_tasks * num_specific_experts`:
-приватные эксперты считаются **на задачу**.
-
-Веса гейтов доступны в выходе как `task_gated_weights`; их читают
-поле `task_gated_weights` выхода — распределение задачи по экспертам.
+Семейства `sequence` (`NextKTokensPrediction`, `SequenceModelWithAggregation`,
+`SequenceClassification`) и `multi_task` (`MMoE`, `PLE`, `MultiTaskResponse`,
+`MultiTaskUplift`) удалены из `avatar/pipeline`. Препроцессинг событийных
+последовательностей и энкодеры под них (`avatar/data/sequential`,
+`avatar/nn/sequential`) остались на месте — ушёл только слой задачи над ними.
+Причины и границы решения — в
+[../decisions/pipeline_boundaries.md](../decisions/pipeline_boundaries.md).

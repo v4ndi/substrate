@@ -98,8 +98,13 @@ class ContrastiveLoss(nn.Module):
             contrastive_loss = torch.tensor(0.0, device=logits.device)
 
         if self.separate_heads:
-            ce_loss = self.c_loss(logits[is_treat == 0], targets[is_treat == 0])
-            +self.t_loss(logits[is_treat == 1], targets[is_treat == 1])
+            # The treated arm used to sit on its own line behind a unary plus,
+            # so its value was computed and discarded: with separate_heads the
+            # cross-entropy scored the control arm only, and the treatment head
+            # received no gradient from it at all.
+            ce_loss = self.c_loss(
+                logits[is_treat == 0], targets[is_treat == 0]
+            ) + self.t_loss(logits[is_treat == 1], targets[is_treat == 1])
         else:
             ce_loss = self.ce(logits, targets)
         total_loss = ce_loss + self.alpha * contrastive_loss
@@ -161,8 +166,6 @@ class GradNormLossBalancer(nn.Module):
         inverse_train_rates = loss_ratios / loss_ratios.mean()
         target_grads = grad_norms.mean() * (inverse_train_rates**self.alpha)
         gradnorm_loss = torch.sum(torch.abs(grad_norms - target_grads.detach()))
-        print(f"grad_norms: {grad_norms.detach()}")
-        print(f"weights: {weights.detach()}")
         return total_loss, gradnorm_loss
 
 
@@ -253,7 +256,6 @@ class KLDxContrastiveLoss(nn.Module):
                 [kld_loss, contrastive_loss], shared_representation=dist
             )
             loss = control_loss + treat_loss + total_aux_loss + gradnorm_loss
-        print(loss.detach())
         return loss
 
 
@@ -343,7 +345,6 @@ class KLDxContrastiveGridLoss(nn.Module):
             + self.alpha1 * kld_loss
             + self.alpha2 * contrastive_loss
         )
-        print(total_loss)
         return total_loss
 
 

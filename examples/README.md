@@ -12,7 +12,6 @@
 | [`custom_loss`](custom_loss/) | своя функция потерь, подключаемая из конфига | модуль + тесты | не нужны |
 | [`tabular_tasks`](tabular_tasks/) | четыре типовые постановки — uplift, response, регрессия, multi-class — четырьмя конфигами | скрипт + конфиги | открытые, скачиваются скриптом |
 | [`basics`](basics/) | загрузка данных в датасет, своя метрика | ноутбуки | внутренние (HDFS) |
-| [`next_event_prediction`](next_event_prediction/) | self-supervised обучение на событиях, выгрузка эмбеддингов клиента | конфиги + ноутбук | скрипт выгрузки |
 | [`uplift_modeling/s_learner`](uplift_modeling/s_learner/) | uplift-постановка (S-Learner) поверх скрытых состояний | конфиги + ноутбук | скрипт выгрузки |
 
 ## Запускается прямо сейчас
@@ -41,7 +40,7 @@ python -m pytest tests/examples
 
 ```bash
 kinit
-cd examples/next_event_prediction
+cd examples/uplift_modeling/s_learner
 chmod +x download_data.sh
 ./download_data.sh
 ```
@@ -65,7 +64,7 @@ chmod +x download_data.sh
 
 ## TODO
 
-* MLM для событийных последовательностей — постановки нет в коде, нужен
-  отдельный пайплайн (next-token и next-K уже покрыты конфигами в
-  `next_event_prediction`)
+* Событийные последовательности: препроцессинг и энкодеры на месте, но
+  пайплайна под них сейчас нет — он удалён вместе с multi-task, см.
+  [../docs/decisions/pipeline_boundaries.md](../docs/decisions/pipeline_boundaries.md)
 * Запуск на batch_datalab / supercomp

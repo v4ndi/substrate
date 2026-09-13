@@ -9,11 +9,11 @@ import torch.nn as nn
 from avatar.losses import (
     ClassificationLoss,
     CompositeLoss,
+    ContrastiveLoss,
     Loss,
     LossOutput,
     build_task_loss_fn,
 )
-from avatar.losses.next_k_tokens import HeadPrediction, NextKTokensLoss
 
 # -- criterion selection -----------------------------------------------------
 
@@ -104,7 +104,9 @@ def test_a_target_column_shaped_like_the_head_is_accepted_too():
 
     result = loss(logits, targets)
 
-    assert torch.isclose(result.loss, nn.MSELoss()(logits.squeeze(1), targets.squeeze(1)))
+    assert torch.isclose(
+        result.loss, nn.MSELoss()(logits.squeeze(1), targets.squeeze(1))
+    )
 
 
 def test_a_wide_head_still_gets_class_indices():
@@ -182,67 +184,37 @@ def test_composite_rejects_weights_for_unknown_losses():
         CompositeLoss({"a": ConstantLoss(1.0)}, weights={"b": 1.0})
 
 
-# -- NextKTokensLoss ---------------------------------------------------------
+# -- ContrastiveLoss ---------------------------------------------------------
 
 
-def numeric_head(**overrides) -> HeadPrediction:
-    defaults = {
-        "logits": torch.zeros(1, 4, 1),
-        "input_ids": torch.ones(1, 4),
-        "n_classes": 1,
-        "attention_mask": torch.ones(1, 4),
-    }
-    defaults.update(overrides)
-    return HeadPrediction(**defaults)
-
-
-def test_heads_are_keyed_by_name_and_horizon():
-    loss = NextKTokensLoss(horizon=2)
-    result = loss([{"amount": numeric_head()}, {"amount": numeric_head()}])
-    assert set(result.components) == {"amount_head_0", "amount_head_1"}
-    assert set(result.num_items) == set(result.components)
-    # The trainer does the cross-rank weighting, so there is no scalar here.
-    assert result.loss is None
-
-
-def test_feature_weights_apply_in_training_only():
-    loss = NextKTokensLoss(horizon=1, feature_loss_weights={"amount": 0.5})
-    head = numeric_head(logits=torch.full((1, 4, 1), 3.0))
-    loss.train()
-    trained = loss([{"amount": head}]).components["amount_head_0"]
-    loss.eval()
-    evaluated = loss([{"amount": head}]).components["amount_head_0"]
-    assert trained == pytest.approx(float(evaluated) * 0.5)
-
-
-def test_later_horizons_are_discounted():
-    loss = NextKTokensLoss(horizon=2, horizion_loss_weight=1.0)
-    loss.train()
-    head = numeric_head(logits=torch.full((1, 4, 1), 3.0))
-    result = loss([{"amount": head}, {"amount": head}])
-    # coefs are 1 and 2, and horizon 1 shifts one position further.
-    assert result.components["amount_head_1"] < result.components["amount_head_0"]
-
-
-def test_timedelta_keeps_its_horizon_discount_in_eval():
-    """Pre-existing asymmetry, preserved deliberately by the extraction."""
-    loss = NextKTokensLoss(horizon=2, horizion_loss_weight=1.0)
-    loss.eval()
-    head = numeric_head(logits=torch.full((1, 4, 1), 3.0))
-    discounted = numeric_head(
-        logits=torch.full((1, 4, 1), 3.0), scale_by_coef_in_eval=True
-    )
-    plain_result = loss([{"x": head}, {"x": head}])
-    delta_result = loss([{"x": discounted}, {"x": discounted}])
-    # Ordinary heads skip the coefficient outside training; timedelta does not.
-    assert plain_result.components["x_head_1"] == pytest.approx(
-        float(delta_result.components["x_head_1"]) * 2
+def contrastive_batch():
+    """Logits with both arms present and both classes inside each arm."""
+    torch.manual_seed(0)
+    return (
+        torch.randn(8, 2, requires_grad=True),
+        torch.tensor([1, 1, 1, 1, 0, 0, 0, 0]),
+        torch.tensor([1, 0, 1, 0, 1, 0, 1, 0]),
     )
 
 
-def test_num_items_counts_unmasked_positions():
-    loss = NextKTokensLoss(horizon=1)
-    head = numeric_head(attention_mask=torch.tensor([[1, 1, 0, 0]]))
-    result = loss([{"amount": head}])
-    # Offset 1 drops the first position, leaving one unmasked.
-    assert int(result.num_items["amount_head_0"]) == 1
+def test_separate_heads_scores_both_arms():
+    """The treated arm's cross-entropy used to be computed and discarded."""
+    logits, is_treat, targets = contrastive_batch()
+    loss = ContrastiveLoss(alpha=0.0, separate_heads=True)
+
+    value = loss(logits=logits, is_treat=is_treat, targets=targets)
+
+    criterion = nn.CrossEntropyLoss()
+    control = criterion(logits[is_treat == 0], targets[is_treat == 0])
+    treated = criterion(logits[is_treat == 1], targets[is_treat == 1])
+    assert float(value) == pytest.approx(float(control + treated))
+
+
+def test_separate_heads_sends_gradient_to_the_treatment_head():
+    """With the term dropped, treated rows received no classification signal."""
+    logits, is_treat, targets = contrastive_batch()
+    loss = ContrastiveLoss(alpha=0.0, separate_heads=True)
+
+    loss(logits=logits, is_treat=is_treat, targets=targets).backward()
+
+    assert logits.grad[is_treat == 1].norm() > 0

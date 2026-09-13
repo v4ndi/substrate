@@ -5,14 +5,12 @@ embedding, which encoder, which head — and it is the only layer that computes 
 loss: everything under :mod:`avatar.nn` is loss-free by design, so the same
 blocks can be reused across tasks.
 
-Four families, by what the batch looks like and what the task is:
+Two families, by what the task is. Both take a tabular batch — one row per
+record:
 
-* :mod:`~avatar.pipeline.tabular` — one row per record, supervised.
-* :mod:`~avatar.pipeline.sequence` — event sequences, supervised or
-  self-supervised.
+* :mod:`~avatar.pipeline.tabular` — supervised: binary, multi-class, regression.
 * :mod:`~avatar.pipeline.uplift` — treatment/control, scored on the difference
-  between the two heads.
-* :mod:`~avatar.pipeline.multi_task` — several tasks over shared experts.
+  between the two passes.
 
 See ``docs/guides/models.md`` for how the pieces compose and
 ``docs/reference/pipeline.md`` for the catalogue.

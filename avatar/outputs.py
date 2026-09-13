@@ -7,7 +7,6 @@ requires the fields of the output that pipeline returns.
 """
 
 from dataclasses import dataclass, field
-from typing import Any
 
 import torch
 
@@ -37,6 +36,10 @@ class LossOutput:
 class BaseSequenceOutput:
     """Base output container for sequence models.
 
+    Returned by the sequence encoders under :mod:`avatar.nn.sequential`. No
+    pipeline consumes it today — the sequence pipelines were removed — but the
+    encoders are still built and tested, and this is their return type.
+
     Attributes:
         last_hidden_state: Final hidden states from the model
             Shape: (batch_size, sequence_length, hidden_size)
@@ -62,43 +65,6 @@ class BaseTabularOutput:
 
     last_hidden_state: torch.FloatTensor = None
     hidden_states: tuple[torch.FloatTensor, ...] | None = None
-
-
-@dataclass
-class BaseClassificationOutput:
-    """Base output container for classification tasks.
-
-    Attributes:
-        logits: Unnormalized model predictions
-            Shape: (batch_size, num_classes)
-        loss: Computed loss value (if labels were provided)
-            Shape: scalar
-    """
-
-    logits: torch.FloatTensor = None
-    loss: torch.Tensor = None
-
-
-@dataclass
-class SequenceOutput(BaseSequenceOutput):
-    """Extended sequence output with additional task-specific attributes.
-
-    Attributes:
-        logits: Model predictions for sequence tasks
-            Shape: task-dependent (typically (batch_size, sequence_length, num_classes))
-        loss: Computed loss value
-            Shape: scalar
-        losses: Dictionary of individual loss components
-        num_items: Number of valid items in the batch (for proper loss normalization)
-        aggregated_hidden_state: Pooled sequence representation
-            Shape: (batch_size, hidden_size)
-    """
-
-    logits: torch.FloatTensor | None = None
-    loss: torch.Tensor | None = None
-    losses: dict[str, torch.FloatTensor] | None = None
-    num_items: int | None = None
-    aggregated_hidden_state: torch.FloatTensor | None = None
 
 
 @dataclass
@@ -155,60 +121,3 @@ class MultiGroupUpliftOutput(BaseUpliftOutput):
     """
 
     group: torch.LongTensor | None = None
-
-
-@dataclass
-class MultiTaskxGroupUpliftOutput(MultiGroupUpliftOutput):
-    """Uplift output extended with group information.
-
-    Attributes:
-        task_name: List of task names
-            Shape: (batch_size,)
-    """
-
-    task_name: torch.LongTensor | None = None
-    task_losses: torch.FloatTensor | None = None
-
-
-@dataclass
-class MultiTaskxGroupResponseOutput(TabularOutput):
-    """Uplift output extended with group information.
-
-    Attributes:
-        task_name: List of task names
-            Shape: (batch_size,)
-    """
-
-    conversion: torch.LongTensor = None
-    group: torch.LongTensor | None = None
-    task_name: torch.LongTensor | None = None
-    task_losses: torch.FloatTensor | None = None
-
-
-@dataclass
-class MMoEOutput(MultiTaskxGroupResponseOutput):
-    """Multi-task response output plus the gating diagnostics MoE runs carry.
-
-    Attributes:
-        aux: Auxiliary values from the backbone — gate weights, entropy
-            penalties — read by the MoE metrics.
-    """
-
-    aux: dict[str, Any] = None
-
-
-@dataclass
-class MMoeUpliftOutput(MultiGroupUpliftOutput):
-    """Uplift output for Multi-task Mixture-of-Experts models.
-
-    Attributes:
-        task_name: List of task names
-        logits: Raw model outputs before sigmoid
-            Shape: (batch_size, num_tasks)
-        task_gated_weights: Gating weights for each task
-            Shape: (batch_size, num_tasks, num_experts)
-    """
-
-    task_name: list[str] | None = None
-    logits: torch.FloatTensor | None = None
-    task_gated_weights: torch.FloatTensor | None = None

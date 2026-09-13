@@ -235,36 +235,6 @@ Uplift в постановке S-Learner: признак воздействия 
 
 Близок к `SLearner`, но в response-постановке, без флага воздействия.
 
-### `avatar.pipeline.sequence.NextKTokensPrediction` (3)
-
-Self-supervised обучение на последовательностях: предсказание следующих `K`
-событий.
-
-```yaml
-model:
-  _target_: avatar.pipeline.sequence.NextKTokensPrediction
-  model: ...                    # BaseSequenceModel
-  horizon: 3                    # на сколько шагов вперёд предсказываем
-  horizion_loss_weight: 1
-  feature_loss_weights: {mcc: 1.0, price: 0.5}
-  enable_event_id_prediction: False
-```
-
-### `avatar.pipeline.sequence.SequenceModelWithAggregation`
-
-Считает эмбеддинг клиента по последовательности: `sequence_model`,
-`model_weights`, `freeze_backbone`, `aggregation_config`. Используется, чтобы
-получить `seq_hidden_state` для табличных моделей.
-
-### `avatar.pipeline.sequence.SequenceClassification`
-
-Классификация по последовательности напрямую.
-
-### Multi-task
-
-`avatar.pipeline.multi_task.MMoE`, `PLE`, `MultiTaskResponse` — пайплайны с
-несколькими головами и общими экспертами.
-
 ---
 
 ## Метрики
@@ -325,11 +295,8 @@ metrics:
 | таргет | что считает |
 |---|---|
 | `avatar.losses.ClassificationLoss` | MSE / BCE / CrossEntropy по `task_type`, плюс L1-регуляризация |
-| `avatar.losses.NextKTokensLoss` | потери по головам и горизонтам для next-k |
 | `avatar.losses.CompositeLoss` | взвешенная сумма нескольких функций потерь |
 | `avatar.losses.KLDLoss`, `ContrastiveLoss`, `ResearchLosses` | исследовательские функции потерь |
-| `avatar.losses.DirectUpliftLoss` | прямая оптимизация uplift |
-| `avatar.losses.GoldFishLoss` | см. докстринг класса |
 
 ---
 
