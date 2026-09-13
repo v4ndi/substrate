@@ -2,7 +2,7 @@
 # from the training run, and a metric whose product is a file rather than a
 # number. Run from the repository root:
 #
-#     python -m avatar.infer --config-dir=examples/tabular_tasks/configs \
+#     python -m avatar.inference --config-dir=examples/tabular_tasks/configs \
 #         --config-name=response_inference
 #
 load_state: best_models/tabular_tasks/response_smoke/128/model.bin
@@ -17,6 +17,7 @@ test_dataloader:
   _target_: torch.utils.data.DataLoader
   dataset:
     _target_: avatar.data.TabularDataset
+    drop_tail: false # inference keeps the tail
     path: examples/tabular_tasks/data/response_smoke/valid
     shuffle_files: False
     shuffle_pq: False

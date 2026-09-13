@@ -11,6 +11,7 @@ test_dataloader:
   _target_: torch.utils.data.DataLoader
   dataset:
     _target_: avatar.data.TabularDataset
+    drop_tail: false # inference keeps the tail
     path: /home/datalab/projects/avatards/avatar/rusakov/splited_tabular/split_type=calib/product_name=${product}_response
     shuffle_files: False
     shuffle_pq: False
@@ -49,6 +50,9 @@ metrics:
     path_to_save: /home/datalab/nfs/february-pilot/pilot_gap/calib_scores/${product}  ###
     save_steps: 1000
     prefix: "first"
+prepare_batch:
+  _target_: avatar.data.campaign.CampaignTaskChannelBatches
+  tasks: ${campaign_meta.tasks}
 campaign_meta:
   tasks:
     cc_response:

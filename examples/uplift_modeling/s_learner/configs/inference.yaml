@@ -9,6 +9,7 @@ test_dataloader:
   _target_: torch.utils.data.DataLoader
   dataset:
     _target_: avatar.data.TabularDataset
+    drop_tail: false # inference keeps the tail
     path: /home/datalab/nfs/avatar_fm/examples/uplift_modeling/s_learner/data/s_learner/valid
     shuffle_files: False
     shuffle_pq: False

@@ -46,7 +46,7 @@ python -m avatar.train --config-dir=examples/tabular_tasks/configs --config-name
 python -m avatar.train --config-dir=examples/tabular_tasks/configs --config-name=multiclass
 
 # 3. инференс: предсказания лягут в predict/<задача>/
-python -m avatar.infer --config-dir=examples/tabular_tasks/configs --config-name=response_inference
+python -m avatar.inference --config-dir=examples/tabular_tasks/configs --config-name=response_inference
 ```
 
 Многокарточный запуск — та же команда под `torchrun`:

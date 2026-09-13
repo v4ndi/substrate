@@ -11,6 +11,7 @@ test_dataloader:
   _target_: torch.utils.data.DataLoader
   dataset:
     _target_: avatar.data.TabularDataset
+    drop_tail: false # inference keeps the tail
     path: /home/datalab/projects/avatar/avatards/rusakov/murch_pilot/prom/all_clients_inference
     shuffle_files: False
     shuffle_pq: False
@@ -49,6 +50,9 @@ metrics:
     path_to_save: /home/datalab/nfs/march-pilot/pilot_gap/prom_scores/${product}  ###
     save_steps: 1000
     prefix: "first"
+prepare_batch:
+  _target_: avatar.data.campaign.CampaignTaskChannelBatches
+  tasks: ${campaign_meta.tasks}
 campaign_meta:
   tasks:
     sa_response:

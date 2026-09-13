@@ -114,6 +114,6 @@ torchrun --standalone --nproc_per_node=1 -m avatar.train --config-dir=configs --
 
 ## Запуск инференса
 ```bash
-python -m avatar.infer --config-dir=configs --config-name=inference
+python -m avatar.inference --config-dir=configs --config-name=inference
 ```
 Результаты инференса можно найти в директории `predict`.
