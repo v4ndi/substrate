@@ -9,7 +9,7 @@ The whole public API is re-exported here, so ``from avatar.data import
 TabularDataset`` and ``_target_: avatar.data.TabularDataset`` both work.
 """
 
-from avatar.data import base, sampler, sequential, tabular
+from avatar.data import base, campaign, sampler, sequential, tabular
 from avatar.data.base import (
     BaseCollateFn,
     BaseParquetDataset,
@@ -21,6 +21,7 @@ from avatar.data.base import (
     read_parquet_file,
     resolve_filesystem,
 )
+from avatar.data.campaign import CampaignTaskChannelBatches
 from avatar.data.sequential import (
     EventSequenceBatch,
     EventSequenceCollateFn,
@@ -41,6 +42,7 @@ __all__ = [
     "BaseCollateFn",
     "BaseParquetDataset",
     "BaseShardedParquetDataset",
+    "CampaignTaskChannelBatches",
     "EventSequenceBatch",
     "EventSequenceCollateFn",
     "EventSequenceDataset",
@@ -55,6 +57,7 @@ __all__ = [
     "UpliftCollateFn",
     "UpliftTabularBatch",
     "base",
+    "campaign",
     "move_to_device",
     "parquet_num_rows",
     "read_parquet_file",

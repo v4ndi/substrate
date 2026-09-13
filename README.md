@@ -37,7 +37,7 @@ torchrun --standalone --nproc_per_node=8 -m avatar.train \
     --config-dir=configs --config-name=my_run
 
 # инференс
-python -m avatar.infer --config-dir=configs --config-name=inference
+python -m avatar.inference --config-dir=configs --config-name=inference
 ```
 
 Полный путь с разбором конфига — в

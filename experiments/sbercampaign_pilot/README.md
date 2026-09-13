@@ -26,7 +26,7 @@ hdfs dfs -get /user/team/team_ai_avatar/rusakov/september_pilot/prom/model_weigh
 * `metrics.test_metrics.path_to_save` - указать свою директорию, в эту директорию будут сохраняться `parquet` файлы с результатами.
 4. Запуск инференса
 ```bash
-python -m avatar.infer --config-dir=configs/prom/sequence --config-name=inference_sequence
+python -m avatar.inference --config-dir=configs/prom/sequence --config-name=inference_sequence
 ```
 5. Выгрузка эмбеддингов в РХ
 ```bash
@@ -73,8 +73,8 @@ hdfs dfs -get /user/team/team_ai_avatar/rusakov/june_pilot/model_weights/td_mode
 
 4. Запуск инференса
 ```bash
-python -m avatar.cam_inference --config-dir=configs/prom --config-name=cc_inference
-python -m avatar.cam_inference --config-dir=configs/prom --config-name=td_inference
-python -m avatar.cam_inference --config-dir=configs/prom --config-name=sa_inference
+python -m avatar.inference --config-dir=configs/prom --config-name=cc_inference
+python -m avatar.inference --config-dir=configs/prom --config-name=td_inference
+python -m avatar.inference --config-dir=configs/prom --config-name=sa_inference
 ```
 
