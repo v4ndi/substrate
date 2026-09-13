@@ -53,6 +53,9 @@ metrics:
     path_to_save: /home/datalab/nfs/december_pilot/pilot/pilot_scores/${product}  # set your path
     save_steps: 1000
     prefix: "first"
+prepare_batch:
+  _target_: avatar.data.campaign.CampaignTaskChannelBatches
+  tasks: ${campaign_meta.tasks}
 campaign_meta:
   tasks:
     mg_response:

@@ -37,7 +37,7 @@ python -m avatar.train --config-dir=configs --config-name=my_run \
 | `model` | да | пайплайн, который обучаем (`_target_` + аргументы) |
 | `train_dataloader` | да для обучения | `torch.utils.data.DataLoader` с датасетом и `collate_fn` |
 | `valid_dataloader` | нет | если не задан, валидации не будет вообще |
-| `test_dataloader` | нет | финальный прогон после обучения; обязателен для `avatar.infer` |
+| `test_dataloader` | нет | финальный прогон после обучения; обязателен для `avatar.inference` |
 | `optimizer` | да | `_partial_: True`, применяется к параметрам модели |
 | `scheduler` | да | `_partial_: True`, шагает раз на границу накопления градиента |
 | `train` | да | длительность, сиды, чекпоинты, ранняя остановка (см. ниже) |
@@ -47,7 +47,7 @@ python -m avatar.train --config-dir=configs --config-name=my_run \
 | `logging` | нет | подробность логов, профайлер, метрики производительности |
 | `callbacks` | нет | явный список колбэков вместо стандартного |
 | `swa_model` | нет | усреднение весов (EMA/SWA) |
-| `load_state` | только инференс | путь к весам для `avatar.infer` |
+| `load_state` | только инференс | путь к весам для `avatar.inference` |
 | `root_dir` | нет | `chdir` в этот каталог перед запуском |
 
 ## `train:` — параметры обучения
@@ -235,7 +235,7 @@ callbacks:
 
 ## Конфиг инференса
 
-`avatar.infer` читает подмножество той же схемы:
+`avatar.inference` читает подмножество той же схемы:
 
 ```yaml
 load_state: /path/to/model.bin   # веса; без них будет предупреждение и случайная модель
@@ -257,12 +257,36 @@ metrics:
 Запуск:
 
 ```bash
-python -m avatar.infer --config-dir=configs --config-name=inference
+python -m avatar.inference --config-dir=configs --config-name=inference
 ```
 
 Блоки `train:`, `optimizer:`, `scheduler:` при инференсе не нужны. Раздел
 `model:` должен точно совпадать с обучающим, иначе `load_state_dict` не сойдётся
 по ключам.
+
+О числе карт — [distributed.md](distributed.md#инференс-на-нескольких-картах-теряет-хвост):
+под `torchrun` инференс работает, но не делящийся нацело хвост записей молча
+остаётся без предсказаний.
+
+### Необязательный `prepare_batch:`
+
+Батч можно переписать перед скорингом. Единственный существующий случай —
+кампанийный инференс, который разворачивает батч в матрицу «задача x канал»:
+одна модель, один проход по данным, по предсказанию на каждую комбинацию.
+
+```yaml
+prepare_batch:
+  _target_: avatar.data.campaign.CampaignTaskChannelBatches
+  tasks: ${campaign_meta.tasks}
+
+campaign_meta:
+  tasks:
+    sa_response:
+      comm_type: [0, 1, 2, 3]
+```
+
+Раньше это была отдельная точка входа `avatar.cam_inference`, отличавшаяся от
+обычной ровно этим циклом. Точка входа в инференс теперь одна.
 
 ## Устаревший блок `accelerator:`
 

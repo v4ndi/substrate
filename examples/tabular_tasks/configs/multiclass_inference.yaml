@@ -2,7 +2,7 @@
 # from the training run, and a metric whose product is a file rather than a
 # number. Run from the repository root:
 #
-#     python -m avatar.infer --config-dir=examples/tabular_tasks/configs \
+#     python -m avatar.inference --config-dir=examples/tabular_tasks/configs \
 #         --config-name=multiclass_inference
 #
 load_state: best_models/tabular_tasks/multiclass_smoke/128/model.bin

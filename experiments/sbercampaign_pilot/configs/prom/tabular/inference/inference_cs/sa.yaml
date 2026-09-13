@@ -55,6 +55,9 @@ metrics:
     path_to_save: /home/datalab/nfs/february-pilot/cs/prom_scores/${product}  ###
     save_steps: 1000
     prefix: "first"
+prepare_batch:
+  _target_: avatar.data.campaign.CampaignTaskChannelBatches
+  tasks: ${campaign_meta.tasks}
 campaign_meta:
   tasks:
     sa_response:

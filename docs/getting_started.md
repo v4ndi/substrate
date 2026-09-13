@@ -228,7 +228,7 @@ metrics:
 ```
 
 ```bash
-python -m avatar.infer --config-dir=configs --config-name=inference
+python -m avatar.inference --config-dir=configs --config-name=inference
 ```
 
 Блок `model:` должен совпадать с обучающим до последнего аргумента — иначе
