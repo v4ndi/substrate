@@ -126,23 +126,21 @@ valid_dataloader:
     target_column: target
 
 model:
-  _target_: avatar.pipeline.tabular.TabularClassification
-  tabular_model:
-    _target_: avatar.pipeline.tabular.TabularWithAggregatedStates
-    embedding:
-      _target_: avatar.nn.embedding.TabularEmbedding
-      num_numerical_features: 24    # сколько числовых признаков после препроцессинга
-      vocab_size: 74                # pp.vocab_size
-      hidden_size: 64
-    encoder:
-      _target_: avatar.nn.tabular.TabularTransformer
-      hidden_size: 64
-      num_heads: 4
-      num_layers: 3
-    aggregation_config:
-      name: linear
-      num_features: 32              # категориальных + числовых признаков
-      emb_dim: 64
+  _target_: avatar.pipeline.tabular.SupervisedLearner
+  embedding:
+    _target_: avatar.nn.embedding.TabularEmbedding
+    num_numerical_features: 24    # сколько числовых признаков после препроцессинга
+    vocab_size: 74                # pp.vocab_size
+    hidden_size: 64
+  tabular_encoder:
+    _target_: avatar.nn.tabular.TabularTransformer
+    hidden_size: 64
+    num_heads: 4
+    num_layers: 3
+  aggregation_config:
+    name: linear
+    num_features: 32              # категориальных + числовых признаков
+    emb_dim: 64
   num_classes: 1              # одно число на запись: одна вероятность
   task_type: classification
 

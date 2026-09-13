@@ -4,16 +4,21 @@ A pipeline is the top-level module of a run. It owns the composition — which
 embedding, which encoder, which head — and it is the only layer that computes a
 loss: everything under :mod:`avatar.nn` is loss-free by design, so the same
 blocks can be reused across tasks.
+:class:`~avatar.pipeline.base.BasePipeline` states the contract every pipeline
+owes the trainer.
 
-Four families, by what the batch looks like and what the task is:
+One family today, over tabular batches:
+:class:`~avatar.pipeline.tabular.SupervisedLearner` and
+:class:`~avatar.pipeline.tabular.SLearner`. The directory level is kept because
+the axis is the shape of the batch, not the task — a sequence pipeline would be
+a sibling of ``tabular``, not a second kind of supervised learner.
 
-* :mod:`~avatar.pipeline.tabular` — one row per record, supervised.
-* :mod:`~avatar.pipeline.sequence` — event sequences, supervised or
-  self-supervised.
-* :mod:`~avatar.pipeline.uplift` — treatment/control, scored on the difference
-  between the two heads.
-* :mod:`~avatar.pipeline.multi_task` — several tasks over shared experts.
-
-See ``docs/guides/models.md`` for how the pieces compose and
-``docs/reference/pipeline.md`` for the catalogue.
+See ``docs/guides/models.md`` for how the pieces compose,
+``docs/reference/pipeline.md`` for the catalogue and
+``docs/decisions/pipeline_boundaries.md`` for why the package looks like this.
 """
+
+from avatar.pipeline.base import BasePipeline
+from avatar.pipeline.tabular import SLearner, SupervisedLearner
+
+__all__ = ["BasePipeline", "SLearner", "SupervisedLearner"]

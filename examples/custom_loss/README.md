@@ -11,9 +11,8 @@
 
 ```yaml
 model:
-  _target_: avatar.pipeline.tabular.TabularClassification
+  _target_: avatar.pipeline.tabular.SupervisedLearner
   num_classes: 2
-  tabular_model: ...
   loss:
     _target_: examples.custom_loss.loss.FocalLoss
     gamma: 2.0
@@ -33,13 +32,14 @@ LossOutput(
 ```
 
 Список аргументов контрактом **не** является. Его задаёт пайплайн, потому что
-только он знает, что значат его таргеты. `TabularClassification` вызывает
+только он знает, что значат его таргеты. `SupervisedLearner` вызывает
 функцию потерь как `self.loss(logits, targets, model=self.encoder)` — значит,
 замена обязана принимать такую сигнатуру. Поэтому `FocalLoss` принимает
 `model=None` и игнорирует его.
 
-Если бы мы подменяли `NextKTokensLoss`, сигнатура была бы совсем другой —
-список горизонтов.
+У `SLearner` та же подмена устроена иначе: ключ называется `loss_fn:`, ждёт
+голый `nn.Module` и вызывается с `(logits, is_treat, dist, targets)`. Подробнее
+— в `docs/guides/losses.md`, раздел «Два протокола».
 
 ## Про `components`
 

@@ -32,7 +32,7 @@ test_dataloader:
     inverse_treatment: True
 
 model:
-  _target_: avatar.pipeline.uplift.SLearner
+  _target_: avatar.pipeline.tabular.SLearner
   embedding:
     _target_: avatar.nn.embedding.TabularEmbedding
     num_numerical_features: 2

@@ -21,12 +21,7 @@ from avatar.metrics import (
 )
 from avatar.nn.embedding import TabularEmbedding
 from avatar.nn.tabular import TabularTransformer
-from avatar.pipeline.tabular import (
-    SupervisedLearner,
-    TabularClassification,
-    TabularWithAggregatedStates,
-)
-from avatar.pipeline.uplift import SLearner
+from avatar.pipeline.tabular import SLearner, SupervisedLearner
 
 RECORDS = 64
 N_CAT, N_NUM, WIDTH, VOCAB = 3, 5, 16, 40
@@ -67,18 +62,21 @@ def class_of(classes: int):
     return lambda index: (index // 8) % classes
 
 
-def representation(extra_tokens: int = 0):
-    return TabularWithAggregatedStates(
-        embedding=TabularEmbedding(
+def blocks(extra_tokens: int = 0) -> dict:
+    """The representation arguments every pipeline here is built from."""
+    return {
+        "embedding": TabularEmbedding(
             num_numerical_features=N_NUM, hidden_size=WIDTH, vocab_size=VOCAB
         ),
-        encoder=TabularTransformer(hidden_size=WIDTH, num_heads=2, num_layers=1),
-        aggregation_config={
+        "tabular_encoder": TabularTransformer(
+            hidden_size=WIDTH, num_heads=2, num_layers=1
+        ),
+        "aggregation_config": {
             "name": "linear",
             "num_features": N_CAT + N_NUM + extra_tokens,
             "emb_dim": WIDTH,
         },
-    )
+    }
 
 
 def one_step(model, batch, metric):
@@ -104,9 +102,7 @@ def test_response_reaches_a_ranking_number():
     )(records(class_of(2)))
 
     scores = one_step(
-        TabularClassification(
-            num_classes=1, tabular_model=representation(), task_type="classification"
-        ),
+        SupervisedLearner(num_classes=1, task_type="classification", **blocks()),
         batch,
         ResponseMetrics(),
     )
@@ -124,9 +120,7 @@ def test_regression_reaches_an_error_number():
     )(records(lambda index: float(index) / RECORDS))
 
     scores = one_step(
-        TabularClassification(
-            num_classes=1, tabular_model=representation(), task_type="regression"
-        ),
+        SupervisedLearner(num_classes=1, task_type="regression", **blocks()),
         batch,
         RegressionMetrics(),
     )
@@ -144,11 +138,7 @@ def test_multiclass_reaches_a_balanced_number():
     )(records(class_of(classes)))
 
     scores = one_step(
-        TabularClassification(
-            num_classes=classes,
-            tabular_model=representation(),
-            task_type="classification",
-        ),
+        SupervisedLearner(num_classes=classes, task_type="classification", **blocks()),
         batch,
         MultiClassMetrics(num_classes=classes),
     )
@@ -162,21 +152,9 @@ def test_uplift_reaches_a_qini_number():
         target_column="target", treatment_column="treatment", group_column="group"
     )(records(class_of(2)))
 
+    # One extra token for treatment, one for the group.
     model = SLearner(
-        embedding=TabularEmbedding(
-            num_numerical_features=N_NUM, hidden_size=WIDTH, vocab_size=VOCAB
-        ),
-        tabular_encoder=TabularTransformer(
-            hidden_size=WIDTH, num_heads=2, num_layers=1
-        ),
-        # One token for treatment, one for the group.
-        aggregation_config={
-            "name": "linear",
-            "num_features": N_CAT + N_NUM + 2,
-            "emb_dim": WIDTH,
-        },
-        n_groups=N_GROUPS + 1,
-        exchange_treatment_group=True,
+        n_groups=N_GROUPS + 1, exchange_treatment_group=True, **blocks(extra_tokens=2)
     )
 
     scores = one_step(model, batch, UpliftMetrics())
@@ -188,19 +166,7 @@ def test_uplift_reaches_a_qini_number():
 def test_the_supervised_learner_scores_a_batch_with_no_targets():
     """Inference has no labels, and the signature has always said targets are optional."""
     batch = SupervisedCollateFn(target_column="target")(records(class_of(2)))
-    model = SupervisedLearner(
-        embedding=TabularEmbedding(
-            num_numerical_features=N_NUM, hidden_size=WIDTH, vocab_size=VOCAB
-        ),
-        tabular_encoder=TabularTransformer(
-            hidden_size=WIDTH, num_heads=2, num_layers=1
-        ),
-        aggregation_config={
-            "name": "linear",
-            "num_features": N_CAT + N_NUM,
-            "emb_dim": WIDTH,
-        },
-    )
+    model = SupervisedLearner(**blocks())
     model.eval()
 
     output = model(tab_features=batch["tab_features"], targets=None)
@@ -212,19 +178,7 @@ def test_the_supervised_learner_scores_a_batch_with_no_targets():
 def test_the_supervised_learner_returns_logits_while_training():
     """Otherwise train_metrics have nothing to read."""
     batch = SupervisedCollateFn(target_column="target")(records(class_of(2)))
-    model = SupervisedLearner(
-        embedding=TabularEmbedding(
-            num_numerical_features=N_NUM, hidden_size=WIDTH, vocab_size=VOCAB
-        ),
-        tabular_encoder=TabularTransformer(
-            hidden_size=WIDTH, num_heads=2, num_layers=1
-        ),
-        aggregation_config={
-            "name": "linear",
-            "num_features": N_CAT + N_NUM,
-            "emb_dim": WIDTH,
-        },
-    )
+    model = SupervisedLearner(**blocks())
     model.train()
 
     output = model(**batch)

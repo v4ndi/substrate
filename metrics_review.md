@@ -310,8 +310,9 @@ in scores` убивал обучение. Это обязательная час
 ### Побочный эффект чистки: осиротел multi-task
 
 Удаление примера multi_task забрало **единственные рабочие конфиги** для
-`avatar.pipeline.multi_task`. Прямое следствие видно в машинном отчёте:
-`MultiTaskLoss` из `avatar.losses.multi_task` теперь не упоминается нигде, а
+multi-task-пайплайнов. Прямое следствие видно в машинном отчёте:
+`MultiTaskLoss` из одноимённого модуля в `avatar/losses` теперь не
+упоминается нигде, а
 `WeightLossBalancer`, `UncertainlyLossBalancer` и `PCGradBalancer` используются
 только внутри своего файла. Сами классы `MMoE`, `PLE`, `MMoEBackbone`,
 `PLEBackbone`, `MLPExpert`, `TaskHead` остаются в коде и в тестах, но показать
@@ -319,6 +320,11 @@ in scores` убивал обучение. Это обязательная час
 
 Это следствие принятого решения, а не ошибка. Но если multi-task-постановка
 нужна, стоит вернуть пример, переписав его метрики на `ResponseMetrics`.
+
+**Что было дальше.** Осиротевшее удалили: multi-task и последовательностных
+пайплайнов больше нет, вместе с ними ушли `MultiTaskLoss`, балансировщики и
+`NextKTokensLoss`. Обоснование — в
+[docs/decisions/pipeline_boundaries.md](docs/decisions/pipeline_boundaries.md).
 
 ### Вне `avatar.metrics`
 

@@ -39,7 +39,7 @@ valid_dataloader:
     treatment_column: target_attr_3 # название колонки флага контролько целевой группы (1 - ЦГ, 0 - КГ)
     inverse_treatment: True # если True то в treatment_column 0 заменяется на 1  и наоборот (В данном наборе данных 1 - КГ, 0 - ЦГ, поэтому необходимо сделать 1 - treatment_column)
 model:
-  _target_: avatar.pipeline.uplift.SLearner
+  _target_: avatar.pipeline.tabular.SLearner
   embedding:
     _target_: avatar.nn.embedding.TabularEmbedding
     num_numerical_features: 189

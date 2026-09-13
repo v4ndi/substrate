@@ -28,7 +28,8 @@ class LossOutput:
 
 Список аргументов контрактом **не** является: он остаётся делом пайплайна,
 поскольку только пайплайн знает, что значат его таргеты. `ClassificationLoss`
-принимает `(logits, targets, model)`, `NextKTokensLoss` — список горизонтов.
+принимает `(logits, targets, model)`; `SLearner` вызывает свою функцию
+потерь совсем иначе — см. «Два протокола» ниже.
 
 | поле | когда заполнять |
 |---|---|
@@ -39,8 +40,10 @@ class LossOutput:
 ## Когда нужен `num_items`
 
 Для многоголовых потерь — таких, где у каждой головы своё число валидных
-элементов. Например, при предсказании следующих K событий каждая голова видит
-разное количество непаддинговых позиций.
+элементов. Ни одна функция потерь в пакете сейчас его не заполняет:
+единственная, которая это делала, ушла вместе с последовательностными
+пайплайнами. Тренер поддержку сохраняет, так что механизм рабочий, но
+пользователя у него нет.
 
 Наличие `num_items` — это **сигнал тренеру взвешивать потери по токенам между
 рангами**:
@@ -67,7 +70,7 @@ loss_head = loss_head_local * world_size / сумма_по_рангам(num_item
 
 ```yaml
 model:
-  _target_: avatar.pipeline.tabular.TabularClassification
+  _target_: avatar.pipeline.tabular.SupervisedLearner
   num_classes: 2
   loss:
     _target_: avatar.losses.ClassificationLoss
@@ -136,7 +139,7 @@ class FocalLoss(Loss):
 
 ```yaml
 model:
-  _target_: avatar.pipeline.tabular.TabularClassification
+  _target_: avatar.pipeline.tabular.SupervisedLearner
   num_classes: 2
   loss:
     _target_: mypackage.losses.FocalLoss
@@ -160,24 +163,37 @@ model:
 | класс | что считает |
 |---|---|
 | `ClassificationLoss` | MSE / BCE / CrossEntropy по `(num_classes, task_type)`, плюс L1 |
-| `NextKTokensLoss` | потери по головам и горизонтам для предсказания следующих K событий |
 | `CompositeLoss` | взвешенная сумма именованных потерь |
 | `L1RegularizationLoss` | L1 по параметрам, чьё имя содержит подстроку |
-| `DirectUpliftLoss` | прямая оптимизация uplift |
 | `KLDLoss`, `ContrastiveLoss`, `KLDxContrastiveLoss`, `KLDxContrastiveGridLoss` | исследовательские |
 | `ResearchLosses` | выбирает одну из перечисленных выше по имени |
-| `GoldFishLoss` | см. докстринг класса |
 
 `build_task_loss_fn(num_classes, task_type)` — вспомогательная функция,
 выбирающая критерий: `num_classes=1` + `regression` → MSE, `num_classes=1` +
 `classification` → BCEWithLogits, `num_classes>1` + `classification` →
 CrossEntropy. Прочие сочетания — `ValueError`.
 
-## Особый случай: `NextKTokensLoss`
+## Два протокола
 
-Головы предсказания живут на пайплайне `NextKTokensPrediction`, а не на функции
-потерь. Причина не архитектурная, а совместимости: головы содержат параметры, и
-их перенос переименовал бы все ключи `lm_heads.*` в существующих чекпоинтах.
+Всё выше описывает один протокол: наследник `Loss`, возвращающий `LossOutput`,
+подставляемый в ключ `loss:`. Ему следует `SupervisedLearner`.
 
-В модуле потерь остаются сдвиг меток, критерии по типам признаков и взвешивание
-по горизонтам: `loss_k = loss_k / k ** horizion_loss_weight`.
+`SLearner` устроен иначе. У него ключ называется `loss_fn:`, ожидается голый
+`nn.Module`, возвращающий тензор, а вызывается он по результату проверки типа:
+
+```python
+if isinstance(self.loss_fn, nn.CrossEntropyLoss):
+    loss = self.loss_fn(logits, targets)
+else:
+    loss = self.loss_fn(logits=..., is_treat=..., dist=..., targets=...)
+```
+
+То есть «функция потерь от логитов и таргетов» опознаётся по тому, что она
+**в точности** `nn.CrossEntropyLoss`. Подставьте `nn.BCEWithLogitsLoss` — и её
+вызовут с четырьмя именованными аргументами, которых она не принимает.
+`ContrastiveLoss`, `KLDLoss` и `ResearchLosses` написаны под вторую ветку и
+поэтому не наследуют `Loss` и не возвращают `LossOutput`.
+
+Это расхождение известно и зафиксировано в
+[../decisions/pipeline_boundaries.md](../decisions/pipeline_boundaries.md)
+вместе с тем, как его предлагается закрыть.

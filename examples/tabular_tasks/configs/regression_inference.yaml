@@ -32,26 +32,25 @@ test_dataloader:
       target_attr_2: group
 
 model:
-  _target_: avatar.pipeline.tabular.TabularClassification
-  tabular_model:
-    _target_: avatar.pipeline.tabular.TabularWithAggregatedStates
-    embedding:
-      _target_: avatar.nn.embedding.TabularEmbedding
-      num_numerical_features: 175
-      hidden_size: 64
-      vocab_size: 8
-    encoder:
-      _target_: avatar.nn.tabular.TabularTransformer
-      hidden_size: ${model.tabular_model.embedding.hidden_size}
-      num_heads: 4
-      num_layers: 2
-      attn_dropout: 0.15
-    aggregation_config:
-      name: linear
-      num_features: 177
-      emb_dim: ${model.tabular_model.embedding.hidden_size}
+  _target_: avatar.pipeline.tabular.SupervisedLearner
+  embedding:
+    _target_: avatar.nn.embedding.TabularEmbedding
+    num_numerical_features: 175
+    hidden_size: 64
+    vocab_size: 8
+  tabular_encoder:
+    _target_: avatar.nn.tabular.TabularTransformer
+    hidden_size: ${model.embedding.hidden_size}
+    num_heads: 4
+    num_layers: 2
+    attn_dropout: 0.15
+  aggregation_config:
+    name: linear
+    num_features: 177
+    emb_dim: ${model.embedding.hidden_size}
   num_classes: 1
   task_type: regression
+  out_head_hidden_dim: 256 # ширина скрытого слоя головы
   dropout_p: 0.2
 
 metrics:

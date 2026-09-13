@@ -14,16 +14,9 @@
 
 | класс | батч | выход |
 |---|---|---|
-| `TabularClassification` | `TabularCollateFn` | `TabularOutput` |
-| `TabularWithAggregatedStates` | — (вложенный блок) | тензор `(B, D)` |
-| `SupervisedLearner` | `SupervisedCollateFn` | `TabularOutput` |
+| `SupervisedLearner` | `SupervisedCollateFn` / `TabularCollateFn` | `TabularOutput` |
 
-`TabularWithAggregatedStates` — не самостоятельный пайплайн, а
-представляющий стек: `embedding(batch) -> encoder -> aggregation`. Его ставят
-в `tabular_model` классификатора.
-
-`TabularClassification` — штатный путь для трёх постановок из четырёх. Они
-отличаются двумя ключами:
+Один класс на три постановки; различаются они двумя ключами:
 
 | постановка | `num_classes` | `task_type` | метрика |
 |---|---|---|---|
@@ -38,12 +31,17 @@
 `MultiClassMetrics`. Формы головы и таргета согласует `ClassificationLoss`, так
 что колонка таргета `(B,)` из любой collate-функции подходит к голове `(B, 1)`.
 
-`TabularClassification` допускает `tabular_model: null` — тогда модель работает
-только по внешним скрытым состояниям. Так устроен MLP-бенчмарк.
+Пайплайн владеет всем табличным стеком: эмбеддинг, энкодер, агрегация, внешние
+эмбеддинги (late fusion), голова, функция потерь. Отдельного класса под
+представление больше нет — он существовал только затем, чтобы его можно было
+переиспользовать, а переиспользовать его было некому: два других пайплайна
+собирали стек у себя внутри.
 
-`SupervisedLearner` — та же форма, что у `SLearner`, но без флага воздействия:
-response-постановка с опциональным эмбеддингом группы. Рабочего конфига у него
-нет ни одного; для response берите `TabularClassification`.
+`embedding: null` вместе с `tabular_encoder: null` оставляет модель работать
+только по внешним скрытым состояниям — так устроен MLP-бенчмарк.
+
+Необязательный эмбеддинг группы (`n_groups`) добавляет токен к признакам, ровно
+как в uplift; `group_interaction` решает, каким способом.
 
 ## Uplift
 
@@ -51,8 +49,21 @@ response-постановка с опциональным эмбеддингом
 |---|---|---|
 | `SLearner` | `UpliftCollateFn` | `MultiGroupUpliftOutput` |
 
+`SLearner` **наследует** `SupervisedLearner` — это и есть определение
+S-Learner'а: та же модель, только флаг воздействия подан как признак. Он
+принимает все аргументы родителя и добавляет к ним `separate_heads`,
+`treatment_interaction`, `calculate_train_uplift`, `exchange_treatment_group` и
+`loss_fn`.
+
 Один проход на обучении, два на валидации (всё как воздействие, всё как
 контроль). Отсюда `uplift = P(y|treated) - P(y|control)`.
+
+Отличий в устройстве два, и оба зафиксированы существующими чекпоинтами:
+голова шириной 2 вместо `num_classes`, и в ней другой порядок слоёв —
+dropout первым, активация перед нормализацией. Свою функцию потерь `SLearner`
+берёт из ключа `loss_fn:`, а не `loss:`, и вызывает иначе; почему так и что с
+этим делать — в
+[../decisions/pipeline_boundaries.md](../decisions/pipeline_boundaries.md).
 
 Блоки взаимодействия с воздействием:
 
@@ -68,48 +79,12 @@ response-постановка с опциональным эмбеддингом
 `n_groups - 1`, и калиброванный контрольный проход использует тот же
 идентификатор.
 
-## Последовательностные
+## Чего здесь больше нет
 
-| класс | батч | выход |
-|---|---|---|
-| `NextKTokensPrediction` | `EventSequenceCollateFn` | `SequenceOutput` |
-| `SequenceModelWithAggregation` | `EventSequenceCollateFn` | `BaseSequenceOutput` |
-| `SequenceClassification` | `EventSequenceCollateFn` | `SequenceOutput` |
-
-`NextKTokensPrediction` — предобучение: по одной голове на признак, на каждый
-шаг горизонта. Горизонты взвешиваются как `loss_k / k ** horizion_loss_weight`;
-ноль означает равный вес.
-
-`SequenceModelWithAggregation` — без головы и без потерь: даёт эмбеддинг
-клиента для табличных моделей. Аргумент `model_weights` загружает результат
-предобучения.
-
-## Multi-task
-
-| класс | как разделяет | выход |
-|---|---|---|
-| `MultiTaskResponse` | структурно: общий модуль либо словарь по задачам | `MultiTaskxGroupResponseOutput` |
-| `MultiTaskUplift` | то же, плюс двухпроходное скоринговое поведение S-Learner | `MultiTaskxGroupUpliftOutput` |
-| `MMoE` | гейт на задачу над общим пулом экспертов | `MMoEOutput` |
-| `PLE` | гейт видит `[общие эксперты] + [свои]` | `MMoEOutput` |
-
-Вспомогательные классы:
-
-| класс | роль |
-|---|---|
-| `MMoEBackbone` | пул экспертов плюс гейт на задачу |
-| `PLEBackbone` | пул, разделённый на общих и приватных экспертов |
-| `TaskHead` | голова одной задачи; размер выставляется пайплайном через `init_head` |
-| `MLPExpert` | дешёвый эксперт: остаточный feed-forward блок |
-| `TabBackboneExpert` | эксперт целиком из табличного энкодера |
-| `HierarchicalFeatureGate` | обучаемый гейт по признакам: общая и задачная компоненты |
-
-`PLE` — `MMoE` с `PLEBackbone`; тело класса пустое намеренно, отдельное имя
-нужно, чтобы называть архитектуру в конфигах и чтобы PLE-специфичные метрики
-узнавали прогон.
-
-Число экспертов в PLE — `num_shared_experts + num_tasks * num_specific_experts`:
-приватные эксперты считаются **на задачу**.
-
-Веса гейтов доступны в выходе как `task_gated_weights`; их читают
-поле `task_gated_weights` выхода — распределение задачи по экспертам.
+Семейства `sequence` (`NextKTokensPrediction`, `SequenceModelWithAggregation`,
+`SequenceClassification`) и `multi_task` (`MMoE`, `PLE`, `MultiTaskResponse`,
+`MultiTaskUplift`) удалены из `avatar/pipeline`. Препроцессинг событийных
+последовательностей и энкодеры под них (`avatar/data/sequential`,
+`avatar/nn/sequential`) остались на месте — ушёл только слой задачи над ними.
+Причины и границы решения — в
+[../decisions/pipeline_boundaries.md](../decisions/pipeline_boundaries.md).
