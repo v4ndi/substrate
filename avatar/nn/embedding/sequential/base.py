@@ -1,3 +1,5 @@
+"""Base classes for event-sequence embeddings and their temporal component."""
+
 from copy import deepcopy
 from typing import Any
 
@@ -5,7 +7,7 @@ import torch
 import torch.nn as nn
 from omegaconf import DictConfig, OmegaConf
 
-from avatar.data.event_seq_batch import EventSequenceBatch
+from avatar.data.sequential.batch import EventSequenceBatch
 from avatar.nn.embedding.base.embedding import BaseEmbedding
 
 
@@ -75,9 +77,10 @@ class BaseEventSequenceEmbedding(BaseEmbedding):
 
 
 class BaseTemporalEmbedding(nn.Module):
-    """Base class for temporal embedding
+    """Base class for temporal embeddings.
+
     Args:
-        hidden_size: int - Dimensionality of the embeddings
+        embedding_dim: Dimensionality of the embeddings.
     """
 
     def __init__(self, embedding_dim: int):

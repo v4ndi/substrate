@@ -7,44 +7,44 @@
 
 ## Конфиг обучения
 ```yaml
-# конфигцрация accelerator для multi-gpu обучения 
-accelerator:
-  _target_: accelerate.Accelerator
-  _partial_: True
-  dataloader_config:
-    _target_: accelerate.utils.DataLoaderConfiguration
-    dispatch_batches: False
+# конфигурация распределённого запуска для multi-gpu обучения
+distributed:
+  backend: null  # null -> nccl on GPU, gloo on CPU
+  gradient_accumulation_steps: 1
+amp: no  # no | fp16 | bf16
+ddp:
+  find_unused_parameters: False
 train_dataloader:
   _target_: torch.utils.data.DataLoader
   dataset:
-    _target_: avatar.data.dataset.TabularDataset
+    _target_: avatar.data.TabularDataset
     path: /home/datalab/nfs/avatar_fm/examples/uplift_modeling/s_learner/data/s_learner/train
     shuffle_files: True
     shuffle_pq: True
     hidden_state_column: seq_hidden_state # название колонки с hidden_state
-  batch_size: 2048
+  batch_size: 8192
   pin_memory: True
   drop_last: False
   num_workers: 8
   collate_fn:
-    _target_: avatar.data.dataset.collate_fn.UpliftCollateFn
+    _target_: avatar.data.UpliftCollateFn
     target_column: target_attr_1 # назване колонки факта конверсии
     treatment_column: target_attr_3 # название колонки флага контролько целевой группы (1 - ЦГ, 0 - КГ)
     inverse_treatment: True # если True то в treatment_column 0 заменяется на 1  и наоборот (В данном наборе данных 1 - КГ, 0 - ЦГ, поэтому необходимо сделать 1 - treatment_column)
 valid_dataloader:
   _target_: torch.utils.data.DataLoader
   dataset:
-    _target_: avatar.data.dataset.TabularDataset
+    _target_: avatar.data.TabularDataset
     path: /home/datalab/nfs/avatar_fm/examples/uplift_modeling/s_learner/data/s_learner/valid
     shuffle_files: False
     shuffle_pq: False
     hidden_state_column: seq_hidden_state # название колонки с hidden_state
-  batch_size: 2048
+  batch_size: 8192
   pin_memory: True
   drop_last: False
   num_workers: 8
   collate_fn:
-    _target_: avatar.data.dataset.collate_fn.UpliftCollateFn
+    _target_: avatar.data.UpliftCollateFn
     target_column: target_attr_1 # назване колонки факта конверсии
     treatment_column: target_attr_3 # название колонки флага контролько целевой группы (1 - ЦГ, 0 - КГ)
     inverse_treatment: True # если True то в treatment_column 0 заменяется на 1  и наоборот (В данном наборе данных 1 - КГ, 0 - ЦГ, поэтому необходимо сделать 1 - treatment_column)
@@ -56,8 +56,8 @@ model:
     hidden_size: 64
     vocab_size: 172
     std_noise: null
-  tabular_backbone:
-    _target_: avatar.nn.tabular.ste.STEv2Body
+  tabular_encoder:
+    _target_: avatar.nn.tabular.TabularTransformer
     hidden_size: ${model.embedding.hidden_size}
     num_heads: 4
     num_layers: 3
@@ -74,7 +74,7 @@ mlflow:
 optimizer:
   _target_: torch.optim.AdamW
   _partial_: True
-  lr: 0.001
+  lr: 0.0025
   weight_decay: 0
   scale_lr_multigpu: True
 scheduler:
@@ -99,13 +99,21 @@ metrics:
     require_calibration: True
 ```
 
+`require_calibration: True` включает бета-калибровку обеих голов. Калиброванные
+метрики возвращаются только для отложенного среза — строк, у которых в колонке
+`split_type` стоит `test`. В этом примере такой колонки в данных нет, поэтому
+калибровка не выполняется, в лог пишется предупреждение, а прогон отчитывается
+сырыми метриками: `mean_qini_auc_score` и `{calib}_group_{группа}_*`. Чтобы
+получить `mean_calibrated_qini_auc_score`, добавьте в валидационный набор
+колонку `split_type` со значениями `calib` и `test`.
+
 ## Запуск обучения
 ```bash
-accelerate launch -m avatar.train --config-dir=configs --config-name=train
+torchrun --standalone --nproc_per_node=1 -m avatar.train --config-dir=configs --config-name=train
 ```
 
 ## Запуск инференса
 ```bash
-accelerate launch -m avatar.inference --config-dir=configs --config-name=inference
+python -m avatar.infer --config-dir=configs --config-name=inference
 ```
 Результаты инференса можно найти в директории `predict`.

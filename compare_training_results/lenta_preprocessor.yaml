@@ -1,0 +1,989 @@
+_backend: local
+batch_rows: 250000
+cat_cols:
+- gender
+- main_format
+label_encoder:
+  columns:
+  - gender
+  - main_format
+  frequency_encoder: false
+  spec_tokens:
+    unk: 0
+  values_to_id:
+    gender:
+      unk: 0
+      "\u0416": 1
+      "\u041C": 2
+      "\u041D\u0435 \u043E\u043F\u0440\u0435\u0434\u0435\u043B\u0435\u043D": 3
+    main_format:
+      unk: 0
+      0: 1
+      1: 2
+num_cols:
+- age
+- cheque_count_12m_g20
+- cheque_count_12m_g21
+- cheque_count_12m_g25
+- cheque_count_12m_g32
+- cheque_count_12m_g33
+- cheque_count_12m_g38
+- cheque_count_12m_g39
+- cheque_count_12m_g41
+- cheque_count_12m_g42
+- cheque_count_12m_g45
+- cheque_count_12m_g46
+- cheque_count_12m_g48
+- cheque_count_12m_g52
+- cheque_count_12m_g56
+- cheque_count_12m_g57
+- cheque_count_12m_g58
+- cheque_count_12m_g79
+- cheque_count_3m_g20
+- cheque_count_3m_g21
+- cheque_count_3m_g25
+- cheque_count_3m_g42
+- cheque_count_3m_g45
+- cheque_count_3m_g52
+- cheque_count_3m_g56
+- cheque_count_3m_g57
+- cheque_count_3m_g79
+- cheque_count_6m_g20
+- cheque_count_6m_g21
+- cheque_count_6m_g25
+- cheque_count_6m_g32
+- cheque_count_6m_g33
+- cheque_count_6m_g38
+- cheque_count_6m_g39
+- cheque_count_6m_g40
+- cheque_count_6m_g41
+- cheque_count_6m_g42
+- cheque_count_6m_g45
+- cheque_count_6m_g46
+- cheque_count_6m_g48
+- cheque_count_6m_g52
+- cheque_count_6m_g56
+- cheque_count_6m_g57
+- cheque_count_6m_g58
+- cheque_count_6m_g79
+- children
+- crazy_purchases_cheque_count_12m
+- crazy_purchases_cheque_count_1m
+- crazy_purchases_cheque_count_3m
+- crazy_purchases_cheque_count_6m
+- crazy_purchases_goods_count_12m
+- crazy_purchases_goods_count_6m
+- disc_sum_6m_g34
+- food_share_15d
+- food_share_1m
+- k_var_cheque_15d
+- k_var_cheque_3m
+- k_var_cheque_category_width_15d
+- k_var_cheque_group_width_15d
+- k_var_count_per_cheque_15d_g24
+- k_var_count_per_cheque_15d_g34
+- k_var_count_per_cheque_1m_g24
+- k_var_count_per_cheque_1m_g27
+- k_var_count_per_cheque_1m_g34
+- k_var_count_per_cheque_1m_g44
+- k_var_count_per_cheque_1m_g49
+- k_var_count_per_cheque_3m_g24
+- k_var_count_per_cheque_3m_g27
+- k_var_count_per_cheque_3m_g32
+- k_var_count_per_cheque_3m_g34
+- k_var_count_per_cheque_3m_g41
+- k_var_count_per_cheque_3m_g44
+- k_var_count_per_cheque_6m_g24
+- k_var_count_per_cheque_6m_g27
+- k_var_count_per_cheque_6m_g32
+- k_var_count_per_cheque_6m_g44
+- k_var_days_between_visits_15d
+- k_var_days_between_visits_1m
+- k_var_days_between_visits_3m
+- k_var_disc_per_cheque_15d
+- k_var_disc_share_12m_g32
+- k_var_disc_share_15d_g24
+- k_var_disc_share_15d_g34
+- k_var_disc_share_15d_g49
+- k_var_disc_share_1m_g24
+- k_var_disc_share_1m_g27
+- k_var_disc_share_1m_g34
+- k_var_disc_share_1m_g40
+- k_var_disc_share_1m_g44
+- k_var_disc_share_1m_g49
+- k_var_disc_share_1m_g54
+- k_var_disc_share_3m_g24
+- k_var_disc_share_3m_g26
+- k_var_disc_share_3m_g27
+- k_var_disc_share_3m_g32
+- k_var_disc_share_3m_g33
+- k_var_disc_share_3m_g34
+- k_var_disc_share_3m_g38
+- k_var_disc_share_3m_g40
+- k_var_disc_share_3m_g41
+- k_var_disc_share_3m_g44
+- k_var_disc_share_3m_g46
+- k_var_disc_share_3m_g48
+- k_var_disc_share_3m_g49
+- k_var_disc_share_3m_g54
+- k_var_disc_share_6m_g24
+- k_var_disc_share_6m_g27
+- k_var_disc_share_6m_g32
+- k_var_disc_share_6m_g34
+- k_var_disc_share_6m_g44
+- k_var_disc_share_6m_g46
+- k_var_disc_share_6m_g49
+- k_var_disc_share_6m_g54
+- k_var_discount_depth_15d
+- k_var_discount_depth_1m
+- k_var_sku_per_cheque_15d
+- k_var_sku_price_12m_g32
+- k_var_sku_price_15d_g34
+- k_var_sku_price_15d_g49
+- k_var_sku_price_1m_g24
+- k_var_sku_price_1m_g26
+- k_var_sku_price_1m_g27
+- k_var_sku_price_1m_g34
+- k_var_sku_price_1m_g40
+- k_var_sku_price_1m_g44
+- k_var_sku_price_1m_g49
+- k_var_sku_price_1m_g54
+- k_var_sku_price_3m_g24
+- k_var_sku_price_3m_g26
+- k_var_sku_price_3m_g27
+- k_var_sku_price_3m_g32
+- k_var_sku_price_3m_g33
+- k_var_sku_price_3m_g34
+- k_var_sku_price_3m_g40
+- k_var_sku_price_3m_g41
+- k_var_sku_price_3m_g44
+- k_var_sku_price_3m_g46
+- k_var_sku_price_3m_g48
+- k_var_sku_price_3m_g49
+- k_var_sku_price_3m_g54
+- k_var_sku_price_6m_g24
+- k_var_sku_price_6m_g26
+- k_var_sku_price_6m_g27
+- k_var_sku_price_6m_g32
+- k_var_sku_price_6m_g41
+- k_var_sku_price_6m_g42
+- k_var_sku_price_6m_g44
+- k_var_sku_price_6m_g48
+- k_var_sku_price_6m_g49
+- mean_discount_depth_15d
+- months_from_register
+- perdelta_days_between_visits_15_30d
+- promo_share_15d
+- response_sms
+- response_viber
+- sale_count_12m_g32
+- sale_count_12m_g33
+- sale_count_12m_g49
+- sale_count_12m_g54
+- sale_count_12m_g57
+- sale_count_3m_g24
+- sale_count_3m_g33
+- sale_count_3m_g57
+- sale_count_6m_g24
+- sale_count_6m_g25
+- sale_count_6m_g32
+- sale_count_6m_g33
+- sale_count_6m_g44
+- sale_count_6m_g54
+- sale_count_6m_g57
+- sale_sum_12m_g24
+- sale_sum_12m_g25
+- sale_sum_12m_g26
+- sale_sum_12m_g27
+- sale_sum_12m_g32
+- sale_sum_12m_g44
+- sale_sum_12m_g54
+- sale_sum_3m_g24
+- sale_sum_3m_g26
+- sale_sum_3m_g32
+- sale_sum_3m_g33
+- sale_sum_6m_g24
+- sale_sum_6m_g25
+- sale_sum_6m_g26
+- sale_sum_6m_g32
+- sale_sum_6m_g33
+- sale_sum_6m_g44
+- sale_sum_6m_g54
+- stdev_days_between_visits_15d
+- stdev_discount_depth_15d
+- stdev_discount_depth_1m
+offset_map:
+  gender: 1
+  main_format: 5
+spec_tokens:
+  pad: 0
+standard_scaler:
+  columns:
+  - age
+  - cheque_count_12m_g20
+  - cheque_count_12m_g21
+  - cheque_count_12m_g25
+  - cheque_count_12m_g32
+  - cheque_count_12m_g33
+  - cheque_count_12m_g38
+  - cheque_count_12m_g39
+  - cheque_count_12m_g41
+  - cheque_count_12m_g42
+  - cheque_count_12m_g45
+  - cheque_count_12m_g46
+  - cheque_count_12m_g48
+  - cheque_count_12m_g52
+  - cheque_count_12m_g56
+  - cheque_count_12m_g57
+  - cheque_count_12m_g58
+  - cheque_count_12m_g79
+  - cheque_count_3m_g20
+  - cheque_count_3m_g21
+  - cheque_count_3m_g25
+  - cheque_count_3m_g42
+  - cheque_count_3m_g45
+  - cheque_count_3m_g52
+  - cheque_count_3m_g56
+  - cheque_count_3m_g57
+  - cheque_count_3m_g79
+  - cheque_count_6m_g20
+  - cheque_count_6m_g21
+  - cheque_count_6m_g25
+  - cheque_count_6m_g32
+  - cheque_count_6m_g33
+  - cheque_count_6m_g38
+  - cheque_count_6m_g39
+  - cheque_count_6m_g40
+  - cheque_count_6m_g41
+  - cheque_count_6m_g42
+  - cheque_count_6m_g45
+  - cheque_count_6m_g46
+  - cheque_count_6m_g48
+  - cheque_count_6m_g52
+  - cheque_count_6m_g56
+  - cheque_count_6m_g57
+  - cheque_count_6m_g58
+  - cheque_count_6m_g79
+  - children
+  - crazy_purchases_cheque_count_12m
+  - crazy_purchases_cheque_count_1m
+  - crazy_purchases_cheque_count_3m
+  - crazy_purchases_cheque_count_6m
+  - crazy_purchases_goods_count_12m
+  - crazy_purchases_goods_count_6m
+  - disc_sum_6m_g34
+  - food_share_15d
+  - food_share_1m
+  - k_var_cheque_15d
+  - k_var_cheque_3m
+  - k_var_cheque_category_width_15d
+  - k_var_cheque_group_width_15d
+  - k_var_count_per_cheque_15d_g24
+  - k_var_count_per_cheque_15d_g34
+  - k_var_count_per_cheque_1m_g24
+  - k_var_count_per_cheque_1m_g27
+  - k_var_count_per_cheque_1m_g34
+  - k_var_count_per_cheque_1m_g44
+  - k_var_count_per_cheque_1m_g49
+  - k_var_count_per_cheque_3m_g24
+  - k_var_count_per_cheque_3m_g27
+  - k_var_count_per_cheque_3m_g32
+  - k_var_count_per_cheque_3m_g34
+  - k_var_count_per_cheque_3m_g41
+  - k_var_count_per_cheque_3m_g44
+  - k_var_count_per_cheque_6m_g24
+  - k_var_count_per_cheque_6m_g27
+  - k_var_count_per_cheque_6m_g32
+  - k_var_count_per_cheque_6m_g44
+  - k_var_days_between_visits_15d
+  - k_var_days_between_visits_1m
+  - k_var_days_between_visits_3m
+  - k_var_disc_per_cheque_15d
+  - k_var_disc_share_12m_g32
+  - k_var_disc_share_15d_g24
+  - k_var_disc_share_15d_g34
+  - k_var_disc_share_15d_g49
+  - k_var_disc_share_1m_g24
+  - k_var_disc_share_1m_g27
+  - k_var_disc_share_1m_g34
+  - k_var_disc_share_1m_g40
+  - k_var_disc_share_1m_g44
+  - k_var_disc_share_1m_g49
+  - k_var_disc_share_1m_g54
+  - k_var_disc_share_3m_g24
+  - k_var_disc_share_3m_g26
+  - k_var_disc_share_3m_g27
+  - k_var_disc_share_3m_g32
+  - k_var_disc_share_3m_g33
+  - k_var_disc_share_3m_g34
+  - k_var_disc_share_3m_g38
+  - k_var_disc_share_3m_g40
+  - k_var_disc_share_3m_g41
+  - k_var_disc_share_3m_g44
+  - k_var_disc_share_3m_g46
+  - k_var_disc_share_3m_g48
+  - k_var_disc_share_3m_g49
+  - k_var_disc_share_3m_g54
+  - k_var_disc_share_6m_g24
+  - k_var_disc_share_6m_g27
+  - k_var_disc_share_6m_g32
+  - k_var_disc_share_6m_g34
+  - k_var_disc_share_6m_g44
+  - k_var_disc_share_6m_g46
+  - k_var_disc_share_6m_g49
+  - k_var_disc_share_6m_g54
+  - k_var_discount_depth_15d
+  - k_var_discount_depth_1m
+  - k_var_sku_per_cheque_15d
+  - k_var_sku_price_12m_g32
+  - k_var_sku_price_15d_g34
+  - k_var_sku_price_15d_g49
+  - k_var_sku_price_1m_g24
+  - k_var_sku_price_1m_g26
+  - k_var_sku_price_1m_g27
+  - k_var_sku_price_1m_g34
+  - k_var_sku_price_1m_g40
+  - k_var_sku_price_1m_g44
+  - k_var_sku_price_1m_g49
+  - k_var_sku_price_1m_g54
+  - k_var_sku_price_3m_g24
+  - k_var_sku_price_3m_g26
+  - k_var_sku_price_3m_g27
+  - k_var_sku_price_3m_g32
+  - k_var_sku_price_3m_g33
+  - k_var_sku_price_3m_g34
+  - k_var_sku_price_3m_g40
+  - k_var_sku_price_3m_g41
+  - k_var_sku_price_3m_g44
+  - k_var_sku_price_3m_g46
+  - k_var_sku_price_3m_g48
+  - k_var_sku_price_3m_g49
+  - k_var_sku_price_3m_g54
+  - k_var_sku_price_6m_g24
+  - k_var_sku_price_6m_g26
+  - k_var_sku_price_6m_g27
+  - k_var_sku_price_6m_g32
+  - k_var_sku_price_6m_g41
+  - k_var_sku_price_6m_g42
+  - k_var_sku_price_6m_g44
+  - k_var_sku_price_6m_g48
+  - k_var_sku_price_6m_g49
+  - mean_discount_depth_15d
+  - months_from_register
+  - perdelta_days_between_visits_15_30d
+  - promo_share_15d
+  - response_sms
+  - response_viber
+  - sale_count_12m_g32
+  - sale_count_12m_g33
+  - sale_count_12m_g49
+  - sale_count_12m_g54
+  - sale_count_12m_g57
+  - sale_count_3m_g24
+  - sale_count_3m_g33
+  - sale_count_3m_g57
+  - sale_count_6m_g24
+  - sale_count_6m_g25
+  - sale_count_6m_g32
+  - sale_count_6m_g33
+  - sale_count_6m_g44
+  - sale_count_6m_g54
+  - sale_count_6m_g57
+  - sale_sum_12m_g24
+  - sale_sum_12m_g25
+  - sale_sum_12m_g26
+  - sale_sum_12m_g27
+  - sale_sum_12m_g32
+  - sale_sum_12m_g44
+  - sale_sum_12m_g54
+  - sale_sum_3m_g24
+  - sale_sum_3m_g26
+  - sale_sum_3m_g32
+  - sale_sum_3m_g33
+  - sale_sum_6m_g24
+  - sale_sum_6m_g25
+  - sale_sum_6m_g26
+  - sale_sum_6m_g32
+  - sale_sum_6m_g33
+  - sale_sum_6m_g44
+  - sale_sum_6m_g54
+  - stdev_days_between_visits_15d
+  - stdev_discount_depth_15d
+  - stdev_discount_depth_1m
+  fillna: true
+  mean_std:
+    age:
+      mean: 43.73546722537276
+      std: 14.850585480500055
+    cheque_count_12m_g20:
+      mean: 2.5657993349486663
+      std: 5.473131203830405
+    cheque_count_12m_g21:
+      mean: 3.5235023611505243
+      std: 6.992969701673218
+    cheque_count_12m_g25:
+      mean: 5.709525732538764
+      std: 11.156617902363942
+    cheque_count_12m_g32:
+      mean: 2.9141163330495585
+      std: 6.033612965712885
+    cheque_count_12m_g33:
+      mean: 5.367690074436271
+      std: 9.545281811590305
+    cheque_count_12m_g38:
+      mean: 4.763070005020627
+      std: 8.333742663825898
+    cheque_count_12m_g39:
+      mean: 2.2110228256677797
+      std: 4.193807396538703
+    cheque_count_12m_g41:
+      mean: 5.508569630292579
+      std: 9.104074259732466
+    cheque_count_12m_g42:
+      mean: 3.646791527507949
+      std: 5.948497743912297
+    cheque_count_12m_g45:
+      mean: 2.5449691849846836
+      std: 4.390544550588899
+    cheque_count_12m_g46:
+      mean: 4.88858389178727
+      std: 7.865878030257867
+    cheque_count_12m_g48:
+      mean: 5.723296078816587
+      std: 8.670072402786532
+    cheque_count_12m_g52:
+      mean: 3.474358414645682
+      std: 7.218831630195507
+    cheque_count_12m_g56:
+      mean: 2.160601893286183
+      std: 4.0635167378454415
+    cheque_count_12m_g57:
+      mean: 2.3516677217262227
+      std: 5.1605488346462165
+    cheque_count_12m_g58:
+      mean: 1.937442244584634
+      std: 4.237496452985616
+    cheque_count_12m_g79:
+      mean: 2.0946643091542785
+      std: 3.9016189080127464
+    cheque_count_3m_g20:
+      mean: 0.8315405916890408
+      std: 1.867761971713029
+    cheque_count_3m_g21:
+      mean: 1.0285222947655035
+      std: 2.209808369645023
+    cheque_count_3m_g25:
+      mean: 1.697051249088526
+      std: 3.544832236464539
+    cheque_count_3m_g42:
+      mean: 0.996170754426709
+      std: 1.9224827876005934
+    cheque_count_3m_g45:
+      mean: 0.7351329593303351
+      std: 1.4371951358125206
+    cheque_count_3m_g52:
+      mean: 1.06192967001471
+      std: 2.4406611546090704
+    cheque_count_3m_g56:
+      mean: 0.5980683068285754
+      std: 1.3551414854006079
+    cheque_count_3m_g57:
+      mean: 0.6199731931735321
+      std: 1.57517373902325
+    cheque_count_3m_g79:
+      mean: 0.6366347316999152
+      std: 1.384794998404444
+    cheque_count_6m_g20:
+      mean: 1.34638578435314
+      std: 3.067527595117961
+    cheque_count_6m_g21:
+      mean: 1.7980530966982684
+      std: 3.838672813936381
+    cheque_count_6m_g25:
+      mean: 2.9248137887681187
+      std: 6.136393783279451
+    cheque_count_6m_g32:
+      mean: 1.6296497986214156
+      std: 3.60158103142596
+    cheque_count_6m_g33:
+      mean: 2.6726574663577156
+      std: 5.107181539861227
+    cheque_count_6m_g38:
+      mean: 2.3661143070164536
+      std: 4.523474198691047
+    cheque_count_6m_g39:
+      mean: 0.9491802320056723
+      std: 2.1400349819727524
+    cheque_count_6m_g40:
+      mean: 4.18907475494675
+      std: 8.886079487453367
+    cheque_count_6m_g41:
+      mean: 2.466012338549928
+      std: 4.624940992856284
+    cheque_count_6m_g42:
+      mean: 1.6908327059287902
+      std: 3.1356907927379427
+    cheque_count_6m_g45:
+      mean: 1.2515276996060143
+      std: 2.381583223872022
+    cheque_count_6m_g46:
+      mean: 2.3479756152828437
+      std: 4.160832834626322
+    cheque_count_6m_g48:
+      mean: 2.9196002397538137
+      std: 4.713492708117105
+    cheque_count_6m_g52:
+      mean: 1.7984551229103773
+      std: 4.077833621389311
+    cheque_count_6m_g56:
+      mean: 1.0292327877959462
+      std: 2.2044156568429667
+    cheque_count_6m_g57:
+      mean: 1.1679263487979417
+      std: 2.7525260903612248
+    cheque_count_6m_g58:
+      mean: 0.8920815455349507
+      std: 2.1818078573504165
+    cheque_count_6m_g79:
+      mean: 1.051214484638944
+      std: 2.2093240382885067
+    children:
+      mean: 0.6217204522929661
+      std: 0.8873257666619011
+    crazy_purchases_cheque_count_12m:
+      mean: 2.490349843196321
+      std: 4.552607077690758
+    crazy_purchases_cheque_count_1m:
+      mean: 0.2520828330895782
+      std: 0.6786011541515763
+    crazy_purchases_cheque_count_3m:
+      mean: 0.5785728318526118
+      std: 1.293573803445121
+    crazy_purchases_cheque_count_6m:
+      mean: 1.0667816317769387
+      std: 2.108871584099191
+    crazy_purchases_goods_count_12m:
+      mean: 4.190558308412099
+      std: 8.473783894778514
+    crazy_purchases_goods_count_6m:
+      mean: 1.7753392113597377
+      std: 4.004218647127856
+    disc_sum_6m_g34:
+      mean: 168.22508554021363
+      std: 477.4432081024823
+    food_share_15d:
+      mean: 0.3495109802594719
+      std: 0.4105137671542912
+    food_share_1m:
+      mean: 0.4539539164538358
+      std: 0.40795545949931505
+    k_var_cheque_15d:
+      mean: 0.23621120950319066
+      std: 0.388447663142501
+    k_var_cheque_3m:
+      mean: 0.6227977681816239
+      std: 0.4271161724342878
+    k_var_cheque_category_width_15d:
+      mean: 0.20036816208492259
+      std: 0.33186763102170386
+    k_var_cheque_group_width_15d:
+      mean: 0.1823922787711642
+      std: 0.3036708892755831
+    k_var_count_per_cheque_15d_g24:
+      mean: 0.09984112943987503
+      std: 0.25807060464214204
+    k_var_count_per_cheque_15d_g34:
+      mean: 0.16252979690295585
+      std: 0.30048471151694706
+    k_var_count_per_cheque_1m_g24:
+      mean: 0.1545817938062959
+      std: 0.3071552689072856
+    k_var_count_per_cheque_1m_g27:
+      mean: 0.15794602242223274
+      std: 0.29509255201740386
+    k_var_count_per_cheque_1m_g34:
+      mean: 0.21700961557568435
+      std: 0.33018699099303433
+    k_var_count_per_cheque_1m_g44:
+      mean: 0.14004116300008634
+      std: 0.29325348210816843
+    k_var_count_per_cheque_1m_g49:
+      mean: 0.28496882212221475
+      std: 0.34570414974198815
+    k_var_count_per_cheque_3m_g24:
+      mean: 0.3065331275771105
+      std: 0.3764836962597327
+    k_var_count_per_cheque_3m_g27:
+      mean: 0.2769739485135652
+      std: 0.347931765586444
+    k_var_count_per_cheque_3m_g32:
+      mean: 0.10890726103061994
+      std: 0.2436974485133614
+    k_var_count_per_cheque_3m_g34:
+      mean: 0.3300662394204601
+      std: 0.3653119736561115
+    k_var_count_per_cheque_3m_g41:
+      mean: 0.19916837833178358
+      std: 0.31825581447574625
+    k_var_count_per_cheque_3m_g44:
+      mean: 0.26911016741008414
+      std: 0.37097572855795696
+    k_var_count_per_cheque_6m_g24:
+      mean: 0.42379760437081127
+      std: 0.38574619225290524
+    k_var_count_per_cheque_6m_g27:
+      mean: 0.358720995234794
+      std: 0.3540597135547614
+    k_var_count_per_cheque_6m_g32:
+      mean: 0.16022304550758465
+      std: 0.2807531188282015
+    k_var_count_per_cheque_6m_g44:
+      mean: 0.36663649736931936
+      std: 0.396856557454203
+    k_var_days_between_visits_15d:
+      mean: 0.08429449020688355
+      std: 0.23285002890993406
+    k_var_days_between_visits_1m:
+      mean: 0.1945726598274225
+      std: 0.3438099007200581
+    k_var_days_between_visits_3m:
+      mean: 0.5092635700233192
+      std: 0.46587026781086965
+    k_var_disc_per_cheque_15d:
+      mean: 0.29134892217051306
+      std: 0.46780127750525063
+    k_var_disc_share_12m_g32:
+      mean: 0.3941455707986944
+      std: 0.5246180488287251
+    k_var_disc_share_15d_g24:
+      mean: 0.11230534079193165
+      std: 0.299273005124298
+    k_var_disc_share_15d_g34:
+      mean: 0.19120232784037666
+      std: 0.37082181834530775
+    k_var_disc_share_15d_g49:
+      mean: 0.3393752477384667
+      std: 0.5244974094547787
+    k_var_disc_share_1m_g24:
+      mean: 0.17685387454160026
+      std: 0.36243993073960273
+    k_var_disc_share_1m_g27:
+      mean: 0.18975225711985352
+      std: 0.3587005703626453
+    k_var_disc_share_1m_g34:
+      mean: 0.26018346887506566
+      std: 0.414543494304761
+    k_var_disc_share_1m_g40:
+      mean: 0.21664801460074065
+      std: 0.4034810223034425
+    k_var_disc_share_1m_g44:
+      mean: 0.17381861036676588
+      std: 0.35810509216476133
+    k_var_disc_share_1m_g49:
+      mean: 0.4473966416235284
+      std: 0.5730798764670212
+    k_var_disc_share_1m_g54:
+      mean: 0.20217369579471844
+      std: 0.3886904563275291
+    k_var_disc_share_3m_g24:
+      mean: 0.3609940882513106
+      std: 0.46524142911205185
+    k_var_disc_share_3m_g26:
+      mean: 0.1948433985002678
+      std: 0.38896882485952333
+    k_var_disc_share_3m_g27:
+      mean: 0.3300574273228615
+      std: 0.42073688957781574
+    k_var_disc_share_3m_g32:
+      mean: 0.1704867220953187
+      std: 0.37772424334587945
+    k_var_disc_share_3m_g33:
+      mean: 0.27377812296214427
+      std: 0.43697104969710954
+    k_var_disc_share_3m_g34:
+      mean: 0.39439497302524573
+      std: 0.45653866934778337
+    k_var_disc_share_3m_g38:
+      mean: 0.22114255096229868
+      std: 0.3793791539044564
+    k_var_disc_share_3m_g40:
+      mean: 0.3989740888199633
+      std: 0.471688341919761
+    k_var_disc_share_3m_g41:
+      mean: 0.27014285189517884
+      std: 0.41921518177507616
+    k_var_disc_share_3m_g44:
+      mean: 0.3295285125191576
+      std: 0.4447420415886079
+    k_var_disc_share_3m_g46:
+      mean: 0.25165412720427977
+      std: 0.40414657606661375
+    k_var_disc_share_3m_g48:
+      mean: 0.3423482805947389
+      std: 0.4300870958829577
+    k_var_disc_share_3m_g49:
+      mean: 0.6624462923356849
+      std: 0.6205085871427425
+    k_var_disc_share_3m_g54:
+      mean: 0.36891374552872475
+      std: 0.46579686337096926
+    k_var_disc_share_6m_g24:
+      mean: 0.5016435678243074
+      std: 0.4776985474033221
+    k_var_disc_share_6m_g27:
+      mean: 0.4628002571789062
+      std: 0.4578034476173818
+    k_var_disc_share_6m_g32:
+      mean: 0.2574499553424957
+      std: 0.4517920038957378
+    k_var_disc_share_6m_g34:
+      mean: 0.503248833447881
+      std: 0.47218964584133516
+    k_var_disc_share_6m_g44:
+      mean: 0.4553560878036842
+      std: 0.47955043218959725
+    k_var_disc_share_6m_g46:
+      mean: 0.3765036948600815
+      std: 0.44893170278029454
+    k_var_disc_share_6m_g49:
+      mean: 0.8231425367199815
+      std: 0.6219007359225532
+    k_var_disc_share_6m_g54:
+      mean: 0.5000619542364443
+      std: 0.49343421859399983
+    k_var_discount_depth_15d:
+      mean: 0.1236510429273806
+      std: 0.23539985623766066
+    k_var_discount_depth_1m:
+      mean: 0.2064511743070582
+      std: 0.27412643647800683
+    k_var_sku_per_cheque_15d:
+      mean: 0.21450476249974446
+      std: 0.3539216083329273
+    k_var_sku_price_12m_g32:
+      mean: 0.2535460383271333
+      std: 0.32687820531801404
+    k_var_sku_price_15d_g34:
+      mean: 0.08480601917217806
+      std: 0.16825989305252775
+    k_var_sku_price_15d_g49:
+      mean: 0.41270959561253673
+      std: 0.5644658283315438
+    k_var_sku_price_1m_g24:
+      mean: 0.12642085074442072
+      std: 0.26553706452977033
+    k_var_sku_price_1m_g26:
+      mean: 0.12324054132434967
+      std: 0.2858659566191894
+    k_var_sku_price_1m_g27:
+      mean: 0.09432473748618347
+      std: 0.18914453767016945
+    k_var_sku_price_1m_g34:
+      mean: 0.11655557262084155
+      std: 0.18804078176114689
+    k_var_sku_price_1m_g40:
+      mean: 0.11293121714467347
+      std: 0.21366370835598378
+    k_var_sku_price_1m_g44:
+      mean: 0.10925322920820775
+      std: 0.23150999264883965
+    k_var_sku_price_1m_g49:
+      mean: 0.551707341228014
+      std: 0.6137657229913129
+    k_var_sku_price_1m_g54:
+      mean: 0.12473880965510326
+      std: 0.2384708461073859
+    k_var_sku_price_3m_g24:
+      mean: 0.24468189592806233
+      std: 0.31527922984125356
+    k_var_sku_price_3m_g26:
+      mean: 0.2332398102136422
+      std: 0.3826628905428382
+    k_var_sku_price_3m_g27:
+      mean: 0.18274988783961202
+      std: 0.2408740715944338
+    k_var_sku_price_3m_g32:
+      mean: 0.11654780307750552
+      std: 0.2583736621085606
+    k_var_sku_price_3m_g33:
+      mean: 0.1250609609559815
+      std: 0.19999679995924555
+    k_var_sku_price_3m_g34:
+      mean: 0.17997195666753504
+      std: 0.2116699184101772
+    k_var_sku_price_3m_g40:
+      mean: 0.21368625770989091
+      std: 0.2536734316738487
+    k_var_sku_price_3m_g41:
+      mean: 0.18659548479906846
+      std: 0.29434150141623877
+    k_var_sku_price_3m_g44:
+      mean: 0.20665148382361245
+      std: 0.28940010177615466
+    k_var_sku_price_3m_g46:
+      mean: 0.1292308014404865
+      std: 0.2135759622186916
+    k_var_sku_price_3m_g48:
+      mean: 0.251058586371156
+      std: 0.32180938145470467
+    k_var_sku_price_3m_g49:
+      mean: 0.8089353498794021
+      std: 0.6531152553325714
+    k_var_sku_price_3m_g54:
+      mean: 0.22535345335047863
+      std: 0.28465708726418504
+    k_var_sku_price_6m_g24:
+      mean: 0.34397515226846126
+      std: 0.3235861893046075
+    k_var_sku_price_6m_g26:
+      mean: 0.341017847628071
+      std: 0.44724733070028105
+    k_var_sku_price_6m_g27:
+      mean: 0.22811936760258783
+      std: 0.24421669899205242
+    k_var_sku_price_6m_g32:
+      mean: 0.1710113980910881
+      std: 0.2954846332918923
+    k_var_sku_price_6m_g41:
+      mean: 0.2656851343062153
+      std: 0.3271557221461914
+    k_var_sku_price_6m_g42:
+      mean: 0.2181873292625287
+      std: 0.32926525946283314
+    k_var_sku_price_6m_g44:
+      mean: 0.2787533181887734
+      std: 0.3059013055300783
+    k_var_sku_price_6m_g48:
+      mean: 0.3319357660358427
+      std: 0.33762581992543683
+    k_var_sku_price_6m_g49:
+      mean: 0.9820717640151237
+      std: 0.639995355908678
+    mean_discount_depth_15d:
+      mean: 0.2943655157422162
+      std: 0.3563504172502492
+    months_from_register:
+      mean: 43.225927263214906
+      std: 37.686642961253995
+    perdelta_days_between_visits_15_30d:
+      mean: 0.1731227918331114
+      std: 0.6376526446402465
+    promo_share_15d:
+      mean: 0.2831099510306841
+      std: 0.34928724095306946
+    response_sms:
+      mean: 0.782115468344258
+      std: 0.3638076145013487
+    response_viber:
+      mean: 0.2702748340289739
+      std: 0.37310504603918904
+    sale_count_12m_g32:
+      mean: 6.7049278812221225
+      std: 17.433898362938354
+    sale_count_12m_g33:
+      mean: 9.969469963545874
+      std: 23.307890594046864
+    sale_count_12m_g49:
+      mean: 27.456120436867423
+      std: 49.73828645781425
+    sale_count_12m_g54:
+      mean: 14.892796351676816
+      std: 31.362536831611042
+    sale_count_12m_g57:
+      mean: 2.8667350636310056
+      std: 6.94826281605945
+    sale_count_3m_g24:
+      mean: 10.032453098590954
+      std: 32.3717824742584
+    sale_count_3m_g33:
+      mean: 2.951581303503012
+      std: 7.059334773414075
+    sale_count_3m_g57:
+      mean: 0.7285555925530973
+      std: 2.195525344898895
+    sale_count_6m_g24:
+      mean: 18.38962871417398
+      std: 56.63160274251651
+    sale_count_6m_g25:
+      mean: 5.10716671509264
+      std: 14.316344442887567
+    sale_count_6m_g32:
+      mean: 3.8860641195260484
+      std: 11.02581183409237
+    sale_count_6m_g33:
+      mean: 4.862464654586389
+      std: 11.519804106426385
+    sale_count_6m_g44:
+      mean: 9.651917241076847
+      std: 22.127153758865603
+    sale_count_6m_g54:
+      mean: 7.416119833049478
+      std: 17.003726269535452
+    sale_count_6m_g57:
+      mean: 1.452827706184625
+      std: 3.72422938561479
+    sale_sum_12m_g24:
+      mean: 1332.8041872039466
+      std: 3651.057971793572
+    sale_sum_12m_g25:
+      mean: 409.19057338848745
+      std: 918.3711711029276
+    sale_sum_12m_g26:
+      mean: 677.6302792997316
+      std: 1577.5845696561244
+    sale_sum_12m_g27:
+      mean: 1295.4578820225126
+      std: 3293.6974876604595
+    sale_sum_12m_g32:
+      mean: 613.8892228213019
+      std: 1562.826074619962
+    sale_sum_12m_g44:
+      mean: 816.505834606681
+      std: 1678.2112972690932
+    sale_sum_12m_g54:
+      mean: 783.3379496190872
+      std: 1679.0294872652394
+    sale_sum_3m_g24:
+      mean: 313.8073481473364
+      std: 963.974887580441
+    sale_sum_3m_g26:
+      mean: 196.93119648645114
+      std: 527.3835304679159
+    sale_sum_3m_g32:
+      mean: 204.27084631174316
+      std: 571.6102381840748
+    sale_sum_3m_g33:
+      mean: 473.6792244565928
+      std: 1184.0934040217078
+    sale_sum_6m_g24:
+      mean: 736.3620462951458
+      std: 2103.189985316451
+    sale_sum_6m_g25:
+      mean: 218.34469849861483
+      std: 534.187058027691
+    sale_sum_6m_g26:
+      mean: 340.3344926063724
+      std: 877.9332792048292
+    sale_sum_6m_g32:
+      mean: 338.67389804615266
+      std: 927.9783427747271
+    sale_sum_6m_g33:
+      mean: 789.8678132515149
+      std: 1903.8197753896513
+    sale_sum_6m_g44:
+      mean: 430.7380925683627
+      std: 984.0203956948449
+    sale_sum_6m_g54:
+      mean: 400.0338172023362
+      std: 935.443085124543
+    stdev_days_between_visits_15d:
+      mean: 0.29184016048378675
+      std: 0.9117534924242916
+    stdev_discount_depth_15d:
+      mean: 0.06995172928959224
+      std: 0.1266104935885248
+    stdev_discount_depth_1m:
+      mean: 0.11310640036231055
+      std: 0.14241305595567155
+  to_log_columns: []
+vocab_size: 8

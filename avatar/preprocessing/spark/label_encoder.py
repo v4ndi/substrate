@@ -1,3 +1,5 @@
+"""Spark label encoder: value -> id, with a shared offset map."""
+
 from __future__ import annotations
 
 from copy import deepcopy
@@ -10,13 +12,14 @@ from .base_preprocessor import BasePreprocessor
 
 
 class LabelEncoder(BasePreprocessor):
-    """Label Encoder
+    """Map categorical values to integer ids, with a shared offset map.
+
     Args:
-        columns: List[str] - list of categorical columns
-        spec_tokens: Dict[str, int] - special tokens must be from 0 to k
-            where k is the total number of spec_tokens.
-            Also spec_tokens dict must contains "unk".
-        frequency_encoder: bool - if True, the encoder will use frequency encoding
+        columns: Categorical columns to encode.
+        spec_tokens: Special tokens, numbered 0..k-1. Must contain ``unk``,
+            and ``unk`` must be 0.
+        frequency_encoder: Assign ids by descending frequency instead of by
+            ``collect_set`` order. Deterministic; the default is not.
     """
 
     def __init__(
@@ -40,13 +43,11 @@ class LabelEncoder(BasePreprocessor):
         self.values_to_id = {col: spec_tokens.copy() for col in self.columns}
 
     def _create_mapping_dict(self, df: DataFrame, columns: list[str]) -> None:
-        """create mapping dictionary
-        Fill dictionary in the next way:
-            self.values_to_id[column_name][source_value] = destination_value
+        """Build ``values_to_id[column][source value] = id``.
 
         Args:
-            df (DataFrame)
-            columns (list[str]): list of categorical columns
+            df: DataFrame to read the distinct values from.
+            columns: Categorical columns to build mappings for.
         """
         if not self.frequency_encoder:
             unique_values_df = df.select(*[
@@ -106,8 +107,7 @@ class LabelEncoder(BasePreprocessor):
         self.columns.extend(new_columns)
 
     def count_unk(self, transformed_df: DataFrame) -> dict[str, int]:
-        """
-        Count occurrences of UNK values in transformed DataFrame.
+        """Count occurrences of UNK values in transformed DataFrame.
 
         Args:
             transformed_df: DataFrame processed by transform() method
@@ -142,10 +142,11 @@ class LabelEncoder(BasePreprocessor):
     def get_ordered_unique_values(
         self, df: DataFrame, categorical_cols: list[str]
     ) -> dict[str, list[int]]:
-        """Return unique values ordered by frequency
+        """Return each column's unique values, most frequent first.
+
         Args:
-            df (DataFrame): _description_
-            categorical_cols (list[str]): _description_
+            df: DataFrame to count values in.
+            categorical_cols: Columns to rank.
 
         Returns:
             dict[str, list[int]]: unique values for each column ordered by frequency
@@ -153,6 +154,7 @@ class LabelEncoder(BasePreprocessor):
                 "column_name": [1, 101, 202], # 1 - is the most frequent value
                 ...
             }
+
         """
         final = {}
         for col in categorical_cols:
@@ -169,8 +171,7 @@ class LabelEncoder(BasePreprocessor):
         return {key: list(value.keys()) for key, value in final.items()}
 
     def dump(self) -> dict[str, any]:
-        """
-        Creates a dictionary representation of the label encoder.
+        """Creates a dictionary representation of the label encoder.
 
         Returns:
             dict[str, any]:

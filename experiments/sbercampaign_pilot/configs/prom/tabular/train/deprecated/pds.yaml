@@ -1,14 +1,14 @@
-accelerator:
-  _target_: accelerate.Accelerator
-  _partial_: True
-  dataloader_config:
-    _target_: accelerate.utils.DataLoaderConfiguration
-    dispatch_batches: False
+distributed:
+  backend: null  # null -> nccl on GPU, gloo on CPU
+  gradient_accumulation_steps: 1
+amp: no  # no | fp16 | bf16
+ddp:
+  find_unused_parameters: False
 product: pds
 train_dataloader:
   _target_: torch.utils.data.DataLoader
   dataset:
-    _target_: avatar.data.dataset.TabularDataset
+    _target_: avatar.data.TabularDataset
     path: /home/datalab/projects/avatar/avatards/rusakov/murch_pilot/train_calib_data/splited_tabular/split_type=train/product_name=${product}_response
     shuffle_files: True
     shuffle_pq: True
@@ -18,7 +18,7 @@ train_dataloader:
   drop_last: False
   num_workers: 8
   collate_fn:
-    _target_: avatar.data.dataset.collate_fn.UpliftCollateFn
+    _target_: avatar.data.UpliftCollateFn
     target_column: target_attr_1 # назване колонки факта конверсии
     treatment_column: target_attr_3 # название колонки флага контролько целевой группы (1 - ЦГ, 0 - КГ)
     inverse_treatment: True # если True то в treatment_column 0 заменяется на 1  и наоборот (В данном наборе данных 1 - КГ, 0 - ЦГ, поэтому необходимо сделать 1 - treatment_column)
@@ -26,7 +26,7 @@ train_dataloader:
 valid_dataloader:
   _target_: torch.utils.data.DataLoader
   dataset:
-    _target_: avatar.data.dataset.TabularDataset
+    _target_: avatar.data.TabularDataset
     path: /home/datalab/projects/avatar/avatards/rusakov/murch_pilot/train_calib_data/splited_tabular/split_type=calib/product_name=${product}_response
     shuffle_files: False
     shuffle_pq: False
@@ -36,7 +36,7 @@ valid_dataloader:
   drop_last: False
   num_workers: 8
   collate_fn:
-    _target_: avatar.data.dataset.collate_fn.UpliftCollateFn
+    _target_: avatar.data.UpliftCollateFn
     target_column: target_attr_1 # назване колонки факта конверсии
     treatment_column: target_attr_3 # название колонки флага контролько целевой группы (1 - ЦГ, 0 - КГ)
     inverse_treatment: True # если True то в treatment_column 0 заменяется на 1  и наоборот (В данном наборе данных 1 - КГ, 0 - ЦГ, поэтому необходимо сделать 1 - treatment_column)
@@ -105,7 +105,7 @@ metrics:
         avg_test_calibrated_uplift_at_20: ^test_group_\d+_calibrated_uplift_at_20$
 
         avg_calib_qini_auc_score: ^calib_group_\d+_qini_auc_score$
-        avg_test_calibrated_qini_auc_score: ^cc_test_group_\d+_calibrated_qini_auc_score$
+        avg_test_calibrated_qini_auc_score: ^test_group_\d+_calibrated_qini_auc_score$
 
         avg_calib_treatment_roc_auc_score: ^calib_group_\d+_treatment_roc_auc_score$
         avg_test_treatment_roc_auc_score: ^test_group_\d+_treatment_roc_auc_score$

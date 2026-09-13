@@ -22,6 +22,7 @@ _EPOCH_2024 = np.datetime64("2024-01-01T00:00:00", "us")
 
 
 def build_table(n_users: int = 6_000, seed: int = 0) -> pa.Table:
+    """Build a synthetic event log: one row per event, 5-60 events per user."""
     rng = np.random.default_rng(seed)
     counts = rng.integers(5, 60, size=n_users)
     n = int(counts.sum())
@@ -47,6 +48,7 @@ def build_table(n_users: int = 6_000, seed: int = 0) -> pa.Table:
 
 
 def main() -> None:
+    """Write the synthetic event log out as partitioned parquet."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=os.path.join(os.path.dirname(__file__), "data"))
     ap.add_argument("--users", type=int, default=6_000)

@@ -1,9 +1,13 @@
+"""Optimise uplift directly rather than the two outcomes."""
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 
 class DirectUpliftLoss(nn.Module):
+    """Optimise the uplift itself rather than the two outcome probabilities."""
+
     def __init__(self, positive_treat_weight: float = 1.0):
         super().__init__(self)
         self.uplift_loss_weight = torch.tensor()

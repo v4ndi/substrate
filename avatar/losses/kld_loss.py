@@ -1,3 +1,5 @@
+"""Research objectives: KL divergence, contrastive, and their combinations."""
+
 from typing import Literal
 
 import torch
@@ -5,6 +7,16 @@ import torch.nn as nn
 
 
 class KLDLoss(nn.Module):
+    """KL divergence between the treated and control representations.
+
+    Added to the task loss to pull the two populations' feature distributions
+    together, so the uplift head is not just reading off which arm a record
+    came from.
+
+    Args:
+        alpha: Weight of the divergence term relative to cross-entropy.
+    """
+
     def __init__(self, alpha: float):
         super().__init__()
         self.alpha = alpha
@@ -49,6 +61,14 @@ class KLDLoss(nn.Module):
 
 
 class ContrastiveLoss(nn.Module):
+    """Contrastive term over the treated/control split.
+
+    Args:
+        alpha: Weight of the contrastive term.
+        separate_heads: Score the two arms with their own criterion instead of
+            one shared one.
+    """
+
     def __init__(self, alpha: float, separate_heads: bool = False):
         super().__init__()
         self.alpha = alpha
@@ -88,6 +108,18 @@ class ContrastiveLoss(nn.Module):
 
 
 class GradNormLossBalancer(nn.Module):
+    """Balance several losses by equalising their gradient norms.
+
+    Weights are learned so that each loss contributes comparably to the shared
+    representation, rather than the largest-scale loss dominating.
+
+    Args:
+        num_losses: How many losses are being balanced.
+        alpha: Strength of the restoring force towards equal training rates.
+        renormilize_weights: Rescale the weights to sum to ``num_losses`` after
+            each update.
+    """
+
     def __init__(self, num_losses, alpha=1.5, renormilize_weights=False):
         super().__init__()
         self.alpha = alpha
@@ -135,6 +167,13 @@ class GradNormLossBalancer(nn.Module):
 
 
 class KLDxContrastiveLoss(nn.Module):
+    """KL divergence and the contrastive term, balanced by GradNorm.
+
+    Args:
+        loss_balancer: The :class:`GradNormLossBalancer` that weighs the terms.
+        ce_balance: Include the cross-entropy term in the balancing as well.
+    """
+
     def __init__(self, loss_balancer: GradNormLossBalancer, ce_balance=False):
         super().__init__()
         self.loss_balancer = loss_balancer
@@ -219,6 +258,16 @@ class KLDxContrastiveLoss(nn.Module):
 
 
 class KLDxContrastiveGridLoss(nn.Module):
+    """KL divergence and the contrastive term with fixed weights.
+
+    The grid-search counterpart of :class:`KLDxContrastiveLoss`: the weights
+    are hyperparameters instead of being learned.
+
+    Args:
+        alpha1: Weight of the KL term.
+        alpha2: Weight of the contrastive term.
+    """
+
     def __init__(self, alpha1: float, alpha2: float):
         super().__init__()
         self.t_loss = nn.CrossEntropyLoss()
@@ -299,6 +348,12 @@ class KLDxContrastiveGridLoss(nn.Module):
 
 
 class ResearchLosses(nn.Module):
+    """Thin wrapper selecting one research loss by name.
+
+    Args:
+        loss: The loss to delegate to.
+    """
+
     def __init__(
         self,
         loss: Literal[

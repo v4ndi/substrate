@@ -38,7 +38,8 @@
 2. host->device transfer (payload ~тот же; можно уменьшить: `cat` в int16/int32,
    `num` в fp16);
 3. CUDA в DataLoader-воркерах невозможна -> GPU-препроцессинг живёт в main-процессе
-   после `move_to_device` (`avatar/train.py:426`), т.е. в начале `forward` пайплайна;
+   после `move_to_device` (`avatar/train/loop.py`, `Trainer._run_epoch`), т.е. в
+   начале `forward` пайплайна;
 4. строковые категории: маппинг строка->id по батчу на CPU убьёт утилизацию ->
    категории должны приходить integer-кодами (факторизация в fit-шаге).
 

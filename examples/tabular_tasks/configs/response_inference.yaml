@@ -1,0 +1,61 @@
+# Inference for response.yaml: the same model, the same data layout, weights
+# from the training run, and a metric whose product is a file rather than a
+# number. Run from the repository root:
+#
+#     python -m avatar.infer --config-dir=examples/tabular_tasks/configs \
+#         --config-name=response_inference
+#
+load_state: best_models/tabular_tasks/response_smoke/128/model.bin
+distributed:
+  backend: null
+  gradient_accumulation_steps: 1
+amp: no
+ddp:
+  find_unused_parameters: False
+
+test_dataloader:
+  _target_: torch.utils.data.DataLoader
+  dataset:
+    _target_: avatar.data.TabularDataset
+    path: examples/tabular_tasks/data/response_smoke/valid
+    shuffle_files: False
+    shuffle_pq: False
+  batch_size: 1024
+  pin_memory: True
+  drop_last: False
+  num_workers: 2
+  collate_fn:
+    _target_: avatar.data.SupervisedCollateFn
+    target_column: target
+    add_extra_columns:
+      target_attr_2: group
+
+model:
+  _target_: avatar.pipeline.tabular.TabularClassification
+  tabular_model:
+    _target_: avatar.pipeline.tabular.TabularWithAggregatedStates
+    embedding:
+      _target_: avatar.nn.embedding.TabularEmbedding
+      num_numerical_features: 2
+      hidden_size: 64
+      vocab_size: 26
+    encoder:
+      _target_: avatar.nn.tabular.TabularTransformer
+      hidden_size: ${model.tabular_model.embedding.hidden_size}
+      num_heads: 4
+      num_layers: 2
+      attn_dropout: 0.15
+    aggregation_config:
+      name: linear
+      num_features: 8
+      emb_dim: ${model.tabular_model.embedding.hidden_size}
+  num_classes: 1 # one logit -> one probability per record
+  task_type: classification
+  dropout_p: 0.2
+
+metrics:
+  test_metrics:
+    _target_: avatar.metrics.InferenceSupervisedMetrics
+    path_to_save: predict/response
+    save_steps: 20
+    task_type: binary_clf

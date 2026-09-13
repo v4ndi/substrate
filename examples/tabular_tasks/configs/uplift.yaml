@@ -1,0 +1,102 @@
+# Uplift: one model, the treatment flag fed in as a feature (S-Learner).
+#
+# Dimensions come from examples/tabular_tasks/data/uplift_smoke/dims.json,
+# written by prepare_data.py. Run from the repository root.
+distributed:
+  backend: null # null -> nccl on GPU, gloo on CPU
+  gradient_accumulation_steps: 1
+amp: no # no | fp16 | bf16
+ddp:
+  find_unused_parameters: False
+
+train_dataloader:
+  _target_: torch.utils.data.DataLoader
+  dataset:
+    _target_: avatar.data.TabularDataset
+    path: examples/tabular_tasks/data/uplift_smoke/train
+    shuffle_files: True
+    shuffle_pq: True
+  batch_size: 1024
+  pin_memory: True
+  drop_last: False
+  num_workers: 2
+  collate_fn:
+    _target_: avatar.data.UpliftCollateFn
+    target_column: target
+    treatment_column: treatment # 1 = control in the data, hence inverse_treatment
+    group_column: group
+    inverse_treatment: True
+
+valid_dataloader:
+  _target_: torch.utils.data.DataLoader
+  dataset:
+    _target_: avatar.data.TabularDataset
+    path: examples/tabular_tasks/data/uplift_smoke/valid
+    shuffle_files: False
+    shuffle_pq: False
+  batch_size: 1024
+  pin_memory: True
+  drop_last: False
+  num_workers: 2
+  collate_fn:
+    _target_: avatar.data.UpliftCollateFn
+    target_column: target
+    treatment_column: treatment
+    group_column: group
+    inverse_treatment: True
+
+model:
+  _target_: avatar.pipeline.uplift.SLearner
+  embedding:
+    _target_: avatar.nn.embedding.TabularEmbedding
+    num_numerical_features: 2
+    hidden_size: 64
+    vocab_size: 26
+  tabular_encoder:
+    _target_: avatar.nn.tabular.TabularTransformer
+    hidden_size: ${model.embedding.hidden_size}
+    num_heads: 4
+    num_layers: 2
+    attn_dropout: 0.15
+  aggregation_config:
+    name: linear
+    num_features: 10 # 8 features + the treatment token + the group token
+    emb_dim: ${model.embedding.hidden_size}
+  n_groups: 4 # 3 channels, plus the id reserved for control
+  exchange_treatment_group: true
+  hidden_state_dim: null
+
+mlflow:
+  experiment_name: tabular_tasks
+  run_name: uplift_smoke
+  logging_dir: ./mlruns
+
+optimizer:
+  _target_: torch.optim.AdamW
+  _partial_: True
+  lr: 0.001
+  weight_decay: 0.01
+
+scheduler:
+  _target_: transformers.optimization.get_scheduler
+  _partial_: True
+  name: cosine
+  num_warmup_steps: 50
+  num_training_steps: null
+
+train:
+  seed: 42
+  num_epochs: 10
+  max_saved_checkpoints: 2
+  early_stopping:
+    _target_: avatar.train.EarlyStopping
+    # Calibrated numbers exist only because the valid set carries split_type;
+    # they are reported on the held-out half alone.
+    main_metric: mean_calibrated_qini_auc_score
+    patience: 3
+    strategy: max
+
+metrics:
+  valid_metrics:
+    _target_: avatar.metrics.UpliftMetrics
+    require_calibration: true

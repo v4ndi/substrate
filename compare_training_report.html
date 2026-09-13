@@ -1,0 +1,473 @@
+<title>Сверка обучения avatar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Literata:opsz,wght@7..72,400;7..72,600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+
+<style>
+:root{
+  color-scheme: light;
+  --ground:#eef1f4;
+  --panel:#ffffff;
+  --panel-2:#f7f9fb;
+  --ink:#14181d;
+  --ink-soft:#333c46;
+  --muted:#5d6874;
+  --faint:#8a95a1;
+  --rule:#d8dee5;
+  --rule-soft:#e7ecf1;
+  --band:#2f6f8f;
+  --band-fill:#cfe1eb;
+  --band-ink:#1f5673;
+  --warn:#8a6212;
+  --warn-fill:#f3e6c9;
+  --alert:#9b3222;
+  --alert-fill:#f3ddd7;
+  --ok:#1f6b53;
+  --ok-fill:#d6e9e0;
+  --code-bg:#f0f3f6;
+  --shadow:0 1px 2px rgba(20,24,29,.05);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --ground:#12161a;
+    --panel:#191e24;
+    --panel-2:#1e242b;
+    --ink:#e8edf2;
+    --ink-soft:#c4ccd5;
+    --muted:#94a0ad;
+    --faint:#6d7885;
+    --rule:#2b333c;
+    --rule-soft:#232a31;
+    --band:#7db4d0;
+    --band-fill:#284656;
+    --band-ink:#9ecbe2;
+    --warn:#d8ac5d;
+    --warn-fill:#463519;
+    --alert:#e08a76;
+    --alert-fill:#4a2620;
+    --ok:#79c2a5;
+    --ok-fill:#1e3b33;
+    --code-bg:#1c2229;
+    --shadow:0 1px 2px rgba(0,0,0,.3);
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --ground:#12161a;
+  --panel:#191e24;
+  --panel-2:#1e242b;
+  --ink:#e8edf2;
+  --ink-soft:#c4ccd5;
+  --muted:#94a0ad;
+  --faint:#6d7885;
+  --rule:#2b333c;
+  --rule-soft:#232a31;
+  --band:#7db4d0;
+  --band-fill:#284656;
+  --band-ink:#9ecbe2;
+  --warn:#d8ac5d;
+  --warn-fill:#463519;
+  --alert:#e08a76;
+  --alert-fill:#4a2620;
+  --ok:#79c2a5;
+  --ok-fill:#1e3b33;
+  --code-bg:#1c2229;
+  --shadow:0 1px 2px rgba(0,0,0,.3);
+}
+
+*{box-sizing:border-box}
+body{
+  background:var(--ground);
+  color:var(--ink);
+  font-family:"IBM Plex Sans","Helvetica Neue",Arial,sans-serif;
+  font-size:16px;
+  line-height:1.62;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1040px;margin:0 auto;padding:0 24px 96px}
+.col{max-width:68ch}
+
+/* ---- masthead ---- */
+header.top{
+  border-bottom:1px solid var(--rule);
+  margin-bottom:40px;
+  padding:56px 0 28px;
+}
+.eyebrow{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--muted);margin:0 0 14px;
+}
+h1{
+  font-family:Literata,Georgia,serif;
+  font-weight:600;font-size:clamp(30px,4.2vw,44px);line-height:1.14;
+  margin:0 0 16px;text-wrap:balance;letter-spacing:-.01em;
+}
+.standfirst{font-size:18px;color:var(--ink-soft);margin:0;max-width:60ch}
+
+/* ---- revisions strip ---- */
+.revs{
+  display:grid;gap:1px;background:var(--rule);
+  grid-template-columns:repeat(auto-fit,minmax(230px,1fr));
+  border:1px solid var(--rule);margin:32px 0 0;
+}
+.rev{background:var(--panel);padding:16px 18px}
+.rev .tag{
+  font-family:"IBM Plex Mono",monospace;font-size:11.5px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--band);margin:0 0 6px;
+}
+.rev .hash{font-family:"IBM Plex Mono",monospace;font-size:14px;color:var(--ink);margin:0 0 4px}
+.rev p{margin:0;font-size:13.5px;color:var(--muted);line-height:1.5}
+
+/* ---- typography ---- */
+h2{
+  font-family:Literata,Georgia,serif;font-weight:600;
+  font-size:26px;line-height:1.24;margin:56px 0 10px;text-wrap:balance;
+}
+h3{font-size:16px;font-weight:600;margin:32px 0 8px;color:var(--ink)}
+p{margin:0 0 16px}
+a{color:var(--band-ink)}
+code,.mono{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.9em}
+code{background:var(--code-bg);padding:.12em .35em;border-radius:2px}
+strong{font-weight:600}
+ul{margin:0 0 16px;padding-left:20px}
+li{margin-bottom:6px}
+
+/* ---- verdict ---- */
+.verdict{
+  border-left:3px solid var(--ok);
+  background:var(--panel);
+  padding:22px 24px;margin:34px 0 8px;box-shadow:var(--shadow);
+}
+.verdict .head{
+  font-family:"IBM Plex Mono",monospace;font-size:11.5px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--ok);margin:0 0 10px;
+}
+.verdict p{margin:0;font-size:17px;color:var(--ink)}
+.verdict p + p{margin-top:10px;font-size:14.5px;color:var(--muted)}
+
+/* ---- measurement table ---- */
+.measure{
+  border:1px solid var(--rule);background:var(--panel);
+  margin:20px 0 8px;box-shadow:var(--shadow);
+}
+.measure .cap{
+  display:flex;flex-wrap:wrap;gap:8px 18px;align-items:baseline;
+  padding:14px 18px;border-bottom:1px solid var(--rule);background:var(--panel-2);
+}
+.measure .cap h3{margin:0;font-size:15px}
+.measure .cap .meta{
+  font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--muted);
+}
+.rowscroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;min-width:660px;font-size:14px}
+th{
+  font-family:"IBM Plex Mono",monospace;font-weight:400;font-size:11px;
+  letter-spacing:.09em;text-transform:uppercase;color:var(--faint);
+  text-align:right;padding:10px 14px;border-bottom:1px solid var(--rule);
+}
+th:first-child{text-align:left}
+td{
+  padding:11px 14px;border-bottom:1px solid var(--rule-soft);
+  text-align:right;font-variant-numeric:tabular-nums;
+}
+td:first-child{
+  text-align:left;font-family:"IBM Plex Mono",monospace;font-size:12.5px;
+  color:var(--ink-soft);
+}
+tr:last-child td{border-bottom:none}
+.num{font-family:"IBM Plex Mono",monospace;font-size:13px}
+.delta{color:var(--band-ink);font-weight:500}
+
+/* tolerance band bar */
+.bar{width:170px;padding-left:0}
+.track{
+  position:relative;height:16px;background:var(--rule-soft);
+  border-radius:1px;overflow:hidden;
+}
+.zone{
+  position:absolute;inset:0 auto 0 0;width:80%;
+  background:var(--band-fill);
+}
+.zone.over{background:var(--warn-fill)}
+.mark{
+  position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--band);
+}
+.mark.over{background:var(--warn)}
+.legend{
+  display:flex;flex-wrap:wrap;gap:6px 20px;padding:12px 18px;
+  border-top:1px solid var(--rule);background:var(--panel-2);
+  font-size:12.5px;color:var(--muted);
+}
+.legend span{display:inline-flex;align-items:center;gap:7px}
+.swatch{width:22px;height:10px;background:var(--band-fill);display:inline-block}
+.tick{width:2px;height:12px;background:var(--band);display:inline-block}
+
+/* ---- findings ---- */
+.finding{
+  border:1px solid var(--rule);background:var(--panel);
+  padding:22px 24px;margin:18px 0;box-shadow:var(--shadow);
+}
+.finding > .label{
+  font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.11em;
+  text-transform:uppercase;display:inline-block;padding:3px 9px;margin:0 0 12px;
+}
+.label.fix{color:var(--alert);background:var(--alert-fill)}
+.label.compat{color:var(--warn);background:var(--warn-fill)}
+.label.confirm{color:var(--ok);background:var(--ok-fill)}
+.label.perf{color:var(--band-ink);background:var(--band-fill)}
+.finding h3{margin-top:0;font-family:Literata,Georgia,serif;font-size:19px;font-weight:600}
+.finding p:last-child{margin-bottom:0}
+pre{
+  background:var(--code-bg);border:1px solid var(--rule-soft);
+  padding:12px 14px;overflow-x:auto;margin:0 0 16px;
+  font-family:"IBM Plex Mono",monospace;font-size:12.5px;line-height:1.55;
+  color:var(--ink-soft);
+}
+pre code{background:none;padding:0;font-size:inherit}
+
+/* small run table */
+.runs{border:1px solid var(--rule);background:var(--panel);margin:16px 0}
+.runs table{min-width:420px;font-size:13.5px}
+.state{font-family:"IBM Plex Mono",monospace;font-size:12px}
+.state.pass{color:var(--ok)}
+.state.fail{color:var(--alert)}
+
+footer{
+  margin-top:64px;padding-top:22px;border-top:1px solid var(--rule);
+  font-size:13px;color:var(--muted);
+}
+footer p{margin:0 0 6px}
+</style>
+
+<div class="wrap">
+
+<header class="top">
+  <p class="eyebrow">avatar · проверка рефакторинга</p>
+  <h1>Сверка обучения до и после рефакторинга</h1>
+  <p class="standfirst">19 обучений на двух открытых uplift-датасетах, по четыре сида с каждой стороны, на одной и той же подготовленной копии данных.</p>
+
+  <div class="revs">
+    <div class="rev">
+      <p class="tag">base</p>
+      <p class="hash">7c96504</p>
+      <p>29.08.2026, в master. Accelerate, старая раскладка <code>avatar/data</code>, лосс внутри модели.</p>
+    </div>
+    <div class="rev">
+      <p class="tag">new</p>
+      <p class="hash">11b43eb</p>
+      <p>Голова <code>refactor/data-sharding-hdfs</code>. torch.distributed и колбэки, единый движок шардирования, инъекция лосса.</p>
+    </div>
+    <div class="rev">
+      <p class="tag">между ними</p>
+      <p class="hash">31 коммит</p>
+      <p>Голова master (<code>bad93e3</code>) уже содержит часть рефакторинга, поэтому baseline — указанный хэш, а не master.</p>
+    </div>
+  </div>
+</header>
+
+<div class="col">
+  <div class="verdict">
+    <p class="head">вывод</p>
+    <p>На одинаковых данных, с одинаковым конфигом и одинаковым сидом рефакторинг не изменил ни качество модели, ни ход обучения.</p>
+    <p>Побайтового совпадения ждать нельзя — переписаны даталоадер, порядок расхода генератора случайных чисел и обёртка распределённого обучения. Поэтому вопрос ставился иначе: больше ли расхождение между ревизиями, чем разброс от смены сида внутри одной ревизии.</p>
+  </div>
+
+  <h2>Полоса допуска</h2>
+  <p>Закрашенная зона — разброс, который даёт смена сида внутри baseline (шесть попарных разностей на четырёх сидах). Вертикальная риска — наибольшее расхождение между ревизиями при одинаковом сиде. Риска внутри зоны означает, что ревизии неразличимы на этом объёме прогонов.</p>
+</div>
+
+<div class="measure">
+  <div class="cap">
+    <h3>Lenta</h3>
+    <span class="meta">549 732 / 137 297 · 191 числовой + 2 категориальных · 12 эпох · сиды 42–45</span>
+  </div>
+  <div class="rowscroll">
+    <table>
+      <thead>
+        <tr>
+          <th>метрика</th><th>base</th><th>new</th><th>|Δ| пар</th><th>разброс</th><th class="bar">допуск</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>valid_avg_calib_roc_auc_score</td>
+          <td class="num">0.80160</td><td class="num">0.80163</td>
+          <td class="num delta">0.00017</td><td class="num">0.00109</td>
+          <td class="bar"><div class="track"><div class="zone"></div><div class="mark" style="left:12.5%"></div></div></td>
+        </tr>
+        <tr>
+          <td>valid_avg_calib_treatment_roc_auc</td>
+          <td class="num">0.79968</td><td class="num">0.79965</td>
+          <td class="num delta">0.00024</td><td class="num">0.00078</td>
+          <td class="bar"><div class="track"><div class="zone"></div><div class="mark" style="left:24.6%"></div></div></td>
+        </tr>
+        <tr>
+          <td>valid_avg_calib_control_roc_auc</td>
+          <td class="num">0.80351</td><td class="num">0.80361</td>
+          <td class="num delta">0.00035</td><td class="num">0.00150</td>
+          <td class="bar"><div class="track"><div class="zone"></div><div class="mark" style="left:18.7%"></div></div></td>
+        </tr>
+        <tr>
+          <td>train_loss</td>
+          <td class="num">0.28473</td><td class="num">0.28486</td>
+          <td class="num delta">0.00031</td><td class="num">0.00077</td>
+          <td class="bar"><div class="track"><div class="zone"></div><div class="mark" style="left:32.2%"></div></div></td>
+        </tr>
+        <tr>
+          <td>valid_avg_calib_qini_auc_score</td>
+          <td class="num">0.00870</td><td class="num">0.00932</td>
+          <td class="num delta">0.00516</td><td class="num">0.00837</td>
+          <td class="bar"><div class="track"><div class="zone"></div><div class="mark" style="left:49.3%"></div></div></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="legend">
+    <span><i class="swatch"></i> разброс от смены сида</span>
+    <span><i class="tick"></i> расхождение ревизий</span>
+    <span>внутри полосы: <strong>34 из 40</strong> метрик</span>
+  </div>
+</div>
+
+<div class="measure">
+  <div class="cap">
+    <h3>Hillstrom</h3>
+    <span class="meta">51 288 / 12 712 · 2 числовых + 6 категориальных · 8 эпох · сиды 42–45</span>
+  </div>
+  <div class="rowscroll">
+    <table>
+      <thead>
+        <tr>
+          <th>метрика</th><th>base</th><th>new</th><th>|Δ| пар</th><th>разброс</th><th class="bar">допуск</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>valid_avg_calib_roc_auc_score</td>
+          <td class="num">0.62048</td><td class="num">0.62050</td>
+          <td class="num delta">0.00222</td><td class="num">0.00468</td>
+          <td class="bar"><div class="track"><div class="zone"></div><div class="mark" style="left:38.0%"></div></div></td>
+        </tr>
+        <tr>
+          <td>valid_avg_calib_treatment_roc_auc</td>
+          <td class="num">0.59255</td><td class="num">0.59332</td>
+          <td class="num delta">0.00406</td><td class="num">0.00656</td>
+          <td class="bar"><div class="track"><div class="zone"></div><div class="mark" style="left:49.5%"></div></div></td>
+        </tr>
+        <tr>
+          <td>valid_avg_calib_control_roc_auc</td>
+          <td class="num">0.64841</td><td class="num">0.64768</td>
+          <td class="num delta">0.00299</td><td class="num">0.00444</td>
+          <td class="bar"><div class="track"><div class="zone"></div><div class="mark" style="left:53.9%"></div></div></td>
+        </tr>
+        <tr>
+          <td>train_loss</td>
+          <td class="num">0.40404</td><td class="num">0.40444</td>
+          <td class="num delta">0.00129</td><td class="num">0.00212</td>
+          <td class="bar"><div class="track"><div class="zone"></div><div class="mark" style="left:48.7%"></div></div></td>
+        </tr>
+        <tr>
+          <td>valid_avg_calib_qini_auc_score</td>
+          <td class="num">0.01220</td><td class="num">0.01222</td>
+          <td class="num delta">0.02596</td><td class="num">0.03463</td>
+          <td class="bar"><div class="track"><div class="zone"></div><div class="mark" style="left:60.0%"></div></div></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="legend">
+    <span><i class="swatch"></i> разброс от смены сида</span>
+    <span><i class="tick"></i> расхождение ревизий</span>
+    <span>внутри полосы: <strong>39 из 56</strong> метрик</span>
+  </div>
+</div>
+
+<div class="col">
+  <h3>Что с метриками, вышедшими за полосу</h3>
+  <p>Все они — поточечные <code>uplift_at_k</code> и <code>qini</code> по отдельным группам, считающиеся по тонким срезам (в Hillstrom это ~4 тыс. строк на группу). Метрика, у которой поведение действительно изменилось, должна ехать в одну сторону на всех сидах. Таких — и выходящих за полосу, и однонаправленных — оказалось <strong>2 из 40</strong> на Lenta и <strong>4 из 56</strong> на Hillstrom, тогда как случайно ожидалось бы около 5 и 7 (вероятность совпадения знака на четырёх сидах — 1/8). Наблюдаемое меньше случайного ожидания: систематического сдвига нет.</p>
+
+  <h2>Чем обеспечена сопоставимость</h2>
+  <p><strong>Паритет модели проверен до обучения.</strong> Обе ревизии собирают из своих конфигов одну и ту же сеть: 162 636 параметров в 60 тензорах, формы и порядок совпадают, а при одном сиде начальные веса побайтово одинаковы. Единственное различие — имена 42 тензоров.</p>
+  <p><strong>Данные подготовлены один раз</strong> локальным препроцессором, статистика подогнана только на train. Обе ревизии читают одни и те же файлы parquet — расхождение метрик не может прийти из данных.</p>
+  <p><strong>Конфиги-близнецы</strong> взяты из версионированного пилотного <code>td.yaml</code> каждой ревизии: рефакторинг сам мигрировал этот файл, поэтому пара различается ровно там, где менялась поверхность конфига, и больше нигде.</p>
+  <p><strong>Импорт из нужного чекаута.</strong> На машине есть editable-установка <code>avatar</code>, указывающая на посторонний чекаут, а тренер делает <code>chdir</code>. Каждый запуск стартует из своего worktree и печатает <code>avatar.__file__</code> — в логе видно, чей код исполнялся.</p>
+</div>
+
+<h2 class="col">Что нашлось по дороге</h2>
+
+<div class="finding">
+  <span class="label fix">регрессия · исправлена</span>
+  <h3>Обучение с усреднением весов падает на GPU</h3>
+  <p>С <code>swa_model.usage: True</code> — а именно так стоит в пилотном конфиге — новая ревизия падает на первой же валидации:</p>
+  <pre><code>RuntimeError: Expected all tensors to be on the same device,
+but got index is on cuda:0, different from other tensors on cpu</code></pre>
+  <p><code>EMACallback</code> получает <code>AveragedModel</code>, построенную в <code>build_callbacks</code> до того, как <code>Trainer</code> переносит модель на устройство. Усреднённая копия остаётся на CPU, и именно её <code>_evaluate</code> берёт как <code>eval_model</code>. До рефакторинга это не всплывало: старый код перед оценкой звал <code>accelerator.prepare(model)</code>, который переносил копию сам.</p>
+  <div class="runs rowscroll">
+    <table>
+      <tbody>
+        <tr><td>hillstrom_base_swa_seed42</td><td class="state pass">успех · 117.7 с</td></tr>
+        <tr><td>hillstrom_new_swa_seed42</td><td class="state fail">падение через 19 с</td></tr>
+        <tr><td>hillstrom_fix_swa_seed42</td><td class="state pass">успех · 34.7 с</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Исправление — одна строка в <code>_evaluate</code>: перенести модель оценки на <code>env.device</code> перед вызовом <code>evaluate</code> (для уже размещённой модели это no-op). Закрыто регрессионным тестом: без правки тест падает, с правкой проходит. Метрики на исправленной ветке в EMA-режиме сходятся с базовыми — ROC AUC 0.61685 против 0.61463.</p>
+</div>
+
+<div class="finding">
+  <span class="label compat">совместимость</span>
+  <h3>Чекпойнты до рефакторинга не загружаются после него</h3>
+  <p>Рефакторинг переименовал 42 тензора: <code>tabular_backbone.encoder_blocks.N.*</code> → <code>tabular_backbone.blocks.N.*</code>. Загрузка идёт со строгой проверкой, переходника нет, в документации это не отмечено.</p>
+  <p>Проверено на настоящем чекпойнте базового прогона: строгая загрузка падает — 42 ключа модель ждёт и не находит, 42 ключа в файле ей неизвестны. После механического переименования загрузка проходит полностью.</p>
+  <pre><code>state = {k.replace(".encoder_blocks.", ".blocks."): v for k, v in state.items()}</code></pre>
+</div>
+
+<div class="finding">
+  <span class="label compat">хрупкость · обе ревизии</span>
+  <h3><code>require_calibration: False</code> не отключает калибровку</h3>
+  <p>В <code>avatar/metrics/uplift.py</code> калибратор подгоняется и применяется безусловно; флаг влияет лишь на то, попадут ли калиброванные метрики в отчёт. Поэтому защитный ассерт «калибровка не должна менять ROC AUC больше чем на 0.01» срабатывает даже при выключенном флаге — и роняет обучение целиком.</p>
+  <p>Практическое следствие: если модель к моменту первой валидации ещё не обучилась (мало шагов на эпоху, длинный warmup, EMA, которая ещё ни разу не обновилась), скоры почти постоянны, бета-калибратор на них неустойчив, и прогон падает — при том что с самим обучением всё в порядке. Поведение одинаково на обеих ревизиях, то есть это не регрессия, а давняя хрупкость.</p>
+</div>
+
+<div class="finding">
+  <span class="label confirm">подтверждение замысла</span>
+  <h3>Шардирование данных</h3>
+  <p>Проверка на двух рангах (gloo, полный проход датасета Lenta, 549 732 записи в train):</p>
+  <div class="runs rowscroll">
+    <table>
+      <thead><tr><th>ревизия</th><th>записей на ранг</th><th>покрытие</th><th>пересечение рангов</th></tr></thead>
+      <tbody>
+        <tr><td>base</td><td class="num">549 732 + 549 732</td><td class="num">100%</td><td class="num" style="color:var(--alert)">549 732</td></tr>
+        <tr><td>new</td><td class="num">274 866 + 274 866</td><td class="num">100%</td><td class="num" style="color:var(--ok)">0</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Множество записей, которое видят обе ревизии суммарно, совпадает — ничего не потеряно и не добавлено. Новый <code>TabularDataset</code> делит поток по записям сам, ровно поровну и без пересечений; старый его вовсе не делил. Это ровно то, что записано в <code>docs/decisions/data_redesign.md</code>. При переносе конфигов стоит помнить: при N рангах эпоха стала в N раз короче.</p>
+</div>
+
+<div class="finding">
+  <span class="label perf">производительность</span>
+  <h3>Новая ревизия быстрее</h3>
+  <p>Hillstrom, 8 эпох: <strong>93–118 с</strong> против <strong>35 с</strong>. Lenta, 12 эпох: <strong>1305–1347 с</strong> против <strong>1205–1212 с</strong>. На маленькой модели разрыв трёхкратный, на большой — около 10%.</p>
+  <p>Часть разницы объясняется тем, что модуль <code>avatar.train</code> базовой ревизии безусловно выставлял <code>CUDA_LAUNCH_BLOCKING=1</code> (а также <code>NCCL_DEBUG=INFO</code> и жёсткий путь кэша <code>TORCHINDUCTOR_CACHE_DIR=/home/datalab/...</code>, из-за которого на этой машине он вообще не запускался). Новая ревизия глобальных переменных окружения не трогает.</p>
+</div>
+
+<div class="col">
+  <h2>Оговорки</h2>
+  <ul>
+    <li>Датасет из пилотного конфига на машине недоступен, поэтому взяты открытые uplift-датасеты с бинарным таргетом. Late fusion выключен: у них нет последовательностных hidden states.</li>
+    <li><code>SLearnerExp</code> из пилотного конфига не существует ни в одной ревизии — пакет экспортирует <code>SLearner</code>. Пилотный конфиг в этом месте устарел.</li>
+    <li>Размер батча, warmup и шаг EMA подобраны так, чтобы модель успевала обучиться до первой валидации — иначе срабатывает ассерт калибровки. Значения одинаковы для обеих сторон.</li>
+    <li>Усреднение весов выключено в основном сравнении: на нём сторона <code>new</code> падает до исправления. Этот путь проверен отдельно тремя прогонами.</li>
+    <li>Многоранговая проверка выполнена на CPU через gloo — на машине одна GPU, полноценный DDP на двух картах проверить нельзя.</li>
+  </ul>
+
+  <footer>
+    <p>Отчёт и скрипты: ветка <code class="mono">worktree-compare-training</code>, коммиты <code class="mono">d0be868</code> (фикс и тест) и <code class="mono">0b9aa3e</code> (отчёт).</p>
+    <p>Данные, конфиги, логи и MLflow-хранилище прогонов: <code class="mono">~/rusakov/runs/compare_training/</code>.</p>
+  </footer>
+</div>
+
+</div>

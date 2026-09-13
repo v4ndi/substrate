@@ -1,7 +1,9 @@
+"""Multi-task response: several tasks, one backbone, no treatment flag."""
+
 import torch
 import torch.nn as nn
 
-from avatar.data.tabular_batch import TabularBatch
+from avatar.data.tabular.batch import TabularBatch
 from avatar.nn.tabular import BaseTabularEncoder
 from avatar.nn.utils import get_aggregation_layer
 from avatar.nn.utils.ffn import FeedForwardNetwork
@@ -13,7 +15,25 @@ from avatar.pipeline.uplift.treatment_interaction import (
 
 
 class MultiTaskResponse(nn.Module):
-    """Response multi-task wrapper"""
+    """Several response tasks over a shared (or per-task) backbone.
+
+    Simpler than :class:`~avatar.pipeline.multi_task.mmoe.MMoE`: there is no
+    gating. Sharing is decided structurally — pass a single module to share it
+    across tasks, or a ``{task: module}`` mapping to give each task its own.
+
+    Args:
+        embedding: One embedding shared by all tasks, or one per task.
+        tabular_encoder: One encoder shared by all tasks, or one per task.
+        heads: ``{task name: MultiTaskHead}``; sized from the backbone here.
+        multi_task_loss: Combines the per-task losses into one scalar.
+        n_groups: Number of campaign groups; adds a group embedding.
+        group_interaction: How that embedding meets the feature tokens.
+        share_side_embeddings: Share the group embedding across tasks rather
+            than giving each task its own.
+
+    Returns:
+        :class:`~avatar.outputs.MultiTaskxGroupResponseOutput`.
+    """
 
     def __init__(
         self,
@@ -258,6 +278,23 @@ class MultiTaskResponse(nn.Module):
 
 
 class MultiTaskBackbone(nn.Module):
+    """Encoder plus pooling plus external-embedding fusion, without gating.
+
+    The non-MoE counterpart of
+    :class:`~avatar.pipeline.multi_task.mmoe.MMoEBackbone`: same output
+    contract, no experts and no gates.
+
+    Args:
+        tabular_encoder: Encoder over the feature tokens.
+        aggregation_config: Config for
+            :func:`~avatar.nn.utils.get_aggregation_layer`; defaults to mean.
+        hidden_state_dim: Width of external embeddings concatenated after
+            pooling.
+        proj_hiddens_to_dim: Project them to this width first.
+        normalize_hidden_states: ``{name: width}`` — normalise each named
+            external embedding separately; supersedes ``hidden_state_dim``.
+    """
+
     def __init__(
         self,
         tabular_encoder: BaseTabularEncoder,
@@ -331,6 +368,17 @@ class MultiTaskBackbone(nn.Module):
 
 
 class MultiTaskHead(nn.Module):
+    """One task's response head, sized once the backbone width is known.
+
+    Args:
+        dropout_head: Dropout in the default feed-forward head.
+        separate_heads: Accepted for symmetry with the uplift head; a response
+            task has a single branch, so it changes nothing here.
+        out_head: Replace the default head entirely.
+        loss_fn: Loss over this task's logits; defaults to
+            ``BCEWithLogitsLoss``.
+    """
+
     def __init__(
         self,
         dropout_head: float = 0.15,

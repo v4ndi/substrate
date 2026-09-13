@@ -36,13 +36,15 @@ def test_bucketing_invariance(write_parquet, sequence_table, n_buckets):
     d = write_parquet(sequence_table)
     pp = EventSequencePreprocessor(**KW, batch_rows=500).fit(d)
     ref = (
-        pp.transform(d, n_buckets=1)
+        pp
+        .transform(d, n_buckets=1)
         .to_pandas()
         .sort_values("epk_id")
         .reset_index(drop=True)
     )
     got = (
-        pp.transform(d, n_buckets=n_buckets)
+        pp
+        .transform(d, n_buckets=n_buckets)
         .to_pandas()
         .sort_values("epk_id")
         .reset_index(drop=True)

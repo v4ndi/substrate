@@ -1,3 +1,10 @@
+"""How an external client embedding joins the tabular feature tokens.
+
+This is the *early fusion* seam: ``LayerNormConcatenate`` adds the external
+vector as one more token (so the aggregation's ``num_features`` grows by one),
+``LayerNormSum`` adds it into every token instead.
+"""
+
 import torch
 import torch.nn as nn
 
@@ -20,19 +27,28 @@ class BaseHiddenStateAggregator(nn.Module):
         self.embedding_dim = embeddings_dim
 
     def forward(self, hidden_states, embeddings):
-        """
+        """Fuse the external embedding into the feature tokens.
+
         Args:
-            hidden_states torch.FloatTensor: batch_size x hidden_dim
-            embeddings torch.FloatTensor: batch_size x n_features x embedding_dim
+            hidden_states: External embedding, ``(batch_size, hidden_dim)``.
+            embeddings: Feature tokens, ``(batch_size, n_features, embedding_dim)``.
+
+        Raises:
+            NotImplementedError: Always; subclasses must override.
         """
         raise NotImplementedError("This must be implemented in the subclass.")
 
 
 class LayerNormConcatenate(BaseHiddenStateAggregator):
-    """Apply layer normalization and concatenate with embeddings
+    """Normalise the external embedding and append it as one more token.
+
+    Adds a token, so the downstream ``aggregation_config.num_features`` must be
+    one larger than the number of real features. A linear projection is added
+    automatically when the two widths differ.
+
     Args:
-        hidden_state_dim: int - dim of the hidden state
-        embedding_dim: int - dim of the embeddings
+        hidden_state_dim: Width of the external embedding.
+        embedding_dim: Width of the feature tokens.
     """
 
     def __init__(
@@ -52,13 +68,14 @@ class LayerNormConcatenate(BaseHiddenStateAggregator):
     def forward(
         self, hidden_states: torch.FloatTensor, embeddings: torch.FloatTensor
     ) -> torch.FloatTensor:
-        """
+        """Prepend the normalised external embedding to the feature tokens.
+
         Args:
-            hidden_states (torch.FloatTensor): batch_size x hidden_dim
-            embeddings (torch.FloatTensor): batch_size x n_features x embedding_dim
+            hidden_states: External embedding, ``(batch_size, hidden_dim)``.
+            embeddings: Feature tokens, ``(batch_size, n_features, embedding_dim)``.
 
         Returns:
-            batch_size x ( n_features + 1) x embedding_dim
+            ``(batch_size, n_features + 1, embedding_dim)``.
         """
         hidden_states = self.layer_norm(hidden_states)
         if self.proj is not None:
@@ -68,10 +85,14 @@ class LayerNormConcatenate(BaseHiddenStateAggregator):
 
 
 class LayerNormSum(BaseHiddenStateAggregator):
-    """Apply layer normalization, broadcast and sum with embeddings
+    """Normalise the external embedding and add it into every feature token.
+
+    Unlike :class:`LayerNormConcatenate`, the token count is unchanged, so the
+    downstream ``num_features`` stays as it was.
+
     Args:
-        hidden_state_dim: int - dim of the hidden state
-        embedding_dim: int - dim of the embeddings
+        hidden_state_dim: Width of the external embedding.
+        embedding_dim: Width of the feature tokens.
     """
 
     def __init__(
@@ -91,13 +112,14 @@ class LayerNormSum(BaseHiddenStateAggregator):
     def forward(
         self, hidden_states: torch.FloatTensor, embeddings: torch.FloatTensor
     ) -> torch.FloatTensor:
-        """
+        """Broadcast the normalised external embedding over the feature tokens.
+
         Args:
-            hidden_states (torch.FloatTensor): batch_size x hidden_dim
-            embeddings (torch.FloatTensor): batch_size x n_features x embedding_dim
+            hidden_states: External embedding, ``(batch_size, hidden_dim)``.
+            embeddings: Feature tokens, ``(batch_size, n_features, embedding_dim)``.
 
         Returns:
-            batch_size x ( n_features) x embedding_dim
+            ``(batch_size, n_features, embedding_dim)``.
         """
         hidden_states = self.layer_norm(hidden_states)
         if self.proj is not None:

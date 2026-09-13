@@ -70,6 +70,7 @@ def _maybe_spark():
 
 
 def compare(a, b, label: str) -> None:
+    """Assert two transformed tables match: ids exactly, numerics within 1e-4."""
     a = a.sort_values("epk_id").reset_index(drop=True)
     b = b.sort_values("epk_id").reset_index(drop=True)
     assert sorted(a.columns) == sorted(b.columns), (
@@ -89,6 +90,7 @@ def compare(a, b, label: str) -> None:
 
 
 def main() -> None:
+    """Fit both backends, cross-load their artifacts and compare the output."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", default=DATA)
     ap.add_argument("--identity", nargs="*", default=["cat_0"])

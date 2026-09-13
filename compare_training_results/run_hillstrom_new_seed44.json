@@ -1,0 +1,9 @@
+{
+  "tag": "hillstrom_new_seed44",
+  "revision_dir": "/home/jovyan/rusakov/repos/avatar_fm/.claude/worktrees/cmp-new",
+  "avatar": "/home/jovyan/rusakov/repos/avatar_fm/.claude/worktrees/cmp-new/avatar/__init__.py",
+  "overrides": [],
+  "exit_code": 0,
+  "seconds": 33.1,
+  "log": "/home/jovyan/rusakov/runs/compare_training/logs/hillstrom_new_seed44.log"
+}

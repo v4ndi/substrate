@@ -86,6 +86,8 @@ def _resolve_nvml_handle(device_index: int):
 
 @dataclass
 class LocalSystemSnapshot:
+    """One rank's host and GPU counters, before cross-rank reduction."""
+
     host_samples: int = 0
     cpu_mean: float = 0.0
     memory_peak: float = 0.0

@@ -1,3 +1,5 @@
+"""Embeddings for tabular data."""
+
 from avatar.nn.embedding.tabular.base import BaseTabularEmbedding
 from avatar.nn.embedding.tabular.embedding import TabularEmbedding
 from avatar.nn.embedding.tabular.hidden_state_agg import (

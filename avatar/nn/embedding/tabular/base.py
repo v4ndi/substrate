@@ -1,9 +1,11 @@
-from avatar.data.tabular_batch import TabularBatch
+"""Base class for tabular embeddings."""
+
+from avatar.data.tabular.batch import TabularBatch
 from avatar.nn.embedding.base.embedding import BaseEmbedding
 
 
 class BaseTabularEmbedding(BaseEmbedding):
-    """Base class for tabular embedding layers
+    """Base class for tabular embedding layers.
 
     Args:
         hidden_size: int - Dimensionality of the embeddings

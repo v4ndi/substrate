@@ -1,16 +1,13 @@
-accelerator:
-  _target_: accelerate.Accelerator
-  _partial_: true
-  dataloader_config:
-    _target_: accelerate.utils.DataLoaderConfiguration
-    dispatch_batches: false
-  # dynamo_plugin:
-  #   _target_: accelerate.utils.TorchDynamoPlugin
-  #   backend: "inductor"
+distributed:
+  backend: null  # null -> nccl on GPU, gloo on CPU
+  gradient_accumulation_steps: 1
+amp: no  # no | fp16 | bf16
+ddp:
+  find_unused_parameters: False
 test_dataloader:
   _target_: torch.utils.data.DataLoader
   dataset:
-    _target_: avatar.data.dataset.EventSequenceDataset
+    _target_: avatar.data.EventSequenceDataset
     path: /home/datalab/projects/avatar/avatards/rusakov/8m_chains_2026_02_01_test_amazme_v2
     max_length: 1024
     event_time_column: evt_dttm
@@ -25,7 +22,7 @@ test_dataloader:
   drop_last: false
   num_workers: 8
   collate_fn:
-    _target_: avatar.data.dataset.collate_fn.EventSequenceCollateFn
+    _target_: avatar.data.EventSequenceCollateFn
     sequence_columns: ${test_dataloader.dataset.sequence_columns}
     create_attention_mask: true
 model:

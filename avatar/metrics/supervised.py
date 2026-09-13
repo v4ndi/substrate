@@ -1,37 +1,74 @@
-import os
-from datetime import datetime
+"""Response and regression metrics, plus the inference-time collector.
+
+"Response" here means the ordinary supervised setting — one probability per
+record, scored with ROC AUC and precision/recall at the top k percent, which is
+how campaign quality is judged.
+"""
+
+import abc
+import logging
 from typing import Literal
 
 import numpy as np
 import pandas as pd
 import torch
 from sklearn.metrics import (
+    accuracy_score,
+    balanced_accuracy_score,
+    f1_score,
+    log_loss,
     mean_absolute_error,
     mean_absolute_percentage_error,
     mean_squared_error,
+    r2_score,
     roc_auc_score,
 )
 
-from avatar.metrics.base import BaseMetric
+from avatar.metrics.base import ArtifactMetric
+from avatar.metrics.grouped import (
+    CALIB_SPLIT,
+    TEST_SPLIT,
+    GroupedPredictionMetric,
+    defined_scores,
+    group_prefixed,
+)
+
+logger = logging.getLogger(__name__)
 
 
 def precision_at_k(y_true, y_pred, k_pnt):
+    """Share of positives among the top ``k_pnt`` **percent** by score.
+
+    ``nan`` when the slice is too small for ``k_pnt`` percent to be a whole
+    record: there is no top-k to look at. The caller drops undefined numbers
+    rather than reporting them.
+    """
     assert y_true.ndim == 1
     k = int(y_true.shape[0] * k_pnt / 100)
+    if k == 0:
+        return float("nan")
     top_k_indices = np.argsort(-y_pred)[:k]
     relevant = np.take(y_true, top_k_indices)
     return relevant.sum() / k
 
 
 def recall_at_k(y_true, y_pred, k_pnt):
+    """Share of all positives captured by the top ``k_pnt`` percent by score.
+
+    ``nan`` when the slice has no positives to capture, or is too small for
+    ``k_pnt`` percent to be a whole record.
+    """
     assert y_true.ndim == 1
     k = int(y_true.shape[0] * k_pnt / 100)
+    if k == 0 or y_true.sum() == 0:
+        return float("nan")
     top_k_indices = np.argsort(-y_pred)[:k]
     relevant = np.take(y_true, top_k_indices)
     return relevant.sum() / y_true.sum()
 
 
 def calculate_response_metrics(y_true, y_pred):
+    """ROC AUC plus precision and recall at 5, 10, 15 and 20 percent."""
     metrics = (
         {"roc_auc_score": roc_auc_score(y_true, y_pred)}
         | {f"recall_at_{k}": recall_at_k(y_true, y_pred, k) for k in [5, 10, 15, 20]}
@@ -43,11 +80,42 @@ def calculate_response_metrics(y_true, y_pred):
     return metrics
 
 
+def mape_over_nonzero(y_true, y_pred):
+    """Mean absolute percentage error, where a percentage means something.
+
+    ``mean_absolute_percentage_error`` divides by ``max(|y_true|, eps)``, so one
+    zero target contributes an error of roughly ``1e16``. That number is
+    *finite*, which is worse than ``nan`` would be: the undefined-value filter
+    lets it through, and it goes on to stand for the model's quality in MLflow
+    and — if it is the main metric — in early stopping. Money targets are full
+    of zeros, so this is the normal case, not an edge one.
+
+    Zero targets are excluded instead. A column that is all zeros yields no
+    number at all, which the caller drops.
+    """
+    scorable = y_true != 0
+    if not scorable.any():
+        logger.warning("mape is undefined here: every target is zero")
+        return float("nan")
+    if not scorable.all():
+        logger.warning(
+            "mape skips %d of %d records whose target is zero — a percentage "
+            "error is undefined there",
+            int((~scorable).sum()),
+            scorable.size,
+        )
+    return mean_absolute_percentage_error(y_true[scorable], y_pred[scorable])
+
+
 def calculate_regression_metrics(y_true, y_pred):
+    """Squared, absolute, relative and explained-variance views of the error."""
+    mse = mean_squared_error(y_true, y_pred)
     metrics = {
-        "mse": mean_squared_error(y_true, y_pred),
+        "mse": mse,
+        "rmse": float(np.sqrt(mse)),
         "mae": mean_absolute_error(y_true, y_pred),
-        "mape": mean_absolute_percentage_error(y_true, y_pred),
+        "mape": mape_over_nonzero(y_true, y_pred),
+        "r2": r2_score(y_true, y_pred),
     }
     return metrics
 
@@ -55,6 +123,11 @@ def calculate_regression_metrics(y_true, y_pred):
 def apply_calculate_metrics(
     y_true, y_pred, task_type: Literal["binary_clf", "reg"] = "binary_clf"
 ):
+    """Dispatch to the response or regression metric set.
+
+    Raises:
+        ValueError: ``task_type`` is neither ``binary_clf`` nor ``reg``.
+    """
     if task_type == "binary_clf":
         no_calib_metrics = calculate_response_metrics(y_true=y_true, y_pred=y_pred)
     elif task_type == "reg":
@@ -65,69 +138,28 @@ def apply_calculate_metrics(
     return metrics
 
 
-def save_to_parquet(
-    df: pd.DataFrame, path_to_save: str, prefix: str | None = None
-) -> str:
-    """
-    Save a DataFrame as a parquet file in the specified directory.
+class SupervisedMetric(GroupedPredictionMetric):
+    """One head, one target column, scored per group and per split.
 
-    Parameters
-    ----------
-    df : pd.DataFrame
-        The DataFrame to save.
-    path_to_save : str
-        Directory where the parquet file will be saved.
-    prefix : str, optional
-        Optional prefix for the filename.
-
-    Returns
-    -------
-    str
-        The full path to the saved parquet file.
-    """
-    if not os.path.exists(path_to_save):
-        os.makedirs(path_to_save, exist_ok=True)
-    time_now = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
-    if prefix is not None:
-        filename = f"{time_now}_{prefix}.parquet"
-    else:
-        filename = f"{time_now}.parquet"
-    full_path = os.path.join(path_to_save, filename)
-    # for campatibility with spark cast datetime64[ns] to datetime64[us]
-    for col in df.select_dtypes(include=["datetime64[ns]"]).columns:
-        df[col] = df[col].astype(str)
-    df.to_parquet(full_path, index=False)
-    print(f"predict_saved: {full_path}")
-    return full_path
-
-
-class ResponseMetrics(BaseMetric):
-    """Class for computing supervised metrics.
-    Args:
-        save_submit_path: str = None
-            Path to save predictions.
-    Available metrics:
-        recall_at_5/10/15/20
-        precision_at_5/10/15/20
-        roc_auc_score
+    The two concrete metrics below differ in exactly two things: which metric
+    set :func:`apply_calculate_metrics` should use, and how a logit becomes a
+    prediction. Everything else — buffering, merging, the group loop and the
+    submit file — comes from :class:`~avatar.metrics.grouped.GroupedPredictionMetric`.
     """
 
-    def __init__(
-        self,
-        save_submit_path: str | None = None,
-        main_metric: str | None = "roc_auc_score",
-    ):
-        self.preds = []
-        self.save_submit = save_submit_path
-        self.main_metric = main_metric
+    #: Which metric family :func:`apply_calculate_metrics` computes.
+    task_type: Literal["binary_clf", "reg"]
 
-    def update(self, inputs, outputs):
-        """Stores model predictions for later computation.
-        Args:
-            inputs: Dict[str, any]
-            outputs: Dict[str, torch.Tensor]
-        """
-        self.preds.append({
+    required_inputs = ("epk_id", "group", "is_treat", "targets", "split_type")
+    required_outputs = ("logits",)
+
+    @abc.abstractmethod
+    def predictions(self, outputs) -> np.ndarray:
+        """Turn the model's logits into the number that gets scored."""
+
+    def collect(self, inputs, outputs) -> dict:
+        """Keep the target, the prediction and the columns that slice them."""
+        return {
             "epk_id": inputs["epk_id"] if "epk_id" in inputs else None,
             "group": inputs["group"].detach().contiguous().cpu().numpy()
             if "group" in inputs
@@ -138,677 +170,356 @@ class ResponseMetrics(BaseMetric):
             "y_true": inputs["targets"].detach().contiguous().cpu().numpy()
             if "targets" in inputs
             else None,
-            "y_pred": torch.nn.functional.sigmoid(outputs.logits)
+            "y_pred": self.predictions(outputs),
+            "split_type": inputs["split_type"] if "split_type" in inputs else None,
+        }
+
+    def score_slice(self, merged: dict, mask: np.ndarray) -> dict[str, float]:
+        """Score one ``(group, split)`` slice of the population.
+
+        The default reads the metric family from :attr:`task_type`. Overriding
+        this is how a metric whose predictions are not one number per record —
+        a multiclass head's probability matrix, say — reuses the buffering, the
+        group loop and the mean.
+        """
+        return apply_calculate_metrics(
+            y_true=merged["y_true"][mask],
+            y_pred=merged["y_pred"][mask],
+            task_type=self.task_type,
+        )
+
+    def score_group(self, merged, group, calib_mask, test_mask):
+        """Score both slices of one group; the held-out one feeds the mean."""
+        scores: dict[str, float] = {}
+        main_value = None
+        for split, mask in ((CALIB_SPLIT, calib_mask), (TEST_SPLIT, test_mask)):
+            if not mask.any():
+                continue
+            slice_scores = defined_scores(
+                self.score_slice(merged, mask),
+                f"{split} slice of group {group}",
+            )
+            scores.update(group_prefixed(slice_scores, split, group))
+            if self.main_metric in slice_scores:
+                # ``test`` comes second, so when the group has a held-out slice
+                # its number is the one that survives into the mean.
+                main_value = slice_scores[self.main_metric]
+        return scores, main_value
+
+
+class ResponseMetrics(SupervisedMetric):
+    """Ranking quality of a single-head response model.
+
+    Args:
+        save_submit_path: Directory to write per-record predictions into.
+            ``None`` writes nothing.
+        main_metric: Which metric counts as *the* number for this run.
+
+    Returns from :meth:`compute`:
+        ``{calib,test}_group_{group}_{metric}`` for ``roc_auc_score``,
+        ``recall_at_{5,10,15,20}`` and ``precision_at_{5,10,15,20}``, plus
+        ``mean_{main_metric}`` over the groups. The ``k`` is a **percentage**
+        of the population, not a record count, so ``precision_at_5`` is
+        precision in the top 5% by score.
+    """
+
+    task_type = "binary_clf"
+
+    def __init__(
+        self,
+        save_submit_path: str | None = None,
+        main_metric: str | None = "roc_auc_score",
+    ):
+        super().__init__(save_submit_path=save_submit_path, main_metric=main_metric)
+
+    def predictions(self, outputs) -> np.ndarray:
+        """A probability per record."""
+        return (
+            torch.nn.functional
+            .sigmoid(outputs.logits)
             .squeeze(1)
             .detach()
             .contiguous()
             .cpu()
-            .numpy(),
-            # backward compatibility with uplift metrics
-            "task_name": outputs.task_name.detach().contiguous().cpu().numpy()
-            if torch.is_tensor(outputs.task_name)
-            else outputs.task_name
-            if (hasattr(outputs, "task_name") and outputs.task_name is not None)
-            else inputs["product"]
-            if ("product" in inputs)
-            else None,
-            "split_type": inputs["split_type"] if "split_type" in inputs else None,
-        })
-
-    def compute(self) -> dict[str, float]:
-        """Computes metrics."""
-        merged_preds = {
-            key: np.concatenate([p[key] for p in self.preds])
-            for key in self.preds[0]
-            if self.preds[0][key] is not None
-        }
-        result = {}
-        mean_main_metric = []
-
-        if "group" not in merged_preds:
-            merged_preds["group"] = -1 * np.ones(
-                merged_preds["y_true"].shape[0]
-            ).astype(np.int32)
-
-        if "task_name" not in merged_preds:
-            task_names = [""]
-            merged_preds["task_name"] = np.array(
-                task_names * merged_preds["y_true"].shape[0]
-            )
-        else:
-            task_names = np.unique(merged_preds["task_name"])
-
-        if "split_type" not in merged_preds:
-            merged_preds["split_type"] = np.array(
-                ["calib"] * merged_preds["y_true"].shape[0]
-            )
-
-        for task in task_names:
-            task_mask = merged_preds["task_name"] == task
-            task_groups = np.unique(merged_preds["group"][task_mask])
-            for group in task_groups:
-                calib_group_mask = (
-                    (merged_preds["group"] == group)
-                    & (merged_preds["split_type"] == "calib")
-                    & task_mask
-                )
-
-                test_group_mask = (
-                    (merged_preds["group"] == group)
-                    & (merged_preds["split_type"] == "test")
-                    & task_mask
-                )
-                calib_scores = {}
-                test_scores = {}
-
-                if merged_preds["y_true"][calib_group_mask].shape[0] > 0:
-                    calib_scores = apply_calculate_metrics(
-                        y_true=merged_preds["y_true"][calib_group_mask],
-                        y_pred=merged_preds["y_pred"][calib_group_mask],
-                        task_type="binary_clf",
-                    )
-
-                    calib_scores = {
-                        f"calib_group_{group}_{key}": val
-                        for key, val in calib_scores.items()
-                    }
-
-                if merged_preds["y_true"][test_group_mask].shape[0] > 0:
-                    test_scores = apply_calculate_metrics(
-                        y_true=merged_preds["y_true"][test_group_mask],
-                        y_pred=merged_preds["y_pred"][test_group_mask],
-                        task_type="binary_clf",
-                    )
-
-                    test_scores = {
-                        f"test_group_{group}_{key}": val
-                        for key, val in test_scores.items()
-                    }
-
-                if merged_preds["y_true"][test_group_mask].shape[0] > 0:
-                    mean_main_metric.append(
-                        test_scores[f"test_group_{group}_{self.main_metric}"]
-                    )
-                elif merged_preds["y_true"][calib_group_mask].shape[0] > 0:
-                    mean_main_metric.append(
-                        calib_scores[f"calib_group_{group}_{self.main_metric}"]
-                    )
-                else:
-                    continue
-
-                if len(task_names) > 0:
-
-                    def task_name_prefix(scores, task_name):
-                        return {
-                            (
-                                f"task_{task_name!s}_{key}"
-                                if len(str(task_name)) != 0
-                                else key
-                            ): val
-                            for key, val in scores.items()
-                        }
-
-                    result = {
-                        **result,
-                        **task_name_prefix(scores=calib_scores, task_name=task),
-                        **task_name_prefix(scores=test_scores, task_name=task),
-                    }
-                else:
-                    result = {**result, **calib_scores, **test_scores}
-
-        if len(mean_main_metric) > 0:
-            result[f"mean_{self.main_metric}"] = np.mean(mean_main_metric)
-
-        if self.save_submit is not None:
-            import os
-
-            df = pd.DataFrame(merged_preds)
-            if not os.path.exists(self.save_submit):
-                os.makedirs(self.save_submit, exist_ok=True)
-            df.to_parquet(
-                os.path.join(self.save_submit, "predict.parquet"), index=False
-            )
-            print(
-                f"Predict was saved: {os.path.join(self.save_submit, 'predict.parquet')}"
-            )
-        return result
-
-    def reset(self) -> None:
-        """Clears stored predictions."""
-        self.preds = []
+            .numpy()
+        )
 
 
-class RegressionMetrics(BaseMetric):
-    """Class for computing regression metrics.
+class RegressionMetrics(SupervisedMetric):
+    """Error metrics for a regression head.
+
     Args:
-        save_submit_path: str = None
-            Path to save predictions.
-    Available metrics:
-        mse
-        mae
-        mape
+        save_submit_path: Directory to write per-record predictions into.
+            ``None`` writes nothing.
+        main_metric: Which metric counts as *the* number for this run.
+
+    Returns from :meth:`compute`:
+        ``{calib,test}_group_{group}_{mse,rmse,mae,mape,r2}`` plus
+        ``mean_{main_metric}`` over the groups. ``mape`` is computed over the
+        records whose target is not zero — see :func:`mape_over_nonzero` — and
+        is absent entirely when none of them is.
     """
+
+    task_type = "reg"
 
     def __init__(
         self,
         save_submit_path: str | None = None,
         main_metric: str | None = "mae",
     ):
-        self.preds = []
-        self.save_submit = save_submit_path
-        self.main_metric = main_metric
+        super().__init__(save_submit_path=save_submit_path, main_metric=main_metric)
 
-    def update(self, inputs, outputs):
-        """Stores model predictions for later computation.
-        Args:
-            inputs: Dict[str, any]
-            outputs: Dict[str, torch.Tensor]
-        """
-        self.preds.append({
-            "epk_id": inputs["epk_id"] if "epk_id" in inputs else None,
-            "group": inputs["group"].detach().contiguous().cpu().numpy()
-            if "group" in inputs
-            else None,
-            "treatment": inputs["is_treat"].detach().contiguous().cpu().numpy()
-            if "is_treat" in inputs
-            else None,
-            "y_true": inputs["targets"].detach().contiguous().cpu().numpy()
-            if "targets" in inputs
-            else None,
-            "y_pred": outputs.logits.squeeze(1).detach().contiguous().cpu().numpy(),
-            # backward compatibility with uplift metrics
-            "task_name": outputs.task_name
-            if (hasattr(outputs, "task_name") and outputs.task_name is not None)
-            else len(inputs["epk_id"]) * ["unk"]
-            if ("product" in inputs)
-            else None,
-            "split_type": inputs["split_type"] if "split_type" in inputs else None,
-        })
-
-    def compute(self) -> dict[str, float]:
-        """Computes metrics."""
-        merged_preds = {
-            key: np.concatenate([p[key] for p in self.preds])
-            for key in self.preds[0]
-            if self.preds[0][key] is not None
-        }
-        result = {}
-        mean_main_metric = []
-
-        if "group" not in merged_preds:
-            merged_preds["group"] = -1 * np.ones(
-                merged_preds["y_true"].shape[0]
-            ).astype(np.int32)
-
-        if "task_name" not in merged_preds:
-            task_names = [""]
-            merged_preds["task_name"] = np.array(
-                task_names * merged_preds["y_true"].shape[0]
-            )
-        else:
-            task_names = np.unique(merged_preds["task_name"])
-
-        if "split_type" not in merged_preds:
-            merged_preds["split_type"] = np.array(
-                ["calib"] * merged_preds["y_true"].shape[0]
-            )
-
-        for task in task_names:
-            task_mask = merged_preds["task_name"] == task
-            task_groups = np.unique(merged_preds["group"][task_mask])
-            for group in task_groups:
-                calib_group_mask = (
-                    (merged_preds["group"] == group)
-                    & (merged_preds["split_type"] == "calib")
-                    & task_mask
-                )
-
-                test_group_mask = (
-                    (merged_preds["group"] == group)
-                    & (merged_preds["split_type"] == "test")
-                    & task_mask
-                )
-
-                calib_scores = apply_calculate_metrics(
-                    y_true=merged_preds["y_true"][calib_group_mask],
-                    y_pred=merged_preds["y_pred"][calib_group_mask],
-                    task_type="reg",
-                )
-
-                calib_scores = {
-                    f"calib_group_{group}_{key}": val
-                    for key, val in calib_scores.items()
-                }
-
-                if merged_preds["y_true"][test_group_mask].shape[0] > 0:
-                    test_scores = apply_calculate_metrics(
-                        y_true=merged_preds["y_true"][test_group_mask],
-                        y_pred=merged_preds["y_pred"][test_group_mask],
-                        task_type="reg",
-                    )
-
-                    test_scores = {
-                        f"test_group_{group}_{key}": val
-                        for key, val in test_scores.items()
-                    }
-                else:
-                    test_scores = {}
-
-                if merged_preds["y_true"][test_group_mask].shape[0] > 0:
-                    mean_main_metric.append(
-                        test_scores[f"test_group_{group}_{self.main_metric}"]
-                    )
-                else:
-                    mean_main_metric.append(
-                        calib_scores[f"calib_group_{group}_{self.main_metric}"]
-                    )
-
-                if len(task_names) > 0:
-
-                    def task_name_prefix(scores, task_name):
-                        return {
-                            f"{task_name}_" if len(task_name) != 0 else "" + key: val
-                            for key, val in scores.items()
-                        }
-
-                    result = {
-                        **result,
-                        **task_name_prefix(scores=calib_scores, task_name=task),
-                        **task_name_prefix(scores=test_scores, task_name=task),
-                    }
-                else:
-                    result = {**result, **calib_scores, **test_scores}
-
-        result[f"mean_{self.main_metric}"] = np.mean(mean_main_metric)
-
-        if self.save_submit is not None:
-            import os
-
-            df = pd.DataFrame(merged_preds)
-            if not os.path.exists(self.save_submit):
-                os.makedirs(self.save_submit, exist_ok=True)
-            df.to_parquet(
-                os.path.join(self.save_submit, "predict.parquet"), index=False
-            )
-            print(
-                f"Predict was saved: {os.path.join(self.save_submit, 'predict.parquet')}"
-            )
-
-        return result
-
-    def reset(self) -> None:
-        """Clears stored predictions."""
-        self.preds = []
+    def predictions(self, outputs) -> np.ndarray:
+        """The raw head output, scored against the target as-is."""
+        return outputs.logits.squeeze(1).detach().contiguous().cpu().numpy()
 
 
-class InferenceSupervisedMetrics(BaseMetric):
+def macro_ovr_auc(y_true, probabilities, labels) -> float:
+    """One-vs-rest ROC AUC, averaged over the classes this slice can score.
+
+    ``roc_auc_score(..., multi_class="ovr")`` insists that every label appear in
+    ``y_true``, which a rare class in a small group routinely does not — and it
+    raises rather than reporting what it can. Here each class is scored against
+    the rest on its own probability column, and a class with no positives (or
+    no negatives) is left out of the average instead of destroying it.
+
+    ``nan`` when no class has both sides, which the caller drops.
+    """
+    scores = []
+    skipped = []
+    for index, label in enumerate(labels):
+        positives = y_true == label
+        if not positives.any() or positives.all():
+            skipped.append(label)
+            continue
+        scores.append(roc_auc_score(positives, probabilities[:, index]))
+    if skipped:
+        logger.warning(
+            "roc_auc_score_ovr leaves out class(es) %s: this slice has no "
+            "contrast for them",
+            skipped,
+        )
+    if not scores:
+        return float("nan")
+    return float(np.mean(scores))
+
+
+def calculate_multiclass_metrics(y_true, probabilities, labels):
+    """Accuracy, its balanced twin, both F1 averages, OVR AUC and log-loss.
+
+    Args:
+        y_true: Class index per record.
+        probabilities: ``(n, num_classes)`` — a distribution per record.
+        labels: Every class the head can predict, in column order. Passed
+            explicitly so that a slice missing a class is still scored against
+            the full label set rather than a re-derived, shorter one.
+    """
+    predicted = probabilities.argmax(axis=1)
+    return {
+        "accuracy": accuracy_score(y_true, predicted),
+        # Accuracy on Covertype-shaped data measures the size of the majority
+        # class; the balanced twin measures the model.
+        "balanced_accuracy": balanced_accuracy_score(y_true, predicted),
+        "f1_macro": f1_score(
+            y_true, predicted, average="macro", labels=labels, zero_division=0
+        ),
+        "f1_weighted": f1_score(
+            y_true, predicted, average="weighted", labels=labels, zero_division=0
+        ),
+        "roc_auc_score_ovr": macro_ovr_auc(y_true, probabilities, labels),
+        "log_loss": log_loss(y_true, probabilities, labels=labels),
+    }
+
+
+class MultiClassMetrics(SupervisedMetric):
+    """Quality of a ``num_classes``-wide head, per group and per split.
+
+    Unlike the other supervised metrics, the prediction kept per record is a
+    whole row of probabilities rather than a single number — accuracy and F1
+    need the argmax, while AUC and log-loss need the distribution.
+
+    Args:
+        num_classes: Width of the head. Also the label set: classes are the
+            column indices ``0 … num_classes - 1``, which is what the target
+            column must contain.
+        save_submit_path: Directory to write per-record predictions into.
+            ``None`` writes nothing. The probability matrix is written as one
+            column per class.
+        main_metric: Which metric counts as *the* number for this run.
+            ``balanced_accuracy`` by default, because plain accuracy on an
+            unbalanced target reports the majority class rather than the model.
+
+    Returns from :meth:`compute`:
+        ``{calib,test}_group_{group}_{accuracy,balanced_accuracy,f1_macro,
+        f1_weighted,roc_auc_score_ovr,log_loss}`` plus ``mean_{main_metric}``
+        over the groups.
+    """
+
     def __init__(
         self,
-        path_to_save,
-        save_steps,
-        task_type: Literal["binary_clf", "reg"],
-        prefix=None,
+        num_classes: int,
+        save_submit_path: str | None = None,
+        main_metric: str | None = "balanced_accuracy",
     ):
-        self.preds = []
-        self.path_to_save = path_to_save
+        super().__init__(save_submit_path=save_submit_path, main_metric=main_metric)
+        if num_classes < 2:
+            raise ValueError(
+                f"MultiClassMetrics needs at least two classes, got {num_classes}. "
+                "A one-wide head is the response setting — use ResponseMetrics."
+            )
+        self.num_classes = num_classes
+        self.labels = list(range(num_classes))
+
+    def predictions(self, outputs) -> np.ndarray:
+        """A distribution over the classes, per record."""
+        return (
+            torch.nn.functional
+            .softmax(outputs.logits, dim=1)
+            .detach()
+            .contiguous()
+            .cpu()
+            .numpy()
+        )
+
+    def score_slice(self, merged: dict, mask: np.ndarray) -> dict[str, float]:
+        return calculate_multiclass_metrics(
+            y_true=merged["y_true"][mask].astype(int),
+            probabilities=merged["y_pred"][mask],
+            labels=self.labels,
+        )
+
+
+class InferenceSupervisedMetrics(ArtifactMetric):
+    """Write per-record predictions to parquet during inference.
+
+    The product here is a file, not a number: predictions are flushed every
+    ``save_steps`` batches so a long inference run does not hold the whole
+    population in memory, and :meth:`compute` writes the tail and returns an
+    empty dict.
+
+    Args:
+        path_to_save: Directory for the parquet parts; created if missing.
+        save_steps: Flush every this many batches.
+        task_type: ``binary_clf``, ``reg`` or ``multi_clf`` — selects how logits
+            become the saved prediction. A multiclass run saves the chosen class
+            in ``prediction`` and the whole distribution alongside it, as
+            ``probability_0 … probability_{k-1}``: which class won is rarely the
+            only thing a downstream campaign wants to know.
+        prefix: Optional tag in the filename, to tell runs apart.
+
+    The second saved column is ``target_attr_2``, the campaign group of the
+    pilot's schema. A dataset that calls that column something else maps it
+    across in the collate function —
+    ``add_extra_columns: {target_attr_2: group}`` — rather than here.
+
+    Raises:
+        ValueError: ``task_type`` is not one of the three.
+    """
+
+    TASK_TYPES = ("binary_clf", "reg", "multi_clf")
+
+    required_inputs = ("epk_id", "target_attr_2", "report_month")
+    required_outputs = ("logits",)
+
+    def __init__(
+        self,
+        path_to_save: str,
+        save_steps: int,
+        task_type: Literal["binary_clf", "reg", "multi_clf"],
+        prefix: str | None = None,
+    ):
+        super().__init__(path_to_save=path_to_save, prefix=prefix)
+        self.preds: list[dict] = []
         self.save_steps = save_steps
-        self.prefix = prefix
+        if task_type not in self.TASK_TYPES:
+            raise ValueError(
+                f"Unknown task_type: {task_type}. One of {self.TASK_TYPES}."
+            )
         self.task_type = task_type
 
-        if not os.path.exists(self.path_to_save):
-            os.makedirs(self.path_to_save, exist_ok=False)
-
-    def update(self, inputs, outputs):
-        epk_id = inputs["epk_id"]
-        if "task_type" in inputs:
-            task_name = inputs["task_type"]
-        else:
-            task_name = len(inputs["epk_id"]) * ["unk"]
-
-        if "target_attr_2" in inputs:
-            target_attr_2 = inputs["target_attr_2"]
-        else:
-            target_attr_2 = len(inputs["epk_id"]) * [-1]
-
-        if self.task_type == "binary_clf":
-            prediction = (
-                torch.nn.functional.sigmoid(outputs.logits)
-                .squeeze(1)
+    def predicted_columns(self, logits: torch.Tensor) -> dict[str, np.ndarray]:
+        """The prediction columns this task saves per record."""
+        if self.task_type == "multi_clf":
+            probabilities = (
+                torch.nn.functional
+                .softmax(logits, dim=1)
                 .detach()
                 .contiguous()
                 .cpu()
                 .numpy()
             )
-        elif self.task_type == "reg":
-            prediction = outputs.logits.squeeze(1).detach().contiguous().cpu().numpy()
-        else:
-            raise ValueError(f"Unknown task_type: {self.task_type}")
-        # Create the prediction dictionary
+            columns = {"prediction": probabilities.argmax(axis=1)}
+            columns.update({
+                f"probability_{index}": probabilities[:, index]
+                for index in range(probabilities.shape[1])
+            })
+            return columns
+
+        values = logits.squeeze(1)
+        if self.task_type == "binary_clf":
+            values = torch.nn.functional.sigmoid(values)
+        return {"prediction": values.detach().contiguous().cpu().numpy()}
+
+    @staticmethod
+    def as_column(values):
+        """Whatever the batch carried for an id column, as something a frame holds.
+
+        A column reaches the batch either as a plain list or as a tensor —
+        ``add_extra_columns`` makes tensors — and a tensor has been moved to the
+        accelerator by the time a metric sees it. pandas cannot read device
+        memory, so it comes back here.
+        """
+        if isinstance(values, torch.Tensor):
+            return values.detach().contiguous().cpu().numpy()
+        return values
+
+    def update(self, inputs, outputs):
+        """Accumulate one batch of predictions, flushing when the buffer is full."""
+        epk_id = self.as_column(inputs["epk_id"])
+        target_attr_2 = self.as_column(inputs.get("target_attr_2", len(epk_id) * [-1]))
+
         pred_dict = {
             "epk_id": epk_id,
             "target_attr_2": target_attr_2,
-            "prediction": prediction,
-            "task_name": task_name,
+            **self.predicted_columns(outputs.logits),
         }
-
-        # Add report_month if it exists in inputs
         if "report_month" in inputs:
             pred_dict["report_month"] = inputs["report_month"]
 
         self.preds.append(pred_dict)
 
         if len(self.preds) >= self.save_steps:
-            self.compute()
+            self.flush()
 
-    def compute(self):
-        """return Dict(metric_name: value)"""
-        predict = {
-            "epk_id": [],
-            "target_attr_2": [],
-            "prediction": [],
-            "task_name": [],
-        }
+    def flush(self) -> None:
+        """Write the buffered predictions to a parquet part and forget them."""
+        if not self.preds:
+            return
+
+        # The first batch fixes the schema: how many probability columns a
+        # multiclass run writes is the head's width, and that does not change
+        # between batches.
+        columns = [name for name in self.preds[0] if name != "report_month"]
+        predict: dict[str, list] = {column: [] for column in columns}
 
         has_report_month = any("report_month" in item for item in self.preds)
         if has_report_month:
             predict["report_month"] = []
 
         for item in self.preds:
-            predict["epk_id"].extend(item["epk_id"])
-            predict["target_attr_2"].extend(item["target_attr_2"])
-            predict["prediction"].extend(item["prediction"])
-            predict["task_name"].extend(item["task_name"])
+            for column in columns:
+                predict[column].extend(item[column])
             if has_report_month:
                 predict["report_month"].extend(
                     item.get("report_month", [None] * len(item["epk_id"]))
                 )
 
-        predict_df = pd.DataFrame().from_dict(predict)
+        frame = pd.DataFrame.from_dict(predict)
         if has_report_month:
-            predict_df["report_month"] = predict_df["report_month"].apply(
-                lambda x: str(x.date())
-            )
-        time_now = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
-        if self.prefix is not None:
-            cur_path = (
-                os.path.join(self.path_to_save, time_now) + f"_{self.prefix}.parquet"
-            )
-        else:
-            cur_path = os.path.join(self.path_to_save, time_now) + ".parquet"
-        predict_df.to_parquet(cur_path, index=False)
+            frame["report_month"] = frame["report_month"].apply(lambda x: str(x.date()))
+        self.save_dataframe(frame)
         self.reset()
-        print(f"predict_saved: {cur_path}")
-
-    def reset(self):
-        self.preds = []
-
-
-class MMoEResponseMetrics(ResponseMetrics):
-    """
-    Response metrics + MMoE gate utilization metrics.
-
-    Adds metrics like:
-    gate_product_{product}_expert_{i}_mean
-    gate_product_{product}_entropy_mean
-    gate_product_{product}_max_mean
-    gate_product_{product}_top1_expert_{i}_rate
-    """
-
-    def __init__(
-        self,
-        save_submit_path: str | None = None,
-        main_metric: str | None = "roc_auc_score",
-        num_experts: int | None = None,
-    ):
-        super().__init__(
-            save_submit_path=save_submit_path,
-            main_metric=main_metric,
-        )
-        self.num_experts = num_experts
-        self.gate_preds = []
-
-    def update(self, inputs, outputs):
-        super().update(inputs, outputs)
-
-        if not hasattr(outputs, "aux") or outputs.aux is None:
-            return
-
-        if "gate" not in outputs.aux:
-            return
-
-        if "product" in inputs:
-            product = inputs["product"]
-            if torch.is_tensor(product):
-                product = product.detach().contiguous().cpu().numpy()
-        elif hasattr(outputs, "task_name") and outputs.task_name is not None:
-            product = outputs.task_name
-            if torch.is_tensor(product):
-                product = product.detach().contiguous().cpu().numpy()
-        else:
-            product = None
-
-        gate = outputs.aux["gate"].detach().contiguous().cpu().numpy()
-        gate_entropy = outputs.aux["gate_entropy"].detach().contiguous().cpu().numpy()
-        gate_max = outputs.aux["gate_max"].detach().contiguous().cpu().numpy()
-        gate_top1 = outputs.aux["gate_top1"].detach().contiguous().cpu().numpy()
-
-        task_name = outputs.task_name
-        if torch.is_tensor(task_name):
-            task_name = task_name.detach().contiguous().cpu().numpy()
-
-        group = outputs.group
-        if torch.is_tensor(group):
-            group = group.detach().contiguous().cpu().numpy()
-
-        split_type = inputs["split_type"] if "split_type" in inputs else None
-
-        self.gate_preds.append({
-            "product": product,
-            "task_name": task_name,
-            "group": group,
-            "split_type": split_type,
-            "gate": gate,
-            "gate_entropy": gate_entropy,
-            "gate_max": gate_max,
-            "gate_top1": gate_top1,
-        })
-
-    def _compute_gate_metrics(self) -> dict[str, float]:
-        if len(self.gate_preds) == 0:
-            return {}
-
-        gate = np.concatenate([p["gate"] for p in self.gate_preds], axis=0)
-        gate_entropy = np.concatenate(
-            [p["gate_entropy"] for p in self.gate_preds],
-            axis=0,
-        )
-        gate_max = np.concatenate([p["gate_max"] for p in self.gate_preds], axis=0)
-        gate_top1 = np.concatenate([p["gate_top1"] for p in self.gate_preds], axis=0)
-
-        product_values = [
-            p["product"] for p in self.gate_preds if p["product"] is not None
-        ]
-
-        if len(product_values) > 0:
-            product = np.concatenate(product_values, axis=0)
-        else:
-            product = np.array(["all"] * gate.shape[0])
-
-        split_values = [
-            p["split_type"] for p in self.gate_preds if p["split_type"] is not None
-        ]
-
-        if len(split_values) > 0:
-            split_type = np.concatenate(split_values, axis=0)
-        else:
-            split_type = np.array(["calib"] * gate.shape[0])
-
-        num_experts = self.num_experts or gate.shape[1]
-        result = {}
-
-        def add_gate_states(prefix: str, mask: np.ndarray):
-            if mask.sum() == 0:
-                return
-
-            for expert_idx in range(num_experts):
-                result[f"{prefix}_expert_{expert_idx}_mean"] = float(
-                    gate[mask, expert_idx].mean()
-                )
-
-            result[f"{prefix}_entropy_mean"] = np.nan_to_num(
-                float(gate_entropy[mask].mean()),
-                nan=0.0,
-            )
-            result[f"{prefix}_max_mean"] = float(gate_max[mask].mean())
-
-            for expert_idx in range(num_experts):
-                result[f"{prefix}_top1_expert_{expert_idx}_rate"] = float(
-                    (gate_top1[mask] == expert_idx).mean()
-                )
-
-        # Global gate stats
-        add_gate_states("gate_global", np.ones(gate.shape[0], dtype=bool))
-
-        # Product-level gate stats
-        for split in np.unique(split_type):
-            split_mask = split_type == split
-            add_gate_states(f"{split}_gate_global", split_mask)
-            for product_name in np.unique(product):
-                mask = split_mask & (product == product_name)
-                add_gate_states(f"{split}_gate_task_{product_name}", mask)
-        return result
-
-    def compute(self) -> dict[str, float]:
-        result = super().compute()
-        result.update(self._compute_gate_metrics())
-        return result
 
     def reset(self) -> None:
-        super().reset()
-        self.gate_preds = []
-
-
-class PLEResponseMetrics(MMoEResponseMetrics):
-    """
-    Response metrics + PLE (CGC) gate utilization metrics.
-
-    In PLE, a task's gate evaluates [Shared Experts] + [Task-Specific Experts].
-    This class correctly maps gate indices to global/shared vs specific metrics
-    so that aggregating across tasks produces mathematically valid statistics.
-
-    Adds metrics like:
-    gate_{task/global}_{shared/specific}_expert_{i}_mean
-    gate_{task/global}_{product}_entropy_mean
-    gate_{task/global}_{product}_max_mean
-    gate_{task/global}_{product}_top1_{shared/specific}_expert_{i}_rate
-    """
-
-    def __init__(
-        self,
-        num_shared_experts: int,
-        num_specific_experts: int,
-        save_submit_path: str | None = None,
-        main_metric: str | None = "roc_auc_score",
-    ):
-        # The gate for each task will output (num_shared + num_specific) values
-        num_experts_per_task = num_shared_experts + num_specific_experts
-        super().__init__(
-            save_submit_path=save_submit_path,
-            main_metric=main_metric,
-            num_experts=num_experts_per_task,
-        )
-        self.num_shared_experts = num_shared_experts
-        self.num_specific_experts = num_specific_experts
-
-    def _compute_gate_metrics(self) -> dict[str, float]:
-        if len(self.gate_preds) == 0:
-            return {}
-
-        gate = np.concatenate([p["gate"] for p in self.gate_preds], axis=0)
-        gate_entropy = np.concatenate(
-            [p["gate_entropy"] for p in self.gate_preds], axis=0
-        )
-        gate_max = np.concatenate([p["gate_max"] for p in self.gate_preds], axis=0)
-        gate_top1 = np.concatenate([p["gate_top1"] for p in self.gate_preds], axis=0)
-
-        product_values = [
-            p["product"] for p in self.gate_preds if p["product"] is not None
-        ]
-        product = (
-            np.concatenate(product_values, axis=0)
-            if len(product_values) > 0
-            else np.array(["all"] * gate.shape[0])
-        )
-
-        split_values = [
-            p["split_type"] for p in self.gate_preds if p["split_type"] is not None
-        ]
-        split_type = (
-            np.concatenate(split_values, axis=0)
-            if len(split_values) > 0
-            else np.array(["calib"] * gate.shape[0])
-        )
-
-        result = {}
-
-        def add_ple_gate_states(prefix: str, mask: np.ndarray, is_global: bool = False):
-            if mask.sum() == 0:
-                return
-
-            # 1. Entropy & Max stats (always valid)
-            result[f"{prefix}_entropy_mean"] = np.nan_to_num(
-                float(gate_entropy[mask].mean()),
-                nan=0.0,
-            )
-            result[f"{prefix}_max_mean"] = float(gate_max[mask].mean())
-
-            # 2. Shared Experts (Indices 0 to num_shared_experts - 1)
-
-            if self.num_shared_experts > 0:
-                for idx in range(self.num_shared_experts):
-                    result[f"{prefix}_shared_expert_{idx}_mean"] = float(
-                        gate[mask, idx].mean()
-                    )
-                    result[f"{prefix}_top1_shared_expert_{idx}_rate"] = float(
-                        (gate_top1[mask] == idx).mean()
-                    )
-
-            # 3. Task-Specific Experts (Indices num_shared_experts to end)
-            for specific_idx in range(self.num_specific_experts):
-                actual_idx = self.num_shared_experts + specific_idx
-
-                # If we are looking at a specific task, we label it as specific_expert_{i}
-                if not is_global:
-                    result[f"{prefix}_specific_expert_{specific_idx}_mean"] = float(
-                        gate[mask, actual_idx].mean()
-                    )
-                    result[f"{prefix}_top1_specific_expert_{specific_idx}_rate"] = (
-                        float((gate_top1[mask] == actual_idx).mean())
-                    )
-                else:
-                    # If global, "actual_idx" points to completely different experts for different tasks.
-                    # We aggregate it as a general "utilization of task-specific experts" metric.
-                    result[f"{prefix}_any_specific_expert_mean"] = float(
-                        gate[mask, actual_idx:].sum(axis=1).mean()
-                    )
-                    result[f"{prefix}_top1_any_specific_expert_rate"] = float(
-                        (gate_top1[mask] >= self.num_shared_experts).mean()
-                    )
-
-        # Global gate stats
-        add_ple_gate_states(
-            "gate_global", np.ones(gate.shape[0], dtype=bool), is_global=True
-        )
-
-        # Split & Product level gate stats
-        for split in np.unique(split_type):
-            split_mask = split_type == split
-            add_ple_gate_states(f"{split}_gate_global", split_mask, is_global=True)
-
-            for product_name in np.unique(product):
-                mask = split_mask & (product == product_name)
-                add_ple_gate_states(
-                    f"{split}_gate_task_{product_name}", mask, is_global=False
-                )
-
-        return result
+        """Drop the buffered batches."""
+        self.preds = []

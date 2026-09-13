@@ -7,18 +7,12 @@
 gradient_checkpointing помогает сэкономить память, путем хранения меньшего количества активаций и их пересчета (вместо хранения) на этапе backward'а
 
 ### Как добавить в конфиг
-1. Добавить в DistributedDataParallelKwargs асселератору данные 3 строки (некоторые мб лишние, но рекомендуются все, static_graph: True обязателен)
+1. Добавить в блок `ddp:` данные 3 строки (некоторые мб лишние, но рекомендуются все, static_graph: True обязателен)
 ```
-accelerator:
-    ...
-    kwargs_handlers:
-    - _target_: accelerate.utils.DistributedDataParallelKwargs
-        ...
-        find_unused_parameters: False
-        broadcast_buffers: False
-        static_graph: True
-        ...
-    ...
+ddp:
+  find_unused_parameters: False
+  broadcast_buffers: False
+  static_graph: True
 ```
 
 2. Добавить в GPT2Config строки (обе строки обязательны):
@@ -37,23 +31,18 @@ config:
 
 ### Пример конфига:
 ```
-accelerator:
-  _target_: accelerate.Accelerator
-  _partial_: True
-  dataloader_config:
-    _target_: accelerate.utils.DataLoaderConfiguration
-    dispatch_batches: False
-  kwargs_handlers:
-    - _target_: accelerate.utils.DistributedDataParallelKwargs
-      find_unused_parameters: False
-      broadcast_buffers: False
-      static_graph: True
+distributed:
+  backend: null  # null -> nccl on GPU, gloo on CPU
   gradient_accumulation_steps: 2
-  mixed_precision: bf16
+amp: bf16  # no | fp16 | bf16
+ddp:
+  find_unused_parameters: False
+  broadcast_buffers: False
+  static_graph: True
 train_dataloader:
   _target_: torch.utils.data.DataLoader
   dataset:
-    _target_: avatar.data.dataset.ShardEventSequenceDataset
+    _target_: avatar.data.EventSequenceDataset
     path: /home/datalab/projects/avatards/avatar/core_fm/large/ssl_training/train/large/middle # train
     min_length: 16
     max_length: 512
@@ -70,13 +59,13 @@ train_dataloader:
   drop_last: True
   num_workers: 8
   collate_fn:
-    _target_: avatar.data.dataset.collate_fn.EventSequenceCollateFn
+    _target_: avatar.data.EventSequenceCollateFn
     sequence_columns: ${train_dataloader.dataset.sequence_columns}
     create_attention_mask: True
 valid_dataloader:
   _target_: torch.utils.data.DataLoader
   dataset:
-    _target_: avatar.data.dataset.EventSequenceDataset
+    _target_: avatar.data.EventSequenceDataset
     path: /home/datalab/projects/avatards/avatar/core_fm/large/ssl_training/valid
     max_length: 512
     min_length: 1
@@ -92,7 +81,7 @@ valid_dataloader:
   drop_last: False
   num_workers: 8
   collate_fn:
-    _target_: avatar.data.dataset.collate_fn.EventSequenceCollateFn
+    _target_: avatar.data.EventSequenceCollateFn
     sequence_columns: ${valid_dataloader.dataset.sequence_columns}
     create_attention_mask: True
 model:

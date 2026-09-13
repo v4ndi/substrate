@@ -1,7 +1,36 @@
-from dataclasses import dataclass
+"""Output dataclasses: what each pipeline returns.
+
+The trainer only ever reads ``loss`` (or ``losses`` plus ``num_items`` for
+multi-head models); everything else exists so that metrics can read what a
+particular task produced. That is why a metric is bound to a pipeline: it
+requires the fields of the output that pipeline returns.
+"""
+
+from dataclasses import dataclass, field
 from typing import Any
 
 import torch
+
+
+@dataclass
+class LossOutput:
+    """What a loss module returns.
+
+    Attributes:
+        loss: The scalar the trainer calls ``backward()`` on. ``None`` for
+            multi-head losses, where the cross-rank token weighting happens in
+            the trainer instead (see
+            :func:`avatar.train.loss_reduce.calculate_output_loss`).
+        components: The individual terms. When ``num_items`` is set these are
+            the per-head losses the trainer reduces; otherwise they are for
+            logging only and ``loss`` already contains their sum.
+        num_items: Valid item count per head, keyed like ``components``. Its
+            presence is what tells the trainer to token-weight across ranks.
+    """
+
+    loss: torch.Tensor | None = None
+    components: dict[str, torch.Tensor] = field(default_factory=dict)
+    num_items: dict[str, torch.Tensor] | None = None
 
 
 @dataclass
@@ -158,6 +187,13 @@ class MultiTaskxGroupResponseOutput(TabularOutput):
 
 @dataclass
 class MMoEOutput(MultiTaskxGroupResponseOutput):
+    """Multi-task response output plus the gating diagnostics MoE runs carry.
+
+    Attributes:
+        aux: Auxiliary values from the backbone — gate weights, entropy
+            penalties — read by the MoE metrics.
+    """
+
     aux: dict[str, Any] = None
 
 

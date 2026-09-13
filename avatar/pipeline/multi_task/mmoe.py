@@ -1,10 +1,25 @@
+"""MMoE and PLE: several tasks sharing one pool of experts.
+
+The shape is the same for both — embedding, a backbone of experts with a
+per-task gate, one head per task, one composite loss. They differ only in how
+the expert pool is organised:
+
+* **MMoE** — every expert is visible to every task; the gate decides the mix.
+* **PLE (CGC)** — the pool is split into shared experts plus a private group
+  per task, so a task's gate sees ``[shared] + [its own]``. That containment is
+  the point: it stops one task's gradient from dragging every expert.
+
+``PLE`` is therefore ``MMoE`` with :class:`PLEBackbone` substituted, and the
+class body is empty on purpose.
+"""
+
 import copy
 import math
 
 import torch
 import torch.nn as nn
 
-from avatar.data.tabular_batch import TabularBatch
+from avatar.data.tabular.batch import TabularBatch
 from avatar.nn.tabular import BaseTabularEncoder
 from avatar.nn.utils import get_aggregation_layer
 from avatar.nn.utils.ffn import FeedForwardNetwork
@@ -16,21 +31,34 @@ from avatar.pipeline.uplift.treatment_interaction import (
 
 
 def inverse_sigmoid(probability: float) -> float:
+    """Logit of ``probability``, clamped away from 0 and 1.
+
+    Used to initialise gate parameters from a desired open probability, so
+    ``init_shared=0.8`` means "start with this gate ~80% open" rather than
+    naming a raw logit.
+    """
     probability = min(max(probability, 1e-6), 1 - 1e-6)
     return math.log(probability / (1.0 - probability))
 
 
 class HierarchicalFeatureGate(nn.Module):
-    """
-    Hierahrcal Feature Gate for multi-task tabular models
+    """Learned per-feature gate with a shared and a task-specific component.
 
-    Input:
-        x: [batch, num_features, embedding_dim]
-        task_name: [batch]
+    Decides, per feature token, how much of it each task should see. Two sets
+    of gate logits are learned — one shared across tasks, one per task — and
+    combined, so a task can suppress a feature the others keep.
 
-    Gates:
-        shared
-        task_specific
+    Args:
+        num_features: Number of feature tokens.
+        num_tasks: Number of tasks.
+        init_shared: Initial open probability of the shared gate.
+        init_task_specific: Initial open probability of the task gates. Starts
+            low on purpose: tasks begin from the shared view and specialise
+            only where it pays.
+        temperature: Sharpness of the gate; lower is closer to hard selection.
+
+    Shape:
+        ``x: (batch, num_features, embedding_dim)``, ``task_name: (batch,)``.
     """
 
     def __init__(
@@ -109,10 +137,15 @@ class HierarchicalFeatureGate(nn.Module):
 
 
 class MLPExpert(nn.Module):
-    """
-    Shape:
-        [batch, n_features, hidden_size] -> [batch, n_features, hidden_size]
+    """Pre-norm residual feed-forward block used as a cheap expert.
 
+    Args:
+        hidden_size: Token width.
+        expansion: Inner width multiplier of the feed-forward network.
+        dropout_p: Dropout inside the block.
+
+    Shape:
+        ``(batch, n_features, hidden_size) -> (batch, n_features, hidden_size)``.
     """
 
     def __init__(
@@ -136,10 +169,19 @@ class MLPExpert(nn.Module):
 
 
 class TabBackboneExpert(nn.Module):
-    """
-    Shape:
-        [batch, n_features, hidden_size] -> [batch, n_features, hidden_size]
+    """A full tabular encoder used as one expert.
 
+    Much heavier than :class:`MLPExpert` — each expert is a whole transformer —
+    so this is for pools of a few experts, not dozens.
+
+    Args:
+        tabular_encoder: The encoder to use as the expert body.
+        hidden_size: Token width; only needed when ``pre_norm`` is set.
+        pre_norm: Layer-normalise the input before the encoder.
+        residual: Add the input back to the encoder's output.
+
+    Shape:
+        ``(batch, n_features, hidden_size) -> (batch, n_features, hidden_size)``.
     """
 
     def __init__(
@@ -162,6 +204,20 @@ class TabBackboneExpert(nn.Module):
 
 
 class TaskHead(nn.Module):
+    """One task's output head, sized after the backbone is known.
+
+    Constructed from config without knowing the backbone width, then wired up
+    by the pipeline through :meth:`init_head` — which is why the head is not
+    built in ``__init__``.
+
+    Args:
+        dropout_head: Dropout in the default feed-forward head.
+        out_head: Replace the default head entirely.
+        loss_fn: Loss over this task's logits; defaults to
+            ``BCEWithLogitsLoss``. A custom loss is called with ``logits``,
+            ``dist`` and ``targets`` instead.
+    """
+
     def __init__(
         self,
         dropout_head: float = 0.15,
@@ -177,6 +233,7 @@ class TaskHead(nn.Module):
         self,
         hidden_size: int,
     ):
+        """Build the head now that the backbone's output width is known."""
         self.out_head = (
             FeedForwardNetwork(
                 input_dim=hidden_size,
@@ -217,6 +274,39 @@ class TaskHead(nn.Module):
 
 
 class MMoEBackbone(nn.Module):
+    """A pool of experts plus one gate per task.
+
+    Every task mixes the same experts with its own learned weights, then the
+    mixture is pooled and optionally concatenated with external embeddings.
+    The gate weights are exposed on the output as ``task_gated_weights``: a
+    task whose weights concentrate on one expert has stopped mixing, which is
+    what makes them worth watching.
+
+    Experts can be given directly (``experts``) or described
+    (``expert_cls`` + ``expert_kwargs`` + ``num_experts``), in which case they
+    are built as independent copies.
+
+    Args:
+        num_tasks: Number of tasks; determines how many gates exist.
+        experts: Ready-made expert modules.
+        expert_cls: Class to instantiate ``num_experts`` copies of instead.
+        expert_kwargs: Arguments for ``expert_cls``.
+        num_experts: How many experts to build from ``expert_cls``.
+        shared_tabular_encoder: Encoder applied before the experts, shared by
+            every task.
+        aggregation_config: Config for
+            :func:`~avatar.nn.utils.get_aggregation_layer`; defaults to mean.
+        hidden_state_dim: Width of external embeddings concatenated after
+            pooling.
+        proj_hiddens_to_dim: Project those external embeddings to this width
+            first.
+        normalize_hidden_states: ``{name: width}`` — normalise each named
+            external embedding separately; supersedes ``hidden_state_dim``.
+        gate_hidden_dim: Hidden width of the gate network; ``None`` makes the
+            gate a single linear layer.
+        gate_dropout_p: Dropout inside the gate network.
+    """
+
     def __init__(
         self,
         num_tasks: int,
@@ -362,7 +452,34 @@ class MMoEBackbone(nn.Module):
 
 
 class MMoE(nn.Module):
-    """ """
+    """Multi-gate mixture-of-experts over a tabular batch.
+
+    Embeds the batch, runs it through :class:`MMoEBackbone`, and sends each
+    record to the head of its own task. Every head contributes to one composite
+    loss built by ``multi_task_loss``.
+
+    Args:
+        embedding: Tabular embedding layer.
+        tabular_encoder: The expert backbone.
+        heads: ``{task name: TaskHead}``. Head widths are set from the
+            backbone here, so they need not be sized in config.
+        multi_task_loss: Combines the per-head losses into the scalar the
+            trainer optimises.
+        n_groups: Number of campaign groups; adds a group embedding.
+        add_treatment_feature: Also add a treatment embedding, for uplift-style
+            multi-task runs.
+        group_interaction: How the group embedding meets the feature tokens;
+            defaults to concatenation.
+        gate_entropy_loss_coef: Weight of an entropy penalty on the gates.
+            Above 0 it pushes the gates to stay spread over experts instead of
+            collapsing onto one.
+        feature_gate: Optional :class:`HierarchicalFeatureGate` applied to the
+            embedded features before the experts.
+
+    Returns:
+        :class:`~avatar.outputs.MMoEOutput`, carrying per-task logits and the
+        gate weights the MoE diagnostics metrics read.
+    """
 
     def __init__(
         self,
@@ -539,6 +656,25 @@ class MMoE(nn.Module):
 
 
 class PLEBackbone(MMoEBackbone):
+    """Expert pool split into shared experts plus a private group per task.
+
+    Each task's gate sees ``[shared experts] + [its own experts]``, so a task
+    can specialise without competing for the whole pool. Everything else —
+    pooling, external embeddings, exposed gate weights — is inherited from
+    :class:`MMoEBackbone`.
+
+    Args:
+        num_tasks: Number of tasks.
+        shared_expert_cls: Class of the shared experts.
+        shared_expert_kwargs: Arguments for it.
+        task_expert_cls: Class of the per-task experts.
+        task_expert_kwargs: Arguments for it.
+        num_shared_experts: Shared experts in the pool.
+        num_specific_experts: Private experts **per task**, so the total number
+            of expert modules is ``num_shared + num_tasks * num_specific``.
+        **kwargs: Passed through to :class:`MMoEBackbone`.
+    """
+
     def __init__(
         self,
         num_tasks: int,
@@ -642,4 +778,9 @@ class PLEBackbone(MMoEBackbone):
 
 
 class PLE(MMoE):
-    pass
+    """MMoE with a :class:`PLEBackbone`.
+
+    Deliberately empty: the pipeline is identical and only the backbone
+    differs, so the distinct class exists to name the architecture in configs
+    and to let the PLE-aware metrics recognise the run.
+    """

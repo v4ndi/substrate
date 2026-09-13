@@ -116,7 +116,8 @@ def test_sequence_fit_and_cross_load(spark_session, write_parquet, sequence_tabl
         spark_pp.transform(sdf).toPandas().sort_values("epk_id").reset_index(drop=True)
     )
     lout = (
-        Local.load(spark_pp.dump())
+        Local
+        .load(spark_pp.dump())
         .transform(d)
         .to_pandas()
         .sort_values("epk_id")

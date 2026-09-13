@@ -1,6 +1,13 @@
 # Проведение пром/пилот сценария
 Для запуска обучения/инференса необходимо установить все дополнительные зависимости, подробная инстуркция есть в корневой директории репозитория.
-  
+
+> **Чтение с HDFS.** Датасеты умеют читать parquet прямо из РХ — в `path` можно
+> указать `hdfs://...` вместо локальной директории, и шаг `hdfs dfs -get` тогда не
+> нужен. Требуется libhdfs в окружении (`HADOOP_HOME`/`ARROW_LIBHDFS_DIR` +
+> `CLASSPATH`); каждый DataLoader-воркер поднимает свою JVM, поэтому при работе с
+> РХ следите за `num_workers`. Ниже оставлен вариант с предварительным копированием
+> на локальный диск.
+
 ---
   
 ## Инференс/Обучение пром сценария
@@ -19,7 +26,7 @@ hdfs dfs -get /user/team/team_ai_avatar/rusakov/september_pilot/prom/model_weigh
 * `metrics.test_metrics.path_to_save` - указать свою директорию, в эту директорию будут сохраняться `parquet` файлы с результатами.
 4. Запуск инференса
 ```bash
-python -m avatar.inference --config-dir=configs/prom/sequence --config-name=inference_sequence
+python -m avatar.infer --config-dir=configs/prom/sequence --config-name=inference_sequence
 ```
 5. Выгрузка эмбеддингов в РХ
 ```bash
@@ -35,7 +42,7 @@ hdfs dfs -put path_to_dir path_to_hdfs
   
 **Запуск обучния:**
 ```bash
-accelerate launch -m avatar.train --config-dir=configs/prom/tabular/train/ --config-name=PASS_YOUR_PRODUCT_NAME_CONFIG
+torchrun --standalone --nproc_per_node=1 -m avatar.train --config-dir=configs/prom/tabular/train/ --config-name=PASS_YOUR_PRODUCT_NAME_CONFIG
 ```
 
 ## Инференс продуктов общий случай

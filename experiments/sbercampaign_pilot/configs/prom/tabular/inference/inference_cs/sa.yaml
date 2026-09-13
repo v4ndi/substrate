@@ -1,18 +1,16 @@
 load_state: /home/datalab/nfs/best_models/february-pilot/${product}_cs/73750/model.bin  #####
-accelerator:
-  _target_: accelerate.Accelerator
-  _partial_: True
-  dataloader_config:
-    _target_: accelerate.utils.DataLoaderConfiguration
-    dispatch_batches: False
-  dynamo_plugin:
-    _target_: accelerate.utils.TorchDynamoPlugin
-    backend: "inductor"
+distributed:
+  backend: null  # null -> nccl on GPU, gloo on CPU
+  gradient_accumulation_steps: 1
+amp: no  # no | fp16 | bf16
+ddp:
+  find_unused_parameters: False
+compile: inductor
 product: sa
 test_dataloader:
   _target_: torch.utils.data.DataLoader
   dataset:
-    _target_: avatar.data.dataset.TabularDataset
+    _target_: avatar.data.TabularDataset
     path: /home/datalab/projects/avatards/avatar/rusakov/pilot_cs_full_table/split_type=test  ##
     shuffle_files: False
     shuffle_pq: False
@@ -24,7 +22,7 @@ test_dataloader:
   drop_last: False
   num_workers: 8
   collate_fn:
-    _target_: avatar.data.dataset.collate_fn.TabularCollateFn
+    _target_: avatar.data.TabularCollateFn
 model:
   _target_: avatar.pipeline.uplift.SLearner
   embedding:

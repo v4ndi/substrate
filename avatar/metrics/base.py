@@ -1,23 +1,46 @@
+"""The metric contract: ``update`` / ``compute`` / ``reset``.
+
+Metrics come in two kinds, and the difference is in the type, not in a comment:
+
+* :class:`ScalarMetric` produces numbers. ``compute`` returns
+  ``{name: value}``, which the trainer logs and feeds to early stopping.
+* :class:`ArtifactMetric` produces a file. Subclasses implement ``flush``;
+  ``compute`` is written once here, in the base class, and always returns an
+  empty dict.
+
+The split exists because the single contract did not hold: four collectors used
+to return ``None`` from ``compute``, and the evaluation loop merges that result
+into a dict. Now there is nowhere for a ``None`` to come from.
+
+Metrics may also declare **which fields they read** through
+:attr:`BaseMetric.required_inputs` and :attr:`BaseMetric.required_outputs`. In a
+distributed run the evaluation loop sends ``(batch, output)`` to rank 0, and the
+declaration is what lets it send two tensors instead of the whole batch. ``None``
+— the default — means "everything on that side", which is always correct and
+always the expensive answer.
+"""
+
+from __future__ import annotations
+
 import abc
 import datetime
+import logging
 import os
 
-import pandas as pd
-import torch
+logger = logging.getLogger(__name__)
 
 
 class BaseMetric(abc.ABC):
     """Abstract base class defining the interface for all metric computations.
 
     Provides the fundamental structure for metrics that need to:
-    1. Accumulate statistics across multiple batches (update)
-    2. Compute final metric values (compute)
-    3. Reset internal state between evaluations (reset)
 
-    Child classes must implement all abstract methods to support stateful metric
-    computation in iterative/streaming scenarios.
+    1. Accumulate statistics across multiple batches (``update``)
+    2. Compute final metric values (``compute``)
+    3. Reset internal state between evaluations (``reset``)
 
-    Typical usage pattern:
+    Typical usage pattern::
+
         metric = ConcreteMetric()
         for batch in dataset:
             predictions = model(batch)
@@ -25,11 +48,19 @@ class BaseMetric(abc.ABC):
         results = metric.compute()
         metric.reset()
 
-    Methods:
-        update: Process a single batch of inputs/outputs to update internal state
-        compute: Calculate final metrics from accumulated state
-        reset: Clear all accumulated state for fresh evaluation
+    Prefer subclassing :class:`ScalarMetric` or :class:`ArtifactMetric` over this
+    class directly — they fix what ``compute`` returns.
+
+    Attributes:
+        required_inputs: Keys of ``inputs`` this metric reads, or ``None`` when
+            it reads whatever the batch happens to carry. Declaring the keys
+            lets a distributed run gather only those, instead of the whole
+            batch.
+        required_outputs: The same for fields of the model's output dataclass.
     """
+
+    required_inputs: tuple[str, ...] | None = None
+    required_outputs: tuple[str, ...] | None = None
 
     @abc.abstractmethod
     def update(self, inputs, outputs) -> None:
@@ -37,12 +68,12 @@ class BaseMetric(abc.ABC):
 
         Args:
             inputs: Raw input data for the batch (typically unused, but provided
-                   for reference if metric needs input features)
-            outputs: Model predictions or raw outputs for the batch
+                for reference if the metric needs input features).
+            outputs: Model predictions or raw outputs for the batch.
 
         Note:
-            Implementation should modify internal state but not return values.
-            All computation should be deferred until compute() is called.
+            Implementations modify internal state and return nothing. All
+            computation is deferred until :meth:`compute`.
         """
         raise NotImplementedError("Method must be implemented by child classes")
 
@@ -51,12 +82,12 @@ class BaseMetric(abc.ABC):
         """Compute and return all metrics using accumulated state.
 
         Returns:
-            Dictionary of metric names to their computed values. All returned
-            values should be scalar floats suitable for logging/aggregation.
+            Dictionary of metric names to their computed values. Never
+            ``None`` — a metric with nothing to report returns ``{}``.
 
         Note:
-            Should not modify internal state. For stateful operations between
-            computations, use reset() explicitly.
+            Must not modify internal state: calling it twice in a row has to
+            give the same answer. Use :meth:`reset` to start over.
         """
         raise NotImplementedError("Method must be implemented by child classes")
 
@@ -65,110 +96,103 @@ class BaseMetric(abc.ABC):
         """Reset all internal state variables.
 
         Note:
-            Should return the metric to its initial state, as if newly instantiated.
-            Called automatically at the start of update() in some implementations.
+            Returns the metric to its initial state, as if newly instantiated.
         """
         raise NotImplementedError("Method must be implemented by child classes")
 
 
-class BaseInferenceMetric(BaseMetric):
-    """Base module Metric for inference
+class ScalarMetric(BaseMetric):
+    """A metric whose product is numbers.
 
-    Args:
-        path_to_save: Path to save dataframe
-        prefix: Prefix for saving file
-            prefix = "first" -> path_to_save/<datetime.now()>_first.csv
-            Default: None -> path_to_save/<datetime.now()>.csv
-        output_format: str: Output format
-            available: "csv", "parquet"
+    Adds nothing to :class:`BaseMetric` but the promise in its name: whatever
+    ``compute`` returns goes straight into the log and into early stopping, so
+    every value has to be a plain number under a stable name.
     """
 
+
+class ArtifactMetric(BaseMetric):
+    """A metric whose product is a file rather than a number.
+
+    Subclasses implement :meth:`flush` — accumulate, write, forget — and get
+    :meth:`compute` for free. ``compute`` writes the tail and returns ``{}``,
+    which is what keeps a collector from poisoning the score dict.
+
+    Args:
+        path_to_save: Directory for the output files; created if missing, and an
+            existing one is not an error.
+        prefix: Optional tag in the filename, to tell runs apart.
+        output_format: ``parquet`` or ``csv``.
+
+    Raises:
+        ValueError: ``output_format`` is neither ``parquet`` nor ``csv``.
+    """
+
+    #: Formats :meth:`save_dataframe` knows how to write.
+    FORMATS = ("parquet", "csv")
+
     def __init__(
         self,
         path_to_save: str,
         prefix: str | None = None,
         output_format: str = "parquet",
     ):
+        if output_format not in self.FORMATS:
+            raise ValueError(
+                f"output_format must be one of {self.FORMATS}, got {output_format!r}"
+            )
         self.path_to_save = path_to_save
-        assert output_format in ["csv", "parquet"], "Wrong output format"
         self.prefix = prefix
         self.output_format = output_format
-        if not os.path.exists(self.path_to_save):
-            os.makedirs(self.path_to_save, exist_ok=False)
+        # A directory left behind by an earlier run is not a reason to refuse to
+        # start: the run stamp below already keeps the two runs' files apart,
+        # and failing here killed the job before training even began.
+        os.makedirs(self.path_to_save, exist_ok=True)
+        self._run_stamp = datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
+        self._part = 0
 
-    def save_dataframe(self, df):
-        time_now = datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
+    def next_path(self) -> str:
+        """Path for the next part file.
 
+        Collectors flush every ``save_steps`` batches. Naming the parts by
+        timestamp alone meant two flushes inside the same second landed on the
+        same name and the second silently overwrote the first; the part counter
+        makes the name monotone however fast the flushes come.
+        """
+        name = [self._run_stamp, f"part-{self._part:05d}"]
         if self.prefix is not None:
-            cur_path = (
-                os.path.join(self.path_to_save, time_now)
-                + f"_{self.prefix}.{self.output_format}"
-            )
-        else:
-            cur_path = (
-                os.path.join(self.path_to_save, time_now) + f".{self.output_format}"
-            )
-        if self.output_format == "csv":
-            df.to_csv(cur_path, index=False)
-
-        elif self.output_format == "parquet":
-            df.to_parquet(cur_path, index=False)
-
-        self.reset()
-        print(f"predict_saved: {cur_path}")
-
-
-class ClassificationInferenceMetrics(BaseInferenceMetric):
-    def __init__(
-        self,
-        input_columns_to_save: list[str],
-        path_to_save: str,
-        classification_type: str = "binary",
-        prefix: str | None = None,
-        output_format: str = "parquet",
-    ):
-        super().__init__(
-            path_to_save=path_to_save, prefix=prefix, output_format=output_format
+            name.append(self.prefix)
+        self._part += 1
+        return os.path.join(
+            self.path_to_save, "_".join(name) + f".{self.output_format}"
         )
-        self.input_columns_to_save = input_columns_to_save
-        self.preds = []
-        self.classification_type = classification_type
 
-    def update(self, inputs, outputs):
-        self.preds.append({
-            k: v.detach().contiguous().cpu().tolist()
-            if isinstance(v, torch.Tensor)
-            else v
-            for k, v in inputs.items()
-            if k in self.input_columns_to_save
-        })
-        if self.classification_type == "binary":
-            if outputs.logits.dim() == 1:
-                predicted = (
-                    torch.nn.functional.sigmoid(outputs.logits)
-                    .detach()
-                    .contiguous()
-                    .cpu()
-                    .tolist()
-                )
-            else:
-                predicted = (
-                    torch.nn.functional.softmax(outputs.logits, dim=-1)[:, 1]
-                    .detach()
-                    .contiguous()
-                    .cpu()
-                    .tolist()
-                )
+    def save_dataframe(self, df) -> str:
+        """Write one part file and return its path."""
+        path = self.next_path()
+        if self.output_format == "csv":
+            df.to_csv(path, index=False)
+        else:
+            # Spark reads datetime64[us], pandas writes datetime64[ns].
+            for column in df.select_dtypes(include=["datetime64[ns]"]).columns:
+                df[column] = df[column].astype(str)
+            df.to_parquet(path, index=False)
+        logger.info("predictions written to %s", path)
+        return path
 
-        self.preds[-1]["predicted"] = predicted
+    @abc.abstractmethod
+    def flush(self) -> None:
+        """Write everything accumulated so far and reset.
 
-    def compute(self):
-        merged_preds = {key: [] for key in self.preds[0].keys()}
-        for pred in self.preds:
-            for key, value in pred.items():
-                merged_preds[key].extend(value)
+        Called both from :meth:`compute` and, for collectors that stream, every
+        ``save_steps`` batches from ``update``.
+        """
+        raise NotImplementedError("Method must be implemented by child classes")
 
-        self.save_dataframe(pd.DataFrame(merged_preds))
+    def compute(self) -> dict[str, float]:
+        """Write the tail of the collection.
 
-    def reset(self):
-        self.preds = []
+        Returns:
+            An empty dict. The product of this metric is the file.
+        """
+        self.flush()
+        return {}

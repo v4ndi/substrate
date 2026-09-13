@@ -1,10 +1,15 @@
+"""Aggregation layers: pool a variable number of tokens into one vector.
+
+Selected by name through :func:`get_aggregation_layer`, which is what the
+``aggregation_config`` block of a config resolves to.
+"""
+
 import torch
 import torch.nn as nn
 
 
 def get_aggregation_layer(name: str, **kwargs):
-    """
-    Returns an aggregation layer based on the provided name.
+    """Returns an aggregation layer based on the provided name.
 
     Args:
         name (str): The name of the aggregation layer to be returned.
@@ -33,8 +38,7 @@ def get_aggregation_layer(name: str, **kwargs):
 
 
 class BaseAggregation(nn.Module):
-    """
-    Base class for aggregation layers.
+    """Base class for aggregation layers.
 
     Args:
         layer_idx (int): The index of the layer to be used for aggregation. Defaults to -1.
@@ -49,8 +53,7 @@ class BaseAggregation(nn.Module):
         self.output_dim = None
 
     def expand_attn_mask(self, states, attn_msk=None):
-        """
-        Expand the attention mask to match the shape of the states.
+        """Expand the attention mask to match the shape of the states.
 
         Args:
             states (torch.Tensor): The input states.
@@ -69,11 +72,10 @@ class BaseAggregation(nn.Module):
         return seq_len, expand_attn
 
     def apply_expanded_mask(self, states, attn_msk=None):
-        """
-        Apply the expanded attention mask to the states.
+        """Apply the expanded attention mask to the states.
 
         Args:
-            states Union[torch.Tensor, Tuple(Torch.Tensor)]: The input states.
+            states: The input states, a tensor or a model output carrying them.
             attn_msk (torch.Tensor): The attention mask.
 
         Returns:
@@ -90,8 +92,7 @@ class BaseAggregation(nn.Module):
 
 
 class SumLayerNorm(BaseAggregation):
-    """
-    Aggregation layer that sums the states and applies layer normalization.
+    """Aggregation layer that sums the states and applies layer normalization.
 
     Args:
         emb_dim (int): The dimension of the embedding.
@@ -103,11 +104,10 @@ class SumLayerNorm(BaseAggregation):
         self.layer_norm = nn.LayerNorm(emb_dim)
 
     def forward(self, states, attn_msk=None):
-        """
-        Forward pass of the aggregation layer.
+        """Forward pass of the aggregation layer.
 
         Args:
-            states Union[torch.Tensor, Tuple(Torch.Tensor)]: The input states.
+            states: The input states, a tensor or a model output carrying them.
             attn_msk (torch.Tensor): The attention mask.
 
         Returns:
@@ -119,8 +119,7 @@ class SumLayerNorm(BaseAggregation):
 
 
 class ConvAggregation(BaseAggregation):
-    """
-    Aggregation layer that sums the states and applies layer normalization.
+    """Aggregation layer that sums the states and applies layer normalization.
 
     Args:
         emb_dim (int): The dimension of the embedding.
@@ -134,11 +133,10 @@ class ConvAggregation(BaseAggregation):
         self.pool_layer = nn.AdaptiveAvgPool1d(1)
 
     def forward(self, states, attn_msk=None):
-        """
-        Forward pass of the aggregation layer.
+        """Forward pass of the aggregation layer.
 
         Args:
-            states Union[torch.Tensor, Tuple(Torch.Tensor)]: The input states.
+            states: The input states, a tensor or a model output carrying them.
             attn_msk (torch.Tensor): The attention mask.
 
         Returns:
@@ -151,19 +149,16 @@ class ConvAggregation(BaseAggregation):
 
 
 class Sum(BaseAggregation):
-    """
-    Aggregation layer that sums the states.
-    """
+    """Aggregation layer that sums the states."""
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
     def forward(self, states, attn_msk=None):
-        """
-        Forward pass of the aggregation layer.
+        """Forward pass of the aggregation layer.
 
         Args:
-            states Union[torch.Tensor, Tuple(Torch.Tensor)]: The input states.
+            states: The input states, a tensor or a model output carrying them.
             attn_msk (torch.Tensor): The attention mask.
 
         Returns:
@@ -175,19 +170,16 @@ class Sum(BaseAggregation):
 
 
 class LastHiddenState(BaseAggregation):
-    """
-    Aggregation layer that returns the last hidden state.
-    """
+    """Aggregation layer that returns the last hidden state."""
 
     def __init__(self):
         super().__init__()
 
     def forward(self, states, attn_msk=None):
-        """
-        Forward pass of the aggregation layer.
+        """Forward pass of the aggregation layer.
 
         Args:
-            states Union[torch.Tensor, Tuple(Torch.Tensor)]: The input states.
+            states: The input states, a tensor or a model output carrying them.
             attn_msk (torch.Tensor): The attention mask.
 
         Returns:
@@ -203,20 +195,17 @@ class LastHiddenState(BaseAggregation):
 
 
 class MeanHiddenState(BaseAggregation):
-    """
-    Aggregation layer that returns the mean of the hidden states.
-    """
+    """Aggregation layer that returns the mean of the hidden states."""
 
     def __init__(self):
         super().__init__()
 
     def forward(self, states, attn_msk=None):
-        """
-        Forward pass of the aggregation layer.
+        """Forward pass of the aggregation layer.
 
         Args:
-            states Union[torch.Tensor, Tuple(Torch.Tensor)]: The input states.
-            attn_msk (torch.Tensor, optional): The attention mask. Defaults to None.
+            states: The input states, a tensor or a model output carrying them.
+            attn_msk: The attention mask. Defaults to None.
 
         Returns:
             torch.Tensor: The mean of the hidden states.
@@ -232,10 +221,12 @@ class MeanHiddenState(BaseAggregation):
 
 
 class LinearAggregation(BaseAggregation):
-    """
-    Aggregation layer using linear transformations.
-    Could be useful for tabular encoders.
-    This aggregation could be used for states with fixed size by second dim.
+    """Pool tokens with a learned linear combination.
+
+    Unlike mean or sum pooling, this one has to know how many tokens there
+    are, so it only works where that count is fixed — which is the tabular
+    case, not the sequence case.
+
     Args:
         num_features (int): Number of features by second dim (batch_size, n_features, emb_dim).
         emb_dim (int): Size of embeddings.
@@ -249,12 +240,12 @@ class LinearAggregation(BaseAggregation):
         self.layer_norm = nn.LayerNorm(emb_dim)
 
     def forward(self, states, attn_msk=None):
-        """
-        Forward pass of the aggregation layer.
+        """Forward pass of the aggregation layer.
 
         Args:
-            states (torch.FloatTensor): The input tensor.
-            attn_mask (torch.LongTensor): The attention mask.
+            states: The input states, a tensor or a model output carrying them.
+            attn_msk: The attention mask. Defaults to None.
+
         Returns:
             torch.Tensor: The aggregated and transformed tensor.
         """
