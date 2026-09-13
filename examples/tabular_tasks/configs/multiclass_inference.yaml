@@ -17,6 +17,7 @@ test_dataloader:
   _target_: torch.utils.data.DataLoader
   dataset:
     _target_: avatar.data.TabularDataset
+    drop_tail: false # inference keeps the tail
     path: examples/tabular_tasks/data/multiclass_smoke/valid
     shuffle_files: False
     shuffle_pq: False

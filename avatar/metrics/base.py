@@ -27,6 +27,8 @@ import datetime
 import logging
 import os
 
+from avatar.data.base.distributed import resolve_dist_info
+
 logger = logging.getLogger(__name__)
 
 
@@ -61,6 +63,15 @@ class BaseMetric(abc.ABC):
 
     required_inputs: tuple[str, ...] | None = None
     required_outputs: tuple[str, ...] | None = None
+
+    #: Whether this metric has to see every record on one rank. ROC-AUC, Qini
+    #: and calibration do — they are not sums, and a per-rank answer averaged
+    #: afterwards is a different number. A collector that writes rows to a file
+    #: does not: rank 1's rows are as good on disk as rank 0's. Declaring it
+    #: False is what lets the evaluation loop skip the cross-rank gather
+    #: entirely, which is the difference between N ranks scoring and one rank
+    #: writing, and N ranks doing both.
+    needs_full_population: bool = True
 
     @abc.abstractmethod
     def update(self, inputs, outputs) -> None:
@@ -130,6 +141,10 @@ class ArtifactMetric(BaseMetric):
     #: Formats :meth:`save_dataframe` knows how to write.
     FORMATS = ("parquet", "csv")
 
+    #: The product is rows in a directory, and rows do not care which process
+    #: wrote them. See :attr:`BaseMetric.needs_full_population`.
+    needs_full_population = False
+
     def __init__(
         self,
         path_to_save: str,
@@ -149,6 +164,11 @@ class ArtifactMetric(BaseMetric):
         os.makedirs(self.path_to_save, exist_ok=True)
         self._run_stamp = datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
         self._part = 0
+        # Two ranks construct their metric within the same second and count
+        # parts from zero, so timestamp and counter together are not unique
+        # across a distributed run — the second writer overwrites the first.
+        world_size, rank = resolve_dist_info()
+        self._rank_tag = f"rank-{rank:03d}" if world_size > 1 else None
 
     def next_path(self) -> str:
         """Path for the next part file.
@@ -156,9 +176,13 @@ class ArtifactMetric(BaseMetric):
         Collectors flush every ``save_steps`` batches. Naming the parts by
         timestamp alone meant two flushes inside the same second landed on the
         same name and the second silently overwrote the first; the part counter
-        makes the name monotone however fast the flushes come.
+        makes the name monotone however fast the flushes come, and the rank tag
+        keeps two ranks writing into the same directory from colliding.
         """
-        name = [self._run_stamp, f"part-{self._part:05d}"]
+        name = [self._run_stamp]
+        if self._rank_tag is not None:
+            name.append(self._rank_tag)
+        name.append(f"part-{self._part:05d}")
         if self.prefix is not None:
             name.append(self.prefix)
         self._part += 1
