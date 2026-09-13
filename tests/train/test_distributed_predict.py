@@ -56,21 +56,30 @@ def corpus(tmp_path) -> Path:
     return path
 
 
-def run_ranks(tmp_path, corpus, port, metric, nproc=2, drop_tail=False) -> list[dict]:
-    """Launch ``nproc`` ranks and return every rank's report."""
+def run_ranks(
+    tmp_path, corpus, port, metric, nproc=2, nnodes=1, drop_tail=False
+) -> list[dict]:
+    """Launch ``nnodes`` launcher groups of ``nproc`` ranks; return the reports.
+
+    ``nnodes > 1`` is a real multi-node job in every respect the code can see —
+    separate launcher groups, separate node ranks, one rendezvous — except that
+    the nodes happen to share this host's filesystem and clock.
+    """
     out = tmp_path / "reports"
     dump = tmp_path / "dump"
     out.mkdir(exist_ok=True)
     dump.mkdir(exist_ok=True)
 
-    command = [
+    common = [
         sys.executable,
         "-m",
         "torch.distributed.run",
         f"--nproc_per_node={nproc}",
-        "--nnodes=1",
+        f"--nnodes={nnodes}",
         "--master_addr=127.0.0.1",
         f"--master_port={port}",
+    ]
+    tail = [
         str(WORKER),
         "--path",
         str(corpus),
@@ -84,7 +93,7 @@ def run_ranks(tmp_path, corpus, port, metric, nproc=2, drop_tail=False) -> list[
         "50",
     ]
     if drop_tail:
-        command.append("--drop-tail")
+        tail.append("--drop-tail")
 
     env = dict(os.environ)
     env["PYTHONPATH"] = os.pathsep.join([
@@ -94,17 +103,21 @@ def run_ranks(tmp_path, corpus, port, metric, nproc=2, drop_tail=False) -> list[
     env["OMP_NUM_THREADS"] = "1"
     env["CUDA_VISIBLE_DEVICES"] = ""
 
-    process = subprocess.run(
-        command,
-        env=env,
-        cwd=str(REPO_ROOT),
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        timeout=900,
-    )
-    if process.returncode != 0:
-        pytest.fail(f"torchrun exited with {process.returncode}:\n{process.stdout}")
+    processes = [
+        subprocess.Popen(
+            [*common, f"--node_rank={node_rank}", *tail],
+            env=env,
+            cwd=str(REPO_ROOT),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        for node_rank in range(nnodes)
+    ]
+    outputs = [process.communicate(timeout=900)[0] for process in processes]
+    for process, stdout in zip(processes, outputs, strict=False):
+        if process.returncode != 0:
+            pytest.fail(f"torchrun exited with {process.returncode}:\n{stdout}")
 
     return [
         json.loads(Path(name).read_text())
@@ -149,3 +162,39 @@ def test_collectors_write_one_directory_without_overwriting(
         pd.concat([pd.read_parquet(part) for part in parts])["id"].tolist()
     )
     assert written == list(range(RECORDS))
+
+
+def test_two_nodes_keep_every_record_and_every_file(tmp_path, corpus, worker_port):
+    """Four ranks in two launcher groups, a collector, and no coordination.
+
+    Multi-node is where the part naming has to hold up without anyone checking:
+    nothing is gathered, so the only thing keeping two writers apart is that the
+    rank in the filename is the *global* rank, not the local one. Four ranks
+    across two nodes must produce four distinct files.
+    """
+    reports = run_ranks(
+        tmp_path, corpus, worker_port, metric="artifact", nproc=2, nnodes=2
+    )
+    assert [report["world_size"] for report in reports] == [4, 4, 4, 4]
+    assert sorted(report["rank"] for report in reports) == [0, 1, 2, 3]
+
+    parts = sorted(glob.glob(str(tmp_path / "dump" / "*.parquet")))
+    assert len({Path(part).name for part in parts}) == len(parts) == 4, (
+        f"one part file per rank expected, got {[Path(p).name for p in parts]}"
+    )
+    written = sorted(
+        pd.concat([pd.read_parquet(part) for part in parts])["id"].tolist()
+    )
+    assert written == list(range(RECORDS))
+
+
+def test_two_nodes_with_a_population_metric_still_agree(tmp_path, corpus, worker_port):
+    """The gather path across node boundaries, with shards that differ in size."""
+    reports = run_ranks(
+        tmp_path, corpus, worker_port, metric="population", nproc=2, nnodes=2
+    )
+    owned = sorted(report["records_owned"] for report in reports)
+    assert owned == [25, 25, 25, 26], f"shards were even, nothing was tested: {owned}"
+
+    main = next(report for report in reports if report["rank"] == 0)
+    assert main["scored_ids"] == list(range(RECORDS))
