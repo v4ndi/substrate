@@ -148,20 +148,18 @@ class UpliftCollateFn(TabularCollateFn):
             Dict[str, torch.Tensor]: A dictionary of processed features and target labels.
         """
         processed_batch = super().__call__(batch=batch)
-        if self.inverse_treatment:
-            processed_batch["is_treat"] = 1 - torch.LongTensor(
-                processed_batch[self.treatment_column]
-            )
-        else:
-            processed_batch["is_treat"] = torch.LongTensor(
-                processed_batch[self.treatment_column]
-            )
-        del processed_batch[self.treatment_column]
+        # Take the raw column out before writing the tensor under its batch
+        # name: when the source column is already called ``group`` — which is
+        # the name the metrics require, so it is the natural one to use — a
+        # delete afterwards removes the tensor that was just built, and the
+        # model is handed ``group=None``.
+        treatment = processed_batch.pop(self.treatment_column)
+        treatment = torch.LongTensor(treatment)
+        processed_batch["is_treat"] = 1 - treatment if self.inverse_treatment else treatment
         if self.group_column is not None:
             processed_batch["group"] = torch.LongTensor(
-                processed_batch[self.group_column]
+                processed_batch.pop(self.group_column)
             )
-            del processed_batch[self.group_column]
 
         return processed_batch
 
@@ -244,8 +242,13 @@ class SupervisedCollateFn(TabularCollateFn):
             return processed_batch
         for col_rename, col_name in self.add_extra_columns.items():
             if col_name in processed_batch:
-                processed_batch[col_rename] = torch.tensor(processed_batch[col_name])
-                del processed_batch[col_name]
+                # ``{"group": "group"}`` is the common case — the metrics
+                # require that exact key — so the raw column has to be taken
+                # out before the tensor goes in under the same name. Deleting
+                # afterwards would remove the tensor itself.
+                processed_batch[col_rename] = torch.tensor(
+                    processed_batch.pop(col_name)
+                )
         return processed_batch
 
 

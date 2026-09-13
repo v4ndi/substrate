@@ -159,11 +159,28 @@ class GroupedPredictionMetric(ScalarMetric):
             merged["split_type"] = np.full(population, CALIB_SPLIT)
         return merged
 
+    @staticmethod
+    def flat_columns(merged: dict) -> dict:
+        """Spread any column that is itself a matrix into one column per slot.
+
+        A frame is two-dimensional, so a per-record *row* of numbers — the
+        multiclass head's probability distribution — has to become
+        ``{name}_0 … {name}_{k-1}`` before pandas will take it.
+        """
+        flat: dict = {}
+        for name, column in merged.items():
+            if getattr(column, "ndim", 1) > 1:
+                for index in range(column.shape[1]):
+                    flat[f"{name}_{index}"] = column[:, index]
+            else:
+                flat[name] = column
+        return flat
+
     def write_submit(self, merged: dict) -> None:
         """Write the merged frame to ``save_submit_path``, if one was given."""
         if self.save_submit is None:
             return
         os.makedirs(self.save_submit, exist_ok=True)
         submit_path = os.path.join(self.save_submit, "predict.parquet")
-        pd.DataFrame(merged).to_parquet(submit_path, index=False)
+        pd.DataFrame(self.flat_columns(merged)).to_parquet(submit_path, index=False)
         logger.info("submit written to %s", submit_path)

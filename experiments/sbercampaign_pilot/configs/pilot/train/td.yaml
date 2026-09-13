@@ -42,7 +42,7 @@ valid_dataloader:
     inverse_treatment: True # если True то в treatment_column 0 заменяется на 1  и наоборот (В данном наборе данных 1 - КГ, 0 - ЦГ, поэтому необходимо сделать 1 - treatment_column)
     group_column: target_attr_2
 model:
-  _target_: avatar.pipeline.uplift.SLearnerExp
+  _target_: avatar.pipeline.uplift.SLearner
   embedding:
     _target_: avatar.nn.embedding.TabularEmbedding
     use_null_embedding: True
@@ -127,7 +127,7 @@ metrics:
         avg_test_calibrated_uplift_at_20: ^test_group_\d+_calibrated_uplift_at_20$
 
         avg_calib_qini_auc_score: ^calib_group_\d+_qini_auc_score$
-        avg_test_calibrated_qini_auc_score: ^cc_test_group_\d+_calibrated_qini_auc_score$
+        avg_test_calibrated_qini_auc_score: ^test_group_\d+_calibrated_qini_auc_score$
 
         avg_calib_treatment_roc_auc_score: ^calib_group_\d+_treatment_roc_auc_score$
         avg_test_treatment_roc_auc_score: ^test_group_\d+_treatment_roc_auc_score$

@@ -13,9 +13,14 @@ import numpy as np
 import pandas as pd
 import torch
 from sklearn.metrics import (
+    accuracy_score,
+    balanced_accuracy_score,
+    f1_score,
+    log_loss,
     mean_absolute_error,
     mean_absolute_percentage_error,
     mean_squared_error,
+    r2_score,
     roc_auc_score,
 )
 
@@ -75,12 +80,42 @@ def calculate_response_metrics(y_true, y_pred):
     return metrics
 
 
+def mape_over_nonzero(y_true, y_pred):
+    """Mean absolute percentage error, where a percentage means something.
+
+    ``mean_absolute_percentage_error`` divides by ``max(|y_true|, eps)``, so one
+    zero target contributes an error of roughly ``1e16``. That number is
+    *finite*, which is worse than ``nan`` would be: the undefined-value filter
+    lets it through, and it goes on to stand for the model's quality in MLflow
+    and — if it is the main metric — in early stopping. Money targets are full
+    of zeros, so this is the normal case, not an edge one.
+
+    Zero targets are excluded instead. A column that is all zeros yields no
+    number at all, which the caller drops.
+    """
+    scorable = y_true != 0
+    if not scorable.any():
+        logger.warning("mape is undefined here: every target is zero")
+        return float("nan")
+    if not scorable.all():
+        logger.warning(
+            "mape skips %d of %d records whose target is zero — a percentage "
+            "error is undefined there",
+            int((~scorable).sum()),
+            scorable.size,
+        )
+    return mean_absolute_percentage_error(y_true[scorable], y_pred[scorable])
+
+
 def calculate_regression_metrics(y_true, y_pred):
-    """MSE, MAE and MAPE."""
+    """Squared, absolute, relative and explained-variance views of the error."""
+    mse = mean_squared_error(y_true, y_pred)
     metrics = {
-        "mse": mean_squared_error(y_true, y_pred),
+        "mse": mse,
+        "rmse": float(np.sqrt(mse)),
         "mae": mean_absolute_error(y_true, y_pred),
-        "mape": mean_absolute_percentage_error(y_true, y_pred),
+        "mape": mape_over_nonzero(y_true, y_pred),
+        "r2": r2_score(y_true, y_pred),
     }
     return metrics
 
@@ -139,6 +174,20 @@ class SupervisedMetric(GroupedPredictionMetric):
             "split_type": inputs["split_type"] if "split_type" in inputs else None,
         }
 
+    def score_slice(self, merged: dict, mask: np.ndarray) -> dict[str, float]:
+        """Score one ``(group, split)`` slice of the population.
+
+        The default reads the metric family from :attr:`task_type`. Overriding
+        this is how a metric whose predictions are not one number per record —
+        a multiclass head's probability matrix, say — reuses the buffering, the
+        group loop and the mean.
+        """
+        return apply_calculate_metrics(
+            y_true=merged["y_true"][mask],
+            y_pred=merged["y_pred"][mask],
+            task_type=self.task_type,
+        )
+
     def score_group(self, merged, group, calib_mask, test_mask):
         """Score both slices of one group; the held-out one feeds the mean."""
         scores: dict[str, float] = {}
@@ -147,11 +196,7 @@ class SupervisedMetric(GroupedPredictionMetric):
             if not mask.any():
                 continue
             slice_scores = defined_scores(
-                apply_calculate_metrics(
-                    y_true=merged["y_true"][mask],
-                    y_pred=merged["y_pred"][mask],
-                    task_type=self.task_type,
-                ),
+                self.score_slice(merged, mask),
                 f"{split} slice of group {group}",
             )
             scores.update(group_prefixed(slice_scores, split, group))
@@ -209,8 +254,10 @@ class RegressionMetrics(SupervisedMetric):
         main_metric: Which metric counts as *the* number for this run.
 
     Returns from :meth:`compute`:
-        ``{calib,test}_group_{group}_{mse,mae,mape}`` plus
-        ``mean_{main_metric}`` over the groups.
+        ``{calib,test}_group_{group}_{mse,rmse,mae,mape,r2}`` plus
+        ``mean_{main_metric}`` over the groups. ``mape`` is computed over the
+        records whose target is not zero — see :func:`mape_over_nonzero` — and
+        is absent entirely when none of them is.
     """
 
     task_type = "reg"
@@ -227,6 +274,121 @@ class RegressionMetrics(SupervisedMetric):
         return outputs.logits.squeeze(1).detach().contiguous().cpu().numpy()
 
 
+def macro_ovr_auc(y_true, probabilities, labels) -> float:
+    """One-vs-rest ROC AUC, averaged over the classes this slice can score.
+
+    ``roc_auc_score(..., multi_class="ovr")`` insists that every label appear in
+    ``y_true``, which a rare class in a small group routinely does not — and it
+    raises rather than reporting what it can. Here each class is scored against
+    the rest on its own probability column, and a class with no positives (or
+    no negatives) is left out of the average instead of destroying it.
+
+    ``nan`` when no class has both sides, which the caller drops.
+    """
+    scores = []
+    skipped = []
+    for index, label in enumerate(labels):
+        positives = y_true == label
+        if not positives.any() or positives.all():
+            skipped.append(label)
+            continue
+        scores.append(roc_auc_score(positives, probabilities[:, index]))
+    if skipped:
+        logger.warning(
+            "roc_auc_score_ovr leaves out class(es) %s: this slice has no "
+            "contrast for them",
+            skipped,
+        )
+    if not scores:
+        return float("nan")
+    return float(np.mean(scores))
+
+
+def calculate_multiclass_metrics(y_true, probabilities, labels):
+    """Accuracy, its balanced twin, both F1 averages, OVR AUC and log-loss.
+
+    Args:
+        y_true: Class index per record.
+        probabilities: ``(n, num_classes)`` — a distribution per record.
+        labels: Every class the head can predict, in column order. Passed
+            explicitly so that a slice missing a class is still scored against
+            the full label set rather than a re-derived, shorter one.
+    """
+    predicted = probabilities.argmax(axis=1)
+    return {
+        "accuracy": accuracy_score(y_true, predicted),
+        # Accuracy on Covertype-shaped data measures the size of the majority
+        # class; the balanced twin measures the model.
+        "balanced_accuracy": balanced_accuracy_score(y_true, predicted),
+        "f1_macro": f1_score(
+            y_true, predicted, average="macro", labels=labels, zero_division=0
+        ),
+        "f1_weighted": f1_score(
+            y_true, predicted, average="weighted", labels=labels, zero_division=0
+        ),
+        "roc_auc_score_ovr": macro_ovr_auc(y_true, probabilities, labels),
+        "log_loss": log_loss(y_true, probabilities, labels=labels),
+    }
+
+
+class MultiClassMetrics(SupervisedMetric):
+    """Quality of a ``num_classes``-wide head, per group and per split.
+
+    Unlike the other supervised metrics, the prediction kept per record is a
+    whole row of probabilities rather than a single number — accuracy and F1
+    need the argmax, while AUC and log-loss need the distribution.
+
+    Args:
+        num_classes: Width of the head. Also the label set: classes are the
+            column indices ``0 … num_classes - 1``, which is what the target
+            column must contain.
+        save_submit_path: Directory to write per-record predictions into.
+            ``None`` writes nothing. The probability matrix is written as one
+            column per class.
+        main_metric: Which metric counts as *the* number for this run.
+            ``balanced_accuracy`` by default, because plain accuracy on an
+            unbalanced target reports the majority class rather than the model.
+
+    Returns from :meth:`compute`:
+        ``{calib,test}_group_{group}_{accuracy,balanced_accuracy,f1_macro,
+        f1_weighted,roc_auc_score_ovr,log_loss}`` plus ``mean_{main_metric}``
+        over the groups.
+    """
+
+    def __init__(
+        self,
+        num_classes: int,
+        save_submit_path: str | None = None,
+        main_metric: str | None = "balanced_accuracy",
+    ):
+        super().__init__(save_submit_path=save_submit_path, main_metric=main_metric)
+        if num_classes < 2:
+            raise ValueError(
+                f"MultiClassMetrics needs at least two classes, got {num_classes}. "
+                "A one-wide head is the response setting — use ResponseMetrics."
+            )
+        self.num_classes = num_classes
+        self.labels = list(range(num_classes))
+
+    def predictions(self, outputs) -> np.ndarray:
+        """A distribution over the classes, per record."""
+        return (
+            torch.nn.functional
+            .softmax(outputs.logits, dim=1)
+            .detach()
+            .contiguous()
+            .cpu()
+            .numpy()
+        )
+
+    def score_slice(self, merged: dict, mask: np.ndarray) -> dict[str, float]:
+        return calculate_multiclass_metrics(
+            y_true=merged["y_true"][mask].astype(int),
+            probabilities=merged["y_pred"][mask],
+            labels=self.labels,
+        )
+
+
 class InferenceSupervisedMetrics(ArtifactMetric):
     """Write per-record predictions to parquet during inference.
 
@@ -238,13 +400,23 @@ class InferenceSupervisedMetrics(ArtifactMetric):
     Args:
         path_to_save: Directory for the parquet parts; created if missing.
         save_steps: Flush every this many batches.
-        task_type: ``binary_clf`` or ``reg`` — selects how logits become the
-            saved prediction.
+        task_type: ``binary_clf``, ``reg`` or ``multi_clf`` — selects how logits
+            become the saved prediction. A multiclass run saves the chosen class
+            in ``prediction`` and the whole distribution alongside it, as
+            ``probability_0 … probability_{k-1}``: which class won is rarely the
+            only thing a downstream campaign wants to know.
         prefix: Optional tag in the filename, to tell runs apart.
 
+    The second saved column is ``target_attr_2``, the campaign group of the
+    pilot's schema. A dataset that calls that column something else maps it
+    across in the collate function —
+    ``add_extra_columns: {target_attr_2: group}`` — rather than here.
+
     Raises:
-        ValueError: ``task_type`` is neither ``binary_clf`` nor ``reg``.
+        ValueError: ``task_type`` is not one of the three.
     """
+
+    TASK_TYPES = ("binary_clf", "reg", "multi_clf")
 
     required_inputs = ("epk_id", "target_attr_2", "report_month")
     required_outputs = ("logits",)
@@ -253,30 +425,63 @@ class InferenceSupervisedMetrics(ArtifactMetric):
         self,
         path_to_save: str,
         save_steps: int,
-        task_type: Literal["binary_clf", "reg"],
+        task_type: Literal["binary_clf", "reg", "multi_clf"],
         prefix: str | None = None,
     ):
         super().__init__(path_to_save=path_to_save, prefix=prefix)
         self.preds: list[dict] = []
         self.save_steps = save_steps
-        if task_type not in ("binary_clf", "reg"):
-            raise ValueError(f"Unknown task_type: {task_type}")
+        if task_type not in self.TASK_TYPES:
+            raise ValueError(
+                f"Unknown task_type: {task_type}. One of {self.TASK_TYPES}."
+            )
         self.task_type = task_type
+
+    def predicted_columns(self, logits: torch.Tensor) -> dict[str, np.ndarray]:
+        """The prediction columns this task saves per record."""
+        if self.task_type == "multi_clf":
+            probabilities = (
+                torch.nn.functional
+                .softmax(logits, dim=1)
+                .detach()
+                .contiguous()
+                .cpu()
+                .numpy()
+            )
+            columns = {"prediction": probabilities.argmax(axis=1)}
+            columns.update({
+                f"probability_{index}": probabilities[:, index]
+                for index in range(probabilities.shape[1])
+            })
+            return columns
+
+        values = logits.squeeze(1)
+        if self.task_type == "binary_clf":
+            values = torch.nn.functional.sigmoid(values)
+        return {"prediction": values.detach().contiguous().cpu().numpy()}
+
+    @staticmethod
+    def as_column(values):
+        """Whatever the batch carried for an id column, as something a frame holds.
+
+        A column reaches the batch either as a plain list or as a tensor —
+        ``add_extra_columns`` makes tensors — and a tensor has been moved to the
+        accelerator by the time a metric sees it. pandas cannot read device
+        memory, so it comes back here.
+        """
+        if isinstance(values, torch.Tensor):
+            return values.detach().contiguous().cpu().numpy()
+        return values
 
     def update(self, inputs, outputs):
         """Accumulate one batch of predictions, flushing when the buffer is full."""
-        epk_id = inputs["epk_id"]
-        target_attr_2 = inputs.get("target_attr_2", len(epk_id) * [-1])
-
-        logits = outputs.logits.squeeze(1)
-        if self.task_type == "binary_clf":
-            logits = torch.nn.functional.sigmoid(logits)
-        prediction = logits.detach().contiguous().cpu().numpy()
+        epk_id = self.as_column(inputs["epk_id"])
+        target_attr_2 = self.as_column(inputs.get("target_attr_2", len(epk_id) * [-1]))
 
         pred_dict = {
             "epk_id": epk_id,
             "target_attr_2": target_attr_2,
-            "prediction": prediction,
+            **self.predicted_columns(outputs.logits),
         }
         if "report_month" in inputs:
             pred_dict["report_month"] = inputs["report_month"]
@@ -291,7 +496,10 @@ class InferenceSupervisedMetrics(ArtifactMetric):
         if not self.preds:
             return
 
-        columns = ["epk_id", "target_attr_2", "prediction"]
+        # The first batch fixes the schema: how many probability columns a
+        # multiclass run writes is the head's width, and that does not change
+        # between batches.
+        columns = [name for name in self.preds[0] if name != "report_month"]
         predict: dict[str, list] = {column: [] for column in columns}
 
         has_report_month = any("report_month" in item for item in self.preds)

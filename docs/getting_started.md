@@ -143,7 +143,7 @@ model:
       name: linear
       num_features: 32              # категориальных + числовых признаков
       emb_dim: 64
-  num_classes: 2
+  num_classes: 1              # одно число на запись: одна вероятность
   task_type: classification
 
 optimizer:
@@ -164,7 +164,9 @@ train:
   max_saved_checkpoints: 5
   early_stopping:
     _target_: avatar.train.EarlyStopping
-    main_metric: roc_auc_score
+    # Имя целиком, как метрика его выдаёт: ROC AUC считается по группам, а
+    # сводное число называется mean_roc_auc_score.
+    main_metric: mean_roc_auc_score
     patience: 5
     strategy: max
 

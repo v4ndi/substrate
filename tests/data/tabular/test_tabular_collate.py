@@ -7,7 +7,11 @@ import pyarrow.parquet as pq
 import pytest
 import torch
 
-from avatar.data.tabular import TabularCollateFn
+from avatar.data.tabular import (
+    SupervisedCollateFn,
+    TabularCollateFn,
+    UpliftCollateFn,
+)
 
 
 @pytest.fixture
@@ -219,6 +223,78 @@ def test_tabular_collate_fn_hidden_state(create_parquet_file):
     assert "tab_features" in processed_batch
     assert processed_batch["tab_features"].cat_features.shape == (2, 2)
     assert processed_batch["tab_features"].num_features.shape == (2, 2)
+
+
+# -- a column that already has the name the batch wants ----------------------
+#
+# The metrics declare the keys they read, and ``group`` is one of them — so
+# naming the source column ``group`` is the obvious thing to do. Both collate
+# functions used to write the tensor under that name and then delete the source
+# column by the same name, removing what they had just built.
+
+
+def records_with_a_group_column():
+    return [
+        {
+            "epk_id": index,
+            "target": index % 2,
+            "treatment": index % 2,
+            "group": index % 3,
+            "split_type": "calib",
+            "tab_features": {
+                "cat_features": torch.tensor([0, 1]),
+                "num_features": torch.tensor([0.1, 0.2]),
+            },
+        }
+        for index in range(4)
+    ]
+
+
+def test_uplift_collate_keeps_a_group_column_called_group():
+    collate_fn = UpliftCollateFn(
+        target_column="target", treatment_column="treatment", group_column="group"
+    )
+
+    batch = collate_fn(records_with_a_group_column())
+
+    assert torch.equal(batch["group"], torch.LongTensor([0, 1, 2, 0]))
+    assert torch.equal(batch["is_treat"], torch.LongTensor([0, 1, 0, 1]))
+
+
+def test_uplift_collate_still_inverts_the_treatment_flag():
+    collate_fn = UpliftCollateFn(
+        target_column="target",
+        treatment_column="treatment",
+        group_column="group",
+        inverse_treatment=True,
+    )
+
+    batch = collate_fn(records_with_a_group_column())
+
+    assert torch.equal(batch["is_treat"], torch.LongTensor([1, 0, 1, 0]))
+
+
+def test_supervised_collate_keeps_a_column_renamed_to_itself():
+    collate_fn = SupervisedCollateFn(
+        target_column="target", add_extra_columns={"group": "group"}
+    )
+
+    batch = collate_fn(records_with_a_group_column())
+
+    assert torch.equal(batch["group"], torch.tensor([0, 1, 2, 0]))
+    # A string column is left alone — the metrics read split_type as it comes.
+    assert batch["split_type"] == ["calib"] * 4
+
+
+def test_supervised_collate_still_renames_a_differently_named_column():
+    collate_fn = SupervisedCollateFn(
+        target_column="target", add_extra_columns={"group": "treatment"}
+    )
+
+    batch = collate_fn(records_with_a_group_column())
+
+    assert torch.equal(batch["group"], torch.tensor([0, 1, 0, 1]))
+    assert "treatment" not in batch
 
 
 if __name__ == "__main__":

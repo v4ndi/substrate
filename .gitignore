@@ -47,6 +47,7 @@ lightning_logs/
 **/best_models/
 **/best_model/
 checkpoints/
+predict/
 **/dynamo_cache/
 catboost_info/
 _SUCCESS

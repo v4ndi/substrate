@@ -1,0 +1,102 @@
+# Response: the same population as uplift.yaml, scored on P(visit) alone.
+#
+# The whole difference from the uplift config is that the treatment column
+# never enters the model — one head, one probability, ranked by ROC AUC.
+distributed:
+  backend: null
+  gradient_accumulation_steps: 1
+amp: no
+ddp:
+  find_unused_parameters: False
+
+train_dataloader:
+  _target_: torch.utils.data.DataLoader
+  dataset:
+    _target_: avatar.data.TabularDataset
+    path: examples/tabular_tasks/data/response_smoke/train
+    shuffle_files: True
+    shuffle_pq: True
+  batch_size: 1024
+  pin_memory: True
+  drop_last: False
+  num_workers: 2
+  collate_fn:
+    _target_: avatar.data.SupervisedCollateFn
+    target_column: target
+    # The metrics read `group` as a tensor; `split_type` and `epk_id` travel as
+    # they are. A column named anything else never reaches them.
+    add_extra_columns:
+      group: group
+
+valid_dataloader:
+  _target_: torch.utils.data.DataLoader
+  dataset:
+    _target_: avatar.data.TabularDataset
+    path: examples/tabular_tasks/data/response_smoke/valid
+    shuffle_files: False
+    shuffle_pq: False
+  batch_size: 1024
+  pin_memory: True
+  drop_last: False
+  num_workers: 2
+  collate_fn:
+    _target_: avatar.data.SupervisedCollateFn
+    target_column: target
+    add_extra_columns:
+      group: group
+
+model:
+  _target_: avatar.pipeline.tabular.TabularClassification
+  tabular_model:
+    _target_: avatar.pipeline.tabular.TabularWithAggregatedStates
+    embedding:
+      _target_: avatar.nn.embedding.TabularEmbedding
+      num_numerical_features: 2
+      hidden_size: 64
+      vocab_size: 26
+    encoder:
+      _target_: avatar.nn.tabular.TabularTransformer
+      hidden_size: ${model.tabular_model.embedding.hidden_size}
+      num_heads: 4
+      num_layers: 2
+      attn_dropout: 0.15
+    aggregation_config:
+      name: linear
+      num_features: 8
+      emb_dim: ${model.tabular_model.embedding.hidden_size}
+  num_classes: 1 # one logit -> one probability per record
+  task_type: classification
+  dropout_p: 0.2
+
+mlflow:
+  experiment_name: tabular_tasks
+  run_name: response_smoke
+  logging_dir: ./mlruns
+
+optimizer:
+  _target_: torch.optim.AdamW
+  _partial_: True
+  lr: 0.001
+  weight_decay: 0.01
+
+scheduler:
+  _target_: transformers.optimization.get_scheduler
+  _partial_: True
+  name: cosine
+  num_warmup_steps: 50
+  num_training_steps: null
+
+train:
+  seed: 42
+  num_epochs: 10
+  max_saved_checkpoints: 2
+  early_stopping:
+    _target_: avatar.train.EarlyStopping
+    main_metric: mean_roc_auc_score
+    patience: 3
+    strategy: max
+
+metrics:
+  valid_metrics:
+    _target_: avatar.metrics.ResponseMetrics
+    main_metric: roc_auc_score
