@@ -161,11 +161,6 @@ encoder:
 взялись. Наследуется от `avatar.nn.tabular.BaseTabularEncoder` — от него же
 наследуйте свой энкодер, если пишете собственный.
 
-### `avatar.nn.tabular.MLPEmbedding` (1)
-
-Узкоспециальный модуль: эмбеддит две категориальные кампанейские колонки в один
-плоский вектор — вход для downstream-модели поверх выгруженных эмбеддингов.
-
 ### `avatar.nn.sequential.EventEncoder` (3)
 
 Кодирует событие с вниманием по его атрибутам: `embedding`, `dropout_p`,
@@ -230,9 +225,6 @@ Uplift в постановке S-Learner: тот же `SupervisedLearner`, но 
 
 `avatar.pipeline.tabular.IgnoreTreatmentInteraction` — заглушка взаимодействия
 с воздействием, без параметров.
-
-Старый путь `avatar.pipeline.uplift.*` ещё работает и предупреждает об
-устаревании; он будет удалён в следующем релизе.
 
 ---
 

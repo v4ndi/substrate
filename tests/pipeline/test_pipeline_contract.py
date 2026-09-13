@@ -133,34 +133,3 @@ def test_missing_inputs_are_reported_by_name(pipeline_class):
     assert model.missing_inputs({}) == list(pipeline_class.required_inputs)
     supplied = dict.fromkeys(pipeline_class.required_inputs, object())
     assert model.missing_inputs(supplied) == []
-
-
-# -- the deprecated import path ----------------------------------------------
-
-
-def test_the_old_uplift_path_still_resolves():
-    """Forty-eight configs name it, several of them records of production runs."""
-    import avatar.pipeline.uplift as old
-
-    with pytest.warns(DeprecationWarning, match="has moved to"):
-        assert old.SLearner is not None
-
-    from avatar.pipeline.tabular import SLearner as moved
-
-    with pytest.warns(DeprecationWarning):
-        assert old.SLearner is moved
-
-
-def test_the_old_interaction_path_still_resolves():
-    import avatar.pipeline.uplift.treatment_interaction as old
-    from avatar.pipeline.tabular.interaction import IgnoreTreatmentInteraction
-
-    with pytest.warns(DeprecationWarning, match="has moved to"):
-        assert old.IgnoreTreatmentInteraction is IgnoreTreatmentInteraction
-
-
-def test_the_old_path_does_not_invent_names():
-    import avatar.pipeline.uplift as old
-
-    with pytest.raises(AttributeError):
-        old.__getattr__("SomethingThatNeverExisted")

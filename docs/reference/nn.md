@@ -81,7 +81,6 @@
 | класс | что делает |
 |---|---|
 | `TabularTransformer` | self-attention по токенам-признакам, `(B, F, D) -> (B, F, D)` |
-| `MLPEmbedding` | узкоспециальный: две кампанейские категориальные колонки → `(B, D)` |
 | `BaseTabularEncoder` | базовый класс; от него наследуйте свой энкодер |
 | `EncoderBlock`, `SublayerConnection` | блоки трансформера |
 | `build_feature_padding_mask` | маска паддинга по токенам-признакам |

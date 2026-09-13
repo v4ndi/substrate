@@ -63,7 +63,7 @@ def build(dataset: str, side: str, seed: int, tag: str, swa: bool = SWA_USAGE) -
     model = config["model"]
     # SLearnerExp in the pilot config never existed in this package; SLearner is
     # the class both revisions actually export.
-    model["_target_"] = "avatar.pipeline.uplift.SLearner"
+    model["_target_"] = "avatar.pipeline.tabular.SLearner"
     model["embedding"]["num_numerical_features"] = dims["num_numerical_features"]
     model["embedding"]["vocab_size"] = dims["vocab_size"]
     # one token per feature, plus the token the group embedding concatenates
