@@ -1,0 +1,43 @@
+product: regression_parity_product
+task_type: reg
+data:
+  input_dir:
+    train: ${oc.env:SBER_INFRA_ROOT}/data/regression/train
+    valid: ${oc.env:SBER_INFRA_ROOT}/data/regression/valid
+    test: ${oc.env:SBER_INFRA_ROOT}/data/regression/test
+  drop_columns_product: [epk_id, target, treatment, report_month]
+  inverse_treatment: true
+  unsqueeze_features: false
+  data_date_range: {min: "${date: 2023-01-01}", max: "${date: 2025-01-01}"}
+  train_date_range: {min: "${date: 2023-01-01}", max: "${date: 2024-07-01}"}
+  val_date_range: {min: "${date: 2024-07-01}", max: "${date: 2024-10-01}"}
+  test_date_range: {min: "${date: 2024-10-01}", max: "${date: 2025-01-01}"}
+  target_column: target
+  report_month_column: report_month
+  group_column: group
+  treatment_control_group_column: treatment
+  hidden_state_columns: [seq_hidden_state]
+  select_features: false
+model: {boosting_type: catboost}
+optuna_ranges:
+  catboost:
+    iterations: {low: 12, high: 12, step: 1}
+    depth: {low: 2, high: 2}
+    l2_leaf_reg: {low: 1.0, high: 1.0}
+    bagging_temperature: {low: 0.25, high: 0.25}
+    learning_rate: {low: 0.1, high: 0.1}
+train:
+  output_dir: ${oc.env:SBER_INFRA_ROOT}/outputs/regression_parity_product/autocampaignxfm
+  use_regression: true
+  use_p_model: false
+  optimization_type: mse
+  trials: 3
+  random_state: 42
+evaluate:
+  model_configs_dir: ${train.output_dir}/configs_product/
+  output_dir: ${oc.env:SBER_INFRA_ROOT}/outputs/regression_parity_product/autocampaignxfm_evaluate
+  use_p_model: false
+  is_product: true
+  campaign_scores_path: null
+  calib_months: ["2024-07-01", "2024-08-01", "2024-09-01"]
+  oot_months: ["2024-10-01", "2024-11-01", "2024-12-01"]

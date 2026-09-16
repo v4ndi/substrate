@@ -1,0 +1,31 @@
+task:
+  env_type: local
+  backend: boosting
+  engine: catboost
+  device: gpu
+  model_scope: product
+data:
+  target_column: target
+  client_id_column: epk_id
+  report_month_column: report_month
+  group_column: group
+  treatment_column: treatment
+  inverse_treatment: true
+  categorical_columns: [cat_feature_1, cat_feature_2, cat_feature_3, cat_feature_4, cat_feature_5]
+  numerical_columns: [num_feature_1, num_feature_2, num_feature_3, num_feature_4, num_feature_5]
+  hidden_state_columns: [seq_hidden_state]
+train:
+  hyperopt: true
+  optimization_metric: roc_auc_ovr_macro
+  n_trials: 1
+  random_state: 42
+  verbose: false
+  search_space:
+    iterations: [16]
+    depth: [2]
+    l2_leaf_reg: [1.0]
+    bagging_temperature: [0.25]
+    learning_rate: [0.1]
+output_dir: ${oc.env:SBER_INFRA_ROOT}/outputs/notebook_tests/multiclass/inline_yaml
+
+environment: {}

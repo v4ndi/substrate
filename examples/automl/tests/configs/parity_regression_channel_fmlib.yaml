@@ -1,0 +1,32 @@
+env_type: local
+backend: boosting
+engine: catboost
+device: gpu
+target_column: target
+client_id_column: epk_id
+report_month_column: report_month
+group_column: group
+treatment_column: treatment
+inverse_treatment: true
+model_scope: group
+categorical_columns: [cat_feature_1, cat_feature_2, cat_feature_3, cat_feature_4, cat_feature_5]
+numerical_columns: [num_feature_1, num_feature_2, num_feature_3, num_feature_4, num_feature_5]
+hidden_state_columns: [seq_hidden_state]
+hyperopt: true
+optimization_metric: mse
+n_trials: 3
+random_state: 42
+verbose: false
+calibration_windows:
+  "2024-10-01": ["2024-07-01", "2024-08-01", "2024-09-01"]
+  "2024-11-01": ["2024-08-01", "2024-09-01", "2024-10-01"]
+  "2024-12-01": ["2024-09-01", "2024-10-01", "2024-11-01"]
+search_space:
+  iterations: {type: int, low: 12, high: 12}
+  depth: {type: int, low: 2, high: 2}
+  l2_leaf_reg: {type: float, low: 1.0, high: 1.0}
+  bagging_temperature: {type: float, low: 0.25, high: 0.25}
+  learning_rate: {type: float, low: 0.1, high: 0.1}
+output_dir: ${oc.env:SBER_INFRA_ROOT}/outputs/regression_parity_channel/fmlib
+
+environment: {}

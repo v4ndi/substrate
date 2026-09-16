@@ -1,0 +1,19 @@
+env_type: local
+backend: boosting
+engine: catboost
+device: gpu
+target_column: target
+client_id_column: epk_id
+group_column: group
+date_column: report_month
+categorical_columns: [cat_feature_1, cat_feature_2, cat_feature_3, cat_feature_4, cat_feature_5]
+numerical_columns: [num_feature_1, num_feature_2, num_feature_3, num_feature_4, num_feature_5]
+hidden_state_columns: [seq_hidden_state]
+model_layout: global
+hyperopt: true
+optimization_metric: roc_auc_ovr_macro
+n_trials: 3
+random_state: 42
+verbose: true
+output_dir: ${oc.env:SBER_INFRA_ROOT}/outputs/multiclass
+environment: {}

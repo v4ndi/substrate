@@ -1,0 +1,56 @@
+# Default Optuna spaces adapted from LightAutoML boost_cb.py and boost_xgb.py
+# at commit 2757cfd4143d18a4afcf9ddc1125bd42e3db6b6a. A non-null task
+# search_space replaces these defaults.
+catboost:
+  max_depth:
+    type: int
+    low: 3
+    high: 7
+    step: 1
+  nan_mode:
+    type: categorical
+    choices: [Max, Min]
+  l2_leaf_reg:
+    type: float
+    low: 1e-8
+    high: 10.0
+    log: true
+  min_data_in_leaf:
+    type: int
+    low: 1
+    high: 20
+    step: 1
+  one_hot_max_size:
+    type: int
+    low: 3
+    high: 10
+    step: 1
+
+xgboost:
+  colsample_bytree:
+    type: categorical
+    choices: [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+  subsample:
+    type: categorical
+    choices: [0.4, 0.5, 0.6, 0.7, 0.8, 1.0]
+  max_depth:
+    type: categorical
+    choices: [5, 7, 9, 11, 13, 15, 17]
+  learning_rate:
+    type: categorical
+    choices: [0.008, 0.01, 0.012, 0.014, 0.016, 0.018, 0.02]
+  min_child_weight:
+    type: int
+    low: 1
+    high: 300
+    step: 1
+  reg_alpha:
+    type: float
+    low: 1e-3
+    high: 10.0
+    log: true
+  reg_lambda:
+    type: float
+    low: 1e-3
+    high: 10.0
+    log: true

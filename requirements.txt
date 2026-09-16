@@ -7,4 +7,4 @@
 #
 # Note: the Spark backend needs a JDK 8/11/17 on PATH (Spark 3.5 breaks on 21+).
 
--e .[spark,catboost,dev]
+-e .[spark,boosting,dev]
