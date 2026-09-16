@@ -94,9 +94,9 @@ unless the search space touches the encoding itself.
 ## 3. Locked decisions (proposed)
 
 - **N1 — one new package, `avatar/automl/backends/tabnn/`,** mirroring
-  `backends/boosting/`: `interface.py` (shared runtime), `base.py` (training
-  loop + persistence), `binary.py` / `regression.py` / `multiclass.py` /
-  `uplift.py` (task adapters), `spaces.py` (default search space).
+  `backends/boosting/`: `interface.py` (shared runtime), `base.py` (assembly,
+  the `avatar.train.train` call, persistence), `binary.py` / `regression.py` /
+  `multiclass.py` / `uplift.py` (task adapters), `spaces.py` (default space).
   `backends/boosting/**` keeps its files; only the three shared pieces move up.
 - **N2 — backend-neutral names at the task layer, with aliases.**
   `BaseBoostingTask -> BaseTask`, `SupervisedBoostingTask -> SupervisedTask`,
@@ -107,13 +107,41 @@ unless the search space touches the encoding itself.
   `resolve_backend(family: str, task: str) -> type[ModelBackend]`.
   `Task._backend_class` becomes `Task._backend_class_for(config.backend)`.
   `ArtifactRepository` takes the resolved class as it does today.
-- **N4 — the NN trains in-process with a plain torch loop,** not through
-  `avatar/train.py`. `train.py` is a Hydra CLI built around Accelerate, MLflow,
-  checkpoint directories and DDP sharding; AutoML needs N fits inside one
-  process, ranked by one validation metric, with no CLI and no distributed
-  setup. The new loop is ~200 lines in `backends/tabnn/trainer.py`; the
-  *modules* it trains and the *dataset/collate* classes it reads through are
-  avatar's, not new ones.
+- **N4 — training goes through `avatar.train.train`; AutoML owns no training
+  logic.** The `@hydra.main` decorator sits on `main()`; `train()` itself
+  (`avatar/train.py:194`) is an ordinary function taking model, optimizer,
+  scheduler, dataloaders, metrics, `TrainingArguments`, `EarlyStopping` and a
+  checkpoint directory. The tabnn backend assembles those and calls it. This
+  buys multi-GPU/DDP through Accelerate (which `EnvironmentConfig.num_gpus` /
+  `num_nodes` already expose), gradient accumulation, clipping, SWA,
+  checkpoint rotation and the existing logging — none of which a private loop
+  would get right — and it keeps one training path in the library instead of
+  two that drift apart.
+- **N4a — `train()` needs three small fixes to be callable as a library.** They
+  are defects in their own right, not AutoML accommodations:
+  1. it is annotated `-> dict[str, Any]` and returns nothing, so a caller
+     cannot learn the objective value (today it is only reachable through the
+     `EarlyStopping` object it was handed); it should return the per-epoch
+     validation scores and the selected step;
+  2. `avatar/train.py:276` calls `accelerator.trackers[0]` unguarded, so
+     training with `mlflow_arguments=None` — the documented no-tracking mode —
+     raises `IndexError`;
+  3. `logging_info` defaults to `None` but is indexed unconditionally.
+- **N4b — one Optuna trial is one `train()` call, subject to a spike.**
+  Accelerate keeps a *global* `AcceleratorState` and `train()` ends with
+  `end_training()`; whether 50 sequential calls survive in one process is
+  unverified and must be proven before the design is committed to (S3a). If it
+  does not hold, the fallback is one trial per subprocess over the spec-file
+  worker protocol AutoML already uses for remote actions (`run.py --spec`) —
+  state isolation for free, and consistent with the existing architecture.
+  Writing a second training loop is not on the list of options.
+- **N4c — ranking stays comparable across backends.** `train()` ranks by
+  `avatar.metrics` `BaseMetric` objects, AutoML by its own registry
+  (`resolve_metric(...).compute(MetricInput)`). A thin
+  `AutoMLMetric(BaseMetric)` adapter wraps the configured
+  `optimization_metric`, so `validation_metrics` mean the same thing for
+  boosting and tabnn and `EarlyStopping(main_metric=…, strategy=direction)`
+  drives on exactly that number.
 
 - **N5 — the modules are reused verbatim:**
   `avatar.nn.embedding.tabular.TabularEmbedding` → embedding,
@@ -196,7 +224,8 @@ avatar/automl/backends/
     __init__.py
     interface.py      TabNNBackend: device handling, module construction
     encoding.py       TabularPreprocessor fit + packed-parquet cache (N12)
-    trainer.py        the training loop: epochs, early stop, best-weights
+    assembly.py       build model/optimizer/scheduler/dataloaders/EarlyStopping
+    metric.py         AutoMLMetric(BaseMetric) adapter (N4c)
     loader.py         TabularDataset + TabularCollateFn over the cache
     base.py           BaseTabNNBackend: prepare_fit_data / fit_prepared / save / load
     binary.py         BinaryTabNNBackend        (num_classes=1, classification)
@@ -256,32 +285,53 @@ Two details that are decisions, not mechanics:
   `avatar/pipeline/tabular/classification.py` — a genuine pre-existing bug, not
   an AutoML concern.
 
-## 6. Training loop (`trainer.py`)
+## 6. Training: what the backend hands to `avatar.train.train`
 
-One function, deliberately small:
+No loop of our own (N4). One trial is:
 
 ```python
-fit_network(model, train_cache, valid_cache, *, objective, direction,
-            params, device, seed, verbose) -> FitOutcome
+model     = TabularClassification(                      # avatar/pipeline/tabular
+                tabular_model=TabularWithAggregatedStates(
+                    embedding=TabularEmbedding(num_numerical_features=n_num,
+                                               vocab_size=preprocessor.vocab_size,
+                                               hidden_size=params["hidden_size"]),
+                    encoder=TabularTransformer(**encoder_params),
+                    aggregation_config={"name": params["aggregation"]}),
+                num_classes=…, task_type=…, dropout_p=params["dropout_p"])
+loaders   = DataLoader(TabularDataset(cache/"train", shuffle_files=True, …),
+                       collate_fn=TabularCollateFn(target_column="target", …))
+optimizer = AdamW(model.parameters(), lr=…, weight_decay=…)
+scheduler = get_cosine_schedule_with_warmup(…)
+stopping  = EarlyStopping(main_metric=config.optimization_metric,
+                          patience=params["patience"], strategy=direction)
+
+scores = avatar.train.train(
+    accelerate_arguments={...}, mlflow_arguments=None,
+    training_arguments=TrainingArguments(num_epochs=params["max_epochs"],
+                                         seed=config.random_state,
+                                         clip_grad_norm=params.get("clip_grad_norm"),
+                                         max_saved_checkpoints=1),
+    model=model, optimizer=optimizer, scheduler=scheduler, config=…,
+    train_dataloader=train_loader, valid_dataloader=valid_loader,
+    valid_metrics=[AutoMLMetric(config.optimization_metric, task)],
+    early_stopping=stopping, checkpoint_dir=trial_dir, logging_info=…)
 ```
 
-- batches come from `TabularDataset` + `TabularCollateFn` over the cache
-  (`num_workers=0` — the encoding is already done, the reader is IO-bound and a
-  worker pool inside an Optuna trial costs more than it saves);
-- AdamW + linear warmup / cosine decay (`lr`, `weight_decay`, `warmup_ratio`);
-- one validation pass per epoch, streaming the valid cache, accumulating scores
-  and targets into two `float32` arrays (one value per row — that fits even when
-  the feature matrix does not) and computing the task's `objective_metric`;
-- `patience` epochs without improvement stops the trial; the best epoch's
-  `state_dict` is kept in memory (moved to CPU) and restored at the end;
-- `torch.manual_seed(random_state)` + deterministic algorithms where available,
-  so a re-run of the same trial reproduces its ranking;
-- progress through `avatar.automl.progress.log_progress`, in the existing
-  `[stage i/n] …` format, so local and Osiris logs stay uniform.
+The trial's objective is `stopping.best_score` (and, once N4a lands, the
+returned scores); the selected weights are the last checkpoint under
+`trial_dir`, because `apply_evaluation` writes one only when
+`early_stopping.counter == 0`, i.e. only on improvement. `test_dataloader` is
+never passed — AutoML evaluates through its own `evaluate()`, on its own
+metrics and reports.
 
-Prediction mirrors it: `predict_score` streams the test source through the
-fitted preprocessor and the model, concatenating scores — the one array that is
-allowed to be O(rows).
+What AutoML contributes on top, and nothing more:
+
+- **assembly** — modules, optimizer, scheduler and dataloaders from the trial's
+  parameters (`assembly.py`);
+- **the metric bridge** (N4c) so the ranking number is AutoML's;
+- **prediction** — `predict_score` streams the test source through the fitted
+  preprocessor and the model with `avatar.train.evaluation`'s inference-mode
+  pattern, concatenating scores: the one array allowed to be O(rows).
 
 **What this costs above the backend.** `TrainingCoordinator` currently calls
 `DataPreparation.read_source` and hands `_fit_one` two materialized frames. For
@@ -290,8 +340,8 @@ value instead; `prepare_data`'s validation work (dtype checks, hidden-state
 dims, fitted-schema enforcement) gets a lazy sibling that operates on
 `ParquetSource.scan()` — which already returns a `pl.LazyFrame` — plus one
 sampled batch for the value-level checks. This is the single largest piece of
-work in the plan and the only one that touches shared code, which is why S0's
-parity harness exists before it.
+work in the plan and the only one that touches shared AutoML code, which is why
+S0's parity harness exists before it.
 
 ## 7. Config surface
 
@@ -351,7 +401,13 @@ Every stage ends green on `pytest` **and** on the boosting parity harness.
   backends, and the lazy sibling of `prepare_data`. No tabnn code yet — this is
   a shared-code change and lands on its own, with parity byte-identical and the
   boosting path still taking materialized frames.
-- **S3 — encoder cache + trainer + `BinaryTabNNBackend`,** `hyperopt=False`,
+- **S3a — spike: is `avatar.train.train` callable N times in one process?**
+  50 sequential calls with `mlflow_arguments=None`, asserting the objective
+  comes back, no `AcceleratorState` leakage between calls and no growth in RSS
+  or open file descriptors. Lands N4a's three fixes to `avatar/train.py`. If
+  the spike fails, N4b's subprocess-per-trial fallback is adopted here — before
+  any tabnn code is written on top of the wrong assumption.
+- **S3 — encoder cache + assembly + `BinaryTabNNBackend`,** `hyperopt=False`,
   CPU, global layout. First end-to-end `train -> save -> load -> predict ->
   evaluate` on synthetic data, with a memory assertion: peak RSS stays flat as
   the synthetic train split grows 10x.
@@ -370,6 +426,8 @@ Every stage ends green on `pytest` **and** on the boosting parity harness.
 |---|---|
 | a refactor silently changes boosting results | S0 parity harness is the gate for every stage |
 | GPU memory accumulates across Optuna trials | one model per trial, explicit `del` + `torch.cuda.empty_cache()` between trials; the best trial keeps CPU weights |
+| Accelerate's global state does not survive N `train()` calls | S3a proves or disproves it before anything is built on the assumption; N4b's subprocess-per-trial fallback is the answer either way |
+| AutoML's needs slowly bend `avatar.train.train` out of shape | the only changes allowed are N4a's three, each defensible without AutoML; anything else goes to the planned `train.py` redesign instead |
 | the encoded cache needs disk next to `output_dir` | size it in the docs (packed float32 + int32 ≈ the source feature bytes); write under `output_dir/cache/<part>`, delete per model part, and fail early with a clear message if the write fails |
 | the cache write becomes the new bottleneck for small data | `prepare_fit_data` keeps an in-memory fast path when the split is provably small (row count x width under a threshold); same code path, no cache files |
 | tabnn scales past data the boosting backend cannot load | real asymmetry, and it is the boosting side that is wrong — logged as a separate follow-up (chunked pool construction / lazy `prepare_data` for boosting), not smuggled into this design |
@@ -387,6 +445,11 @@ Every stage ends green on `pytest` **and** on the boosting parity harness.
    backend, so the NN backend is out-of-core by construction (N12): sources in,
    packed parquet cache, one batch resident. This is what S2b and §6 are for,
    and it is the largest piece of shared-code work in the plan.
+
+5. **Training reuse — `avatar.train.train`, not a private loop** (N4). Its
+   Hydra wrapper is `main()`; `train()` itself takes plain arguments and already
+   provides Accelerate/DDP, early stopping, checkpoint-on-improvement and
+   logging. AutoML contributes assembly, a metric adapter and prediction.
 
 ### Still needed before S2b
 
