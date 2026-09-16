@@ -64,7 +64,7 @@ live in a torch repo. Migration is a copy + a namespace rewrite, not a port.
 | `osiris` | optional, lazy `import osiris` | absent | stays optional (**D6**) |
 
 Name collisions inside `avatar` — none. `avatar.metrics.uplift`,
-`avatar.metrics.campaign` and `avatar.pipeline.uplift` are torch/pandas code;
+`avatar.metrics.campaign` and `avatar.pipeline.tabular.uplift` are torch/pandas code;
 the AutoML copies live under `avatar.automl.metrics` / `avatar.automl.tasks`
 and never meet them on an import path. Deduplicating them is explicitly **out
 of scope** (follow-up F2).
@@ -224,7 +224,10 @@ Results as of 2026-09-16, python 3.12.12 venv, CPU only.
   backend-agnostic protocol.
 - **F2** — reconcile `avatar.automl.metrics.uplift` with `avatar.metrics.uplift`
   and `avatar.automl.reporting` with `avatar.metrics.campaign`.
-- **F3** — drop the `avatar/nn/tabular/ste` shim once D7 is resolved.
+- **F3** — ~~drop the `avatar/nn/tabular/ste` shim once D7 is resolved~~ —
+  done upstream: the deprecation shims left by the `nn` restructure were
+  deleted on `refactor/data-sharding-hdfs`. D7 is settled in the tabnn design
+  (N6): the engine is `"transformer"` and `"ste"` is rejected.
 - **F5** — the internal scratch column names (`__fmlib_remote_row_id`,
   `__fmlib_calibration_row_id`, `__fmlib_key_occurrence`, `__fmlib_truth_row`)
   and the Osiris job-name prefix `fmlib-<action>-<run id>` are kept verbatim.
@@ -236,3 +239,38 @@ Results as of 2026-09-16, python 3.12.12 venv, CPU only.
 - **F4** — `EnvironmentConfig` defaults still point at the shared fmlib
   checkout (`/home/datalab/nfs/sber-amazme-fmlib/env`) and the gigachat image;
   revisit when avatar is renamed to fmlib.
+
+## 7. Rebase onto `refactor/data-sharding-hdfs` (2026-09-17)
+
+The branch was cut from `master`. The live avatar branch is
+`refactor/data-sharding-hdfs`, 47 commits ahead and containing the whole
+train/data/pipeline/metrics refactor. The migration was rebased onto it.
+
+It cost very little, and for the reason §0 gives: `avatar/automl/**` imports
+nothing from the rest of the library, and nothing in the library imports it.
+Only four shared files were touched by both sides, and only `README.md`
+conflicted. What the new base asked for:
+
+| what changed upstream | what the migration had to do |
+|---|---|
+| ruff `D` (pydocstyle, google convention) is on, `avatar/**` and `examples/**` clean | write the 12 missing docstrings in the migrated code (8 dataclasses, 2 functions, 2 parameter lists) |
+| `tests/**` already exempt from `D` | `tests/automl/**` keeps only its `RUF043` exemption — and merges into the *existing* `per-file-ignores` table, since a second one is a duplicate TOML key |
+| `README.md` rewritten in Russian, `avatar/train/` in the layout table | the AutoML section, the `boosting` extra row and the layout row follow it |
+| `tests/docs` checks every dotted name and path-looking code span in every markdown file | both documents move to `docs/decisions/`, which that check excludes by design, and the two example READMEs qualify their paths |
+| `accelerate` dropped from dependencies | nothing: `avatar.automl` never imported it |
+
+Verification after the rebase: 575 automl tests pass unchanged; the full suite
+is 1165 passed / 2 skipped with one pre-existing failure
+(`docs/configuration/schema.md` still names `avatar.cam_inference`, removed by
+the inference refactor — untouched here, it is not ours to fix).
+
+Two local-environment notes, neither a code change: stale `__pycache__`
+directories from the pre-rebase tree made deleted modules importable as
+namespace packages (two `tests/nn` shim tests failed until they were removed),
+and `tests/conftest.py` still needs the `PYSPARK_PYTHON` line the migration
+added, now on top of the upstream builder reformat.
+
+The design document for stage 3,
+[automl_tabnn.md](automl_tabnn.md), was re-grounded on the same base — see its
+header for what moved and N4/N4a for the three `train.py` fixes that are no
+longer needed.
