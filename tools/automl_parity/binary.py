@@ -8,11 +8,12 @@ import logging
 import os
 import subprocess
 import sys
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from datetime import date
 from pathlib import Path
 from time import perf_counter
-from typing import Any, Mapping
+from typing import Any
 
 import numpy as np
 import polars as pl
@@ -122,7 +123,9 @@ def load_case(
         model_scope=reference_scope,
         target_column=str(data["target_column"]),
         client_id_column=fmlib_config.client_id_column,
-        report_month_column=str(data.get("report_month_column", fmlib_config.report_month_column)),
+        report_month_column=str(
+            data.get("report_month_column", fmlib_config.report_month_column)
+        ),
         group_column=data.get("group_column"),
         treatment_column=data.get("treatment_control_group_column"),
         inverse_treatment=bool(data["inverse_treatment"]),
@@ -147,20 +150,22 @@ def task_config(case: BinaryParityCase, output_dir: Path) -> BinaryTaskConfig:
 
 def _jsonable(value: Any) -> Any:
     """Convert comparison payload values into JSON-compatible objects."""
-    if isinstance(value, (str, int, float, bool)) or value is None:
+    if isinstance(value, str | int | float | bool) or value is None:
         return value
     if isinstance(value, np.generic):
         return value.item()
     if isinstance(value, Mapping):
         return {str(key): _jsonable(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
+    if isinstance(value, list | tuple):
         return [_jsonable(item) for item in value]
     return repr(value)
 
 
 def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
     """Write one formatted UTF-8 JSON result file."""
-    path.write_text(json.dumps(_jsonable(payload), ensure_ascii=False, indent=2), encoding="utf-8")
+    path.write_text(
+        json.dumps(_jsonable(payload), ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
 
 def run_fmlib(case: BinaryParityCase) -> dict[str, Any]:
@@ -176,7 +181,11 @@ def run_fmlib(case: BinaryParityCase) -> dict[str, Any]:
     started = perf_counter()
     prediction = task.predict(case.test_path)
     predict_seconds = perf_counter() - started
-    raw_scores = prediction.raw_scores if prediction.raw_scores is not None else prediction.scores
+    raw_scores = (
+        prediction.raw_scores
+        if prediction.raw_scores is not None
+        else prediction.scores
+    )
     calibrated_scores = prediction.scores if prediction.raw_scores is not None else None
     scores_path = output_dir / "scores.parquet"
     raw_scores.write_parquet(scores_path)
@@ -198,14 +207,21 @@ def run_fmlib(case: BinaryParityCase) -> dict[str, Any]:
         model_name = task._model_name(item.scope, item.group_value)
         model_frame = scored_test
         if item.scope == "group":
-            model_frame = scored_test.filter(pl.col(case.group_column) == item.group_value)
+            model_frame = scored_test.filter(
+                pl.col(case.group_column) == item.group_value
+            )
         test_auc[model_name] = float(
-            roc_auc_score(model_frame[case.target_column].to_numpy(), model_frame["score"].to_numpy())
+            roc_auc_score(
+                model_frame[case.target_column].to_numpy(),
+                model_frame["score"].to_numpy(),
+            )
         )
         if calibrated_test is not None:
             calibrated_model_frame = calibrated_test
             if item.scope == "group":
-                calibrated_model_frame = calibrated_test.filter(pl.col(case.group_column) == item.group_value)
+                calibrated_model_frame = calibrated_test.filter(
+                    pl.col(case.group_column) == item.group_value
+                )
             calibrated_test_auc[model_name] = float(
                 roc_auc_score(
                     calibrated_model_frame[case.target_column].to_numpy(),
@@ -215,7 +231,9 @@ def run_fmlib(case: BinaryParityCase) -> dict[str, Any]:
         resolved_model_params[model_name] = item.backend.model.get_params()
     result = {
         "pipeline": "fmlib",
-        "selected_params": {name: dict(params) for name, params in training.best_params.items()},
+        "selected_params": {
+            name: dict(params) for name, params in training.best_params.items()
+        },
         "resolved_model_params": resolved_model_params,
         "feature_names": list(training.feature_names),
         "validation_roc_auc": dict(training.validation_metrics),
@@ -228,7 +246,9 @@ def run_fmlib(case: BinaryParityCase) -> dict[str, Any]:
             "total_train_before_predict": train_seconds,
         },
         "scores_path": str(scores_path),
-        "calibrated_scores_path": str(calibrated_scores_path) if calibrated_scores is not None else None,
+        "calibrated_scores_path": str(calibrated_scores_path)
+        if calibrated_scores is not None
+        else None,
     }
     _write_json(output_dir / "result.json", result)
     return result
@@ -241,10 +261,17 @@ def _score_distribution_comparison(
 ) -> dict[str, Any]:
     """Validate the scored population and compare score distributions."""
     join_columns = [case.client_id_column]
-    if case.report_month_column in reference.columns and case.report_month_column in candidate.columns:
+    if (
+        case.report_month_column in reference.columns
+        and case.report_month_column in candidate.columns
+    ):
         join_columns.append(case.report_month_column)
-        reference = reference.with_columns(pl.col(case.report_month_column).cast(pl.String))
-        candidate = candidate.with_columns(pl.col(case.report_month_column).cast(pl.String))
+        reference = reference.with_columns(
+            pl.col(case.report_month_column).cast(pl.String)
+        )
+        candidate = candidate.with_columns(
+            pl.col(case.report_month_column).cast(pl.String)
+        )
     joined = reference.rename({"score": "reference_score"}).join(
         candidate.rename({"score": "candidate_score"}),
         on=join_columns,
@@ -266,11 +293,20 @@ def _score_distribution_comparison(
     combined = np.sort(np.concatenate((reference_scores, candidate_scores)))
     reference_sorted = np.sort(reference_scores)
     candidate_sorted = np.sort(candidate_scores)
-    reference_cdf = np.searchsorted(reference_sorted, combined, side="right") / reference_scores.size
-    candidate_cdf = np.searchsorted(candidate_sorted, combined, side="right") / candidate_scores.size
+    reference_cdf = (
+        np.searchsorted(reference_sorted, combined, side="right")
+        / reference_scores.size
+    )
+    candidate_cdf = (
+        np.searchsorted(candidate_sorted, combined, side="right")
+        / candidate_scores.size
+    )
     ks_statistic = float(np.max(np.abs(reference_cdf - candidate_cdf)))
     max_quantile_difference = float(quantile_differences.max())
-    passed = ks_statistic <= case.max_score_ks_statistic and max_quantile_difference <= case.max_score_quantile_difference
+    passed = (
+        ks_statistic <= case.max_score_ks_statistic
+        and max_quantile_difference <= case.max_score_quantile_difference
+    )
     return {
         "passed": passed,
         "rows": joined.height,
@@ -309,18 +345,24 @@ def _score_distribution_comparison(
     }
 
 
-def compare_results(reference: Mapping[str, Any], candidate: Mapping[str, Any], case: BinaryParityCase) -> dict[str, Any]:
+def compare_results(
+    reference: Mapping[str, Any], candidate: Mapping[str, Any], case: BinaryParityCase
+) -> dict[str, Any]:
     """Compare selected/native parameters, scores, metrics and elapsed time."""
     reference_params = dict(reference["selected_params"])
     candidate_params = dict(candidate["selected_params"])
 
-    def model_differences(reference_values: Mapping[str, Any], candidate_values: Mapping[str, Any]) -> dict[str, Any]:
+    def model_differences(
+        reference_values: Mapping[str, Any], candidate_values: Mapping[str, Any]
+    ) -> dict[str, Any]:
         """Return parameter differences grouped by public model key."""
         differences: dict[str, Any] = {}
         for model_name in sorted(set(reference_values) | set(candidate_values)):
             reference_model = reference_values.get(model_name)
             candidate_model = candidate_values.get(model_name)
-            if not isinstance(reference_model, Mapping) or not isinstance(candidate_model, Mapping):
+            if not isinstance(reference_model, Mapping) or not isinstance(
+                candidate_model, Mapping
+            ):
                 if reference_model != candidate_model:
                     differences[model_name] = {
                         "autocampaignxfm": reference_model,
@@ -343,14 +385,18 @@ def compare_results(reference: Mapping[str, Any], candidate: Mapping[str, Any], 
     parameter_differences = model_differences(reference_params, candidate_params)
     reference_resolved = dict(reference["resolved_model_params"])
     candidate_resolved = dict(candidate["resolved_model_params"])
-    resolved_parameter_differences = model_differences(reference_resolved, candidate_resolved)
+    resolved_parameter_differences = model_differences(
+        reference_resolved, candidate_resolved
+    )
     score_distribution = _score_distribution_comparison(
         pl.read_parquet(reference["scores_path"]),
         pl.read_parquet(candidate["scores_path"]),
         case,
     )
     calibrated_score_distribution = None
-    if reference.get("calibrated_scores_path") and candidate.get("calibrated_scores_path"):
+    if reference.get("calibrated_scores_path") and candidate.get(
+        "calibrated_scores_path"
+    ):
         calibrated_score_distribution = _score_distribution_comparison(
             pl.read_parquet(reference["calibrated_scores_path"]),
             pl.read_parquet(candidate["calibrated_scores_path"]),
@@ -365,7 +411,9 @@ def compare_results(reference: Mapping[str, Any], candidate: Mapping[str, Any], 
         """Return reference-to-candidate elapsed-time ratio when defined."""
         return float(reference_value / candidate_value) if candidate_value else None
 
-    def metric_comparison(reference_values: Mapping[str, float], candidate_values: Mapping[str, float]) -> dict[str, Any]:
+    def metric_comparison(
+        reference_values: Mapping[str, float], candidate_values: Mapping[str, float]
+    ) -> dict[str, Any]:
         """Compare one metric for each product or channel model."""
         rows: dict[str, Any] = {}
         for model_name in sorted(set(reference_values) | set(candidate_values)):
@@ -383,15 +431,23 @@ def compare_results(reference: Mapping[str, Any], candidate: Mapping[str, Any], 
             }
         return rows
 
-    validation_metrics = metric_comparison(reference["validation_roc_auc"], candidate["validation_roc_auc"])
-    test_metrics = metric_comparison(reference["test_roc_auc"], candidate["test_roc_auc"])
+    validation_metrics = metric_comparison(
+        reference["validation_roc_auc"], candidate["validation_roc_auc"]
+    )
+    test_metrics = metric_comparison(
+        reference["test_roc_auc"], candidate["test_roc_auc"]
+    )
     calibrated_test_metrics = metric_comparison(
         reference.get("calibrated_test_roc_auc", {}),
         candidate.get("calibrated_test_roc_auc", {}),
     )
     metric_differences = [
         row["absolute_difference"]
-        for row in (*validation_metrics.values(), *test_metrics.values(), *calibrated_test_metrics.values())
+        for row in (
+            *validation_metrics.values(),
+            *test_metrics.values(),
+            *calibrated_test_metrics.values(),
+        )
         if row["absolute_difference"] is not None
     ]
     metric_keys_equal = (
@@ -400,7 +456,10 @@ def compare_results(reference: Mapping[str, Any], candidate: Mapping[str, Any], 
         and set(reference.get("calibrated_test_roc_auc", {}))
         == set(candidate.get("calibrated_test_roc_auc", {}))
     )
-    roc_auc_passed = metric_keys_equal and max(metric_differences, default=float("inf")) <= case.max_roc_auc_difference
+    roc_auc_passed = (
+        metric_keys_equal
+        and max(metric_differences, default=float("inf")) <= case.max_roc_auc_difference
+    )
     reference_features = reference.get("feature_names")
     candidate_features = candidate.get("feature_names")
     feature_names_equal = (
@@ -412,7 +471,10 @@ def compare_results(reference: Mapping[str, Any], candidate: Mapping[str, Any], 
         (params_equal or not case.require_equal_best_params)
         and feature_names_equal is not False
         and score_distribution["passed"]
-        and (calibrated_score_distribution is None or calibrated_score_distribution["passed"])
+        and (
+            calibrated_score_distribution is None
+            or calibrated_score_distribution["passed"]
+        )
         and roc_auc_passed
     )
     return {
@@ -443,13 +505,17 @@ def compare_results(reference: Mapping[str, Any], candidate: Mapping[str, Any], 
                     reference_timing["total_train_before_predict"],
                     candidate_timing["total_train_before_predict"],
                 ),
-                "predict": ratio(reference_timing["predict"], candidate_timing["predict"]),
+                "predict": ratio(
+                    reference_timing["predict"], candidate_timing["predict"]
+                ),
             },
         },
     }
 
 
-def run_reference(case: BinaryParityCase, autocampaign_root: Path, autocampaign_python: Path) -> dict[str, Any]:
+def run_reference(
+    case: BinaryParityCase, autocampaign_root: Path, autocampaign_python: Path
+) -> dict[str, Any]:
     """Run the reference adapter in a subprocess with autocampaignxfm importable."""
     autocampaign_root = autocampaign_root.expanduser().resolve()
     autocampaign_python = autocampaign_python.expanduser().resolve()
@@ -473,7 +539,7 @@ def run_reference(case: BinaryParityCase, autocampaign_root: Path, autocampaign_
     matplotlib_directory = reference_output / ".matplotlib"
     matplotlib_directory.mkdir(parents=True, exist_ok=True)
     environment["MPLCONFIGDIR"] = str(matplotlib_directory)
-    subprocess.run(  # noqa: S603 - executable and repository paths are explicit CLI inputs
+    subprocess.run(
         [
             str(autocampaign_python),
             "-m",
@@ -505,7 +571,10 @@ def run_comparison(
     comparison = compare_results(reference, candidate, case)
     comparison_path = case.output_dir / "comparison.json"
     _write_json(comparison_path, comparison)
-    logger.info("Comparison:\n%s", json.dumps(_jsonable(comparison), ensure_ascii=False, indent=2))
+    logger.info(
+        "Comparison:\n%s",
+        json.dumps(_jsonable(comparison), ensure_ascii=False, indent=2),
+    )
     logger.info("Comparison report: %s", comparison_path)
     return comparison
 
@@ -513,7 +582,9 @@ def run_comparison(
 def main() -> None:
     """Run parity from terminal arguments and fail on a contract mismatch."""
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    parser = argparse.ArgumentParser(description="Compare fmlib binary boosting with autocampaignxfm")
+    parser = argparse.ArgumentParser(
+        description="Compare fmlib binary boosting with autocampaignxfm"
+    )
     parser.add_argument(
         "--autocampaign-config",
         required=True,
@@ -526,7 +597,12 @@ def main() -> None:
         type=Path,
         help="YAML loaded by BinaryTaskConfig.from_yaml",
     )
-    parser.add_argument("--autocampaign-root", required=True, type=Path, help="Path to the autocampaignxfm repository")
+    parser.add_argument(
+        "--autocampaign-root",
+        required=True,
+        type=Path,
+        help="Path to the autocampaignxfm repository",
+    )
     parser.add_argument(
         "--autocampaign-python",
         type=Path,

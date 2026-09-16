@@ -7,13 +7,18 @@ import logging
 import os
 import sys
 import uuid
+from collections.abc import Callable, Mapping
 from dataclasses import asdict
 from pathlib import Path, PurePosixPath
 from time import perf_counter
-from typing import Any, Callable, Literal, Mapping, TypeVar
+from typing import Any, Literal, TypeVar
 
 from avatar.automl.config.base import BaseTaskConfig
-from avatar.automl.exceptions import ConfigError, MissingDependencyError, RemoteExecutionError
+from avatar.automl.exceptions import (
+    ConfigError,
+    MissingDependencyError,
+    RemoteExecutionError,
+)
 from avatar.automl.progress import use_progress_logger
 
 logger = logging.getLogger(__name__)
@@ -113,15 +118,24 @@ class EnvironmentRunner:
             msg = "EnvironmentRunner.run_local requires env_type='local'"
             raise ConfigError(msg)
         run_id = uuid.uuid4().hex
-        log_dir = Path(config.environment.log_dir or Path(config.output_dir) / "logs").expanduser().resolve()
+        log_dir = (
+            Path(config.environment.log_dir or Path(config.output_dir) / "logs")
+            .expanduser()
+            .resolve()
+        )
         log_dir.mkdir(parents=True, exist_ok=True)
         log_path = log_dir / f"{run_id}.{action}.log"
         action_started = perf_counter()
         run_logger = logging.getLogger(f"avatar.automl.local.{run_id}")
         run_logger.setLevel(logging.INFO)
         run_logger.propagate = False
-        formatter = logging.Formatter(f"%(asctime)s %(levelname)s run_id={run_id} %(message)s")
-        handlers = [logging.StreamHandler(), logging.FileHandler(log_path, encoding="utf-8")]
+        formatter = logging.Formatter(
+            f"%(asctime)s %(levelname)s run_id={run_id} %(message)s"
+        )
+        handlers = [
+            logging.StreamHandler(),
+            logging.FileHandler(log_path, encoding="utf-8"),
+        ]
         for handler in handlers:
             handler.setFormatter(formatter)
             run_logger.addHandler(handler)
@@ -137,10 +151,17 @@ class EnvironmentRunner:
             )
             with use_progress_logger(run_logger):
                 result = callback()
-            run_logger.info("Finished action=%s duration_seconds=%.3f", action, perf_counter() - action_started)
+            run_logger.info(
+                "Finished action=%s duration_seconds=%.3f",
+                action,
+                perf_counter() - action_started,
+            )
             return result
         except Exception:
-            run_logger.exception("AutoML action failed duration_seconds=%.3f", perf_counter() - action_started)
+            run_logger.exception(
+                "AutoML action failed duration_seconds=%.3f",
+                perf_counter() - action_started,
+            )
             raise
         finally:
             for handler in handlers:
@@ -163,7 +184,10 @@ class EnvironmentRunner:
 
     @staticmethod
     def _resources(config: BaseTaskConfig) -> tuple[int, int]:
-        return config.environment.resolved_num_nodes, config.environment.resolved_num_gpus
+        return (
+            config.environment.resolved_num_nodes,
+            config.environment.resolved_num_gpus,
+        )
 
     @staticmethod
     def _job_id(response: Any) -> str:
@@ -233,11 +257,17 @@ class EnvironmentRunner:
                 "num_nodes": num_nodes,
             },
         }
-        spec_path.write_text(json.dumps(spec, default=_json_default, ensure_ascii=False, indent=2), encoding="utf-8")
+        spec_path.write_text(
+            json.dumps(spec, default=_json_default, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
 
         job_name = f"fmlib-{action}-{run_id[:8]}"
         envs = dict(config.environment.env)
-        if config.environment.resource_profile == "supercomp" and config.backend == "boosting":
+        if (
+            config.environment.resource_profile == "supercomp"
+            and config.backend == "boosting"
+        ):
             envs["CUDA_VISIBLE_DEVICES"] = "0"
         kwargs: dict[str, Any] = {
             "name": job_name,
@@ -257,7 +287,13 @@ class EnvironmentRunner:
         submit_log = run_dir / "submit.log"
         submit_log.write_text(
             json.dumps(
-                {"run_id": run_id, "job_id": job_id, "job_name": job_name, "request": kwargs, "response": response},
+                {
+                    "run_id": run_id,
+                    "job_id": job_id,
+                    "job_name": job_name,
+                    "request": kwargs,
+                    "response": response,
+                },
                 default=_json_default,
                 ensure_ascii=False,
                 indent=2,
@@ -293,10 +329,15 @@ class EnvironmentRunner:
             "state": "queued",
         }
 
-    def poll_jobs(self, jobs: list[Mapping[str, Any]]) -> tuple[str, list[dict[str, Any]]]:
+    def poll_jobs(
+        self, jobs: list[Mapping[str, Any]]
+    ) -> tuple[str, list[dict[str, Any]]]:
         """Poll exact Osiris job IDs and return aggregate and detailed states."""
         rows = self.osiris.list().get("jobs", [])
-        by_id = {str(row.get("job_id") or row.get("job") or row.get("id")): row for row in rows}
+        by_id = {
+            str(row.get("job_id") or row.get("job") or row.get("id")): row
+            for row in rows
+        }
         details: list[dict[str, Any]] = []
         for job in jobs:
             row = by_id.get(str(job["job_id"]))
@@ -307,8 +348,12 @@ class EnvironmentRunner:
                 | {
                     "state": state,
                     "scheduler": row,
-                    "submitted_time": None if row is None else row.get("submitted_time") or row.get("created_at"),
-                    "updated_time": None if row is None else row.get("updated_time") or row.get("updated_at"),
+                    "submitted_time": None
+                    if row is None
+                    else row.get("submitted_time") or row.get("created_at"),
+                    "updated_time": None
+                    if row is None
+                    else row.get("updated_time") or row.get("updated_at"),
                 }
             )
         states = {item["state"] for item in details}
@@ -330,16 +375,29 @@ class EnvironmentRunner:
         """Collect scheduler and shared-filesystem diagnostics for failed jobs."""
         chunks: list[str] = []
         for job in jobs:
-            chunks.append(json.dumps(job.get("scheduler", {}), default=_json_default, ensure_ascii=False, indent=2))
+            chunks.append(
+                json.dumps(
+                    job.get("scheduler", {}),
+                    default=_json_default,
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
             for field in ("submit_log_path", "remote_log_path", "result_path"):
                 path = Path(str(job.get(field, "")))
                 if path.is_file():
-                    chunks.append(f"===== {path} =====\n{path.read_text(encoding='utf-8', errors='replace')}")
+                    chunks.append(
+                        f"===== {path} =====\n{path.read_text(encoding='utf-8', errors='replace')}"
+                    )
             for method_name in ("logs", "log"):
                 method = getattr(self.osiris, method_name, None)
                 if callable(method):
                     try:
-                        chunks.append(f"===== osiris.{method_name}({job['job_id']}) =====\n{method(job['job_id'])}")
-                    except Exception as exc:  # noqa: BLE001 - scheduler APIs differ between installations
-                        chunks.append(f"osiris.{method_name} failed: {type(exc).__name__}: {exc}")
+                        chunks.append(
+                            f"===== osiris.{method_name}({job['job_id']}) =====\n{method(job['job_id'])}"
+                        )
+                    except Exception as exc:
+                        chunks.append(
+                            f"osiris.{method_name} failed: {type(exc).__name__}: {exc}"
+                        )
         return "\n".join(chunks)

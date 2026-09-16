@@ -30,7 +30,9 @@ def test_default_model_params_match_lightautoml_boosters():
 
 
 def test_default_search_spaces_have_expected_ranges():
-    catboost = default_search_space("catboost", n_trials=51, has_nan=True, has_categorical=True)
+    catboost = default_search_space(
+        "catboost", n_trials=51, has_nan=True, has_categorical=True
+    )
     xgboost = default_search_space("xgboost", n_trials=31)
 
     assert catboost == {
@@ -84,7 +86,9 @@ def test_default_model_params_return_an_isolated_copy():
         (300_001, 0.05, 3_000),
     ],
 )
-def test_catboost_binary_defaults_depend_on_train_rows(train_rows, learning_rate, num_trees):
+def test_catboost_binary_defaults_depend_on_train_rows(
+    train_rows, learning_rate, num_trees
+):
     params = default_model_params("catboost", task="binary", train_rows=train_rows)
 
     assert params["learning_rate"] == learning_rate
@@ -93,14 +97,30 @@ def test_catboost_binary_defaults_depend_on_train_rows(train_rows, learning_rate
 
 
 def test_catboost_multiclass_and_regression_defaults_depend_on_task_and_train_rows():
-    small_multiclass = default_model_params("catboost", task="multiclass", train_rows=100_000)
-    large_multiclass = default_model_params("catboost", task="multiclass", train_rows=100_001)
+    small_multiclass = default_model_params(
+        "catboost", task="multiclass", train_rows=100_000
+    )
+    large_multiclass = default_model_params(
+        "catboost", task="multiclass", train_rows=100_001
+    )
     regression = default_model_params("catboost", task="regression", train_rows=1)
 
-    assert (small_multiclass["learning_rate"], small_multiclass["num_trees"]) == (0.03, 3_000)
-    assert (large_multiclass["learning_rate"], large_multiclass["num_trees"]) == (0.03, 4_000)
-    assert (regression["learning_rate"], regression["num_trees"], regression["od_wait"]) == (0.05, 2_000, 300)
+    assert (small_multiclass["learning_rate"], small_multiclass["num_trees"]) == (
+        0.03,
+        3_000,
+    )
+    assert (large_multiclass["learning_rate"], large_multiclass["num_trees"]) == (
+        0.03,
+        4_000,
+    )
+    assert (
+        regression["learning_rate"],
+        regression["num_trees"],
+        regression["od_wait"],
+    ) == (0.05, 2_000, 300)
 
 
 def test_xgboost_defaults_do_not_depend_on_task_or_train_rows():
-    assert default_model_params("xgboost", task="binary", train_rows=1) == default_model_params("xgboost")
+    assert default_model_params(
+        "xgboost", task="binary", train_rows=1
+    ) == default_model_params("xgboost")

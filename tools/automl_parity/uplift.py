@@ -7,11 +7,12 @@ import json
 import os
 import subprocess
 import sys
+from collections.abc import Mapping
 from dataclasses import replace
 from datetime import date
 from pathlib import Path
 from time import perf_counter
-from typing import Any, Mapping
+from typing import Any
 
 import numpy as np
 import polars as pl
@@ -23,15 +24,24 @@ from avatar.automl.metrics import qini_auc_score, uplift_at_k, uplift_auc_score
 _LEARNERS = ("s", "t", "x")
 
 
-def _metrics(target: np.ndarray, treatment: np.ndarray, effect: np.ndarray) -> dict[str, float]:
+def _metrics(
+    target: np.ndarray, treatment: np.ndarray, effect: np.ndarray
+) -> dict[str, float]:
     return {
         "qini_auc": float(qini_auc_score(target, effect, treatment)),
         "uplift_auc": float(uplift_auc_score(target, effect, treatment)),
-        **{f"uplift_at_{k}": float(uplift_at_k(target, effect, treatment, "overall", k / 100)) for k in (10, 20, 50)},
+        **{
+            f"uplift_at_{k}": float(
+                uplift_at_k(target, effect, treatment, "overall", k / 100)
+            )
+            for k in (10, 20, 50)
+        },
     }
 
 
-def run_fmlib(config: UpliftTaskConfig, train: Path, valid: Path, test: Path, output: Path) -> dict[str, Any]:
+def run_fmlib(
+    config: UpliftTaskConfig, train: Path, valid: Path, test: Path, output: Path
+) -> dict[str, Any]:
     """Run the public fmlib lifecycle and persist normalized parity scores."""
     task = UpliftTask(replace(config, output_dir=output))
     started = perf_counter()
@@ -41,7 +51,11 @@ def run_fmlib(config: UpliftTaskConfig, train: Path, valid: Path, test: Path, ou
     prediction = task.predict(test)
     evaluation = task.evaluate(test, prediction)
     evaluation_seconds = perf_counter() - started
-    raw_scores = prediction.raw_scores if prediction.raw_scores is not None else prediction.scores
+    raw_scores = (
+        prediction.raw_scores
+        if prediction.raw_scores is not None
+        else prediction.scores
+    )
     calibrated_scores = prediction.scores if prediction.raw_scores is not None else None
     scores_path = output / "scores.parquet"
     raw_scores.write_parquet(scores_path)
@@ -51,7 +65,9 @@ def run_fmlib(config: UpliftTaskConfig, train: Path, valid: Path, test: Path, ou
     return {
         "pipeline": "fmlib",
         "scores_path": str(scores_path),
-        "calibrated_scores_path": str(calibrated_scores_path) if calibrated_scores is not None else None,
+        "calibrated_scores_path": str(calibrated_scores_path)
+        if calibrated_scores is not None
+        else None,
         "best_params": dict(training.best_params),
         "metrics": {
             learner: {
@@ -88,7 +104,10 @@ def run_reference(
     """Launch the isolated adapter that invokes both real reference entrypoints."""
     environment = os.environ.copy()
     repo_root = Path(__file__).resolve().parents[2]
-    environment["PYTHONPATH"] = os.pathsep.join((str(autocampaign_root), str(repo_root)))
+    environment["PYTHONPATH"] = os.pathsep.join((
+        str(autocampaign_root),
+        str(repo_root),
+    ))
     environment["MPLBACKEND"] = "Agg"
     environment["PYTHONIOENCODING"] = "utf-8"
     command = [
@@ -104,7 +123,7 @@ def run_reference(
         "--output",
         str(output),
     ]
-    subprocess.run(command, cwd=repo_root, env=environment, check=True)  # noqa: S603
+    subprocess.run(command, cwd=repo_root, env=environment, check=True)
     return json.loads((output / "result.json").read_text(encoding="utf-8"))
 
 
@@ -117,19 +136,32 @@ def _distribution(reference: np.ndarray, candidate: np.ndarray) -> dict[str, Any
         "fmlib_mean": float(candidate.mean()),
         "reference_std": float(reference.std()),
         "fmlib_std": float(candidate.std()),
-        "max_quantile_difference": float(np.max(np.abs(reference_quantiles - candidate_quantiles))),
+        "max_quantile_difference": float(
+            np.max(np.abs(reference_quantiles - candidate_quantiles))
+        ),
     }
 
 
-def compare(reference: Mapping[str, Any], candidate: Mapping[str, Any], config: UpliftTaskConfig) -> dict[str, Any]:
+def compare(
+    reference: Mapping[str, Any], candidate: Mapping[str, Any], config: UpliftTaskConfig
+) -> dict[str, Any]:
     """Compare metrics, score distributions, parameters and elapsed time."""
     join_columns = [config.client_id_column, config.report_month_column]
 
     def distributions_for(reference_path: str, candidate_path: str) -> dict[str, Any]:
-        reference_scores = pl.read_parquet(reference_path).with_columns(pl.col(config.report_month_column).cast(pl.String))
-        candidate_scores = pl.read_parquet(candidate_path).with_columns(pl.col(config.report_month_column).cast(pl.String))
-        joined = reference_scores.join(candidate_scores, on=join_columns, suffix="_fmlib", validate="1:1")
-        if joined.height != reference_scores.height or joined.height != candidate_scores.height:
+        reference_scores = pl.read_parquet(reference_path).with_columns(
+            pl.col(config.report_month_column).cast(pl.String)
+        )
+        candidate_scores = pl.read_parquet(candidate_path).with_columns(
+            pl.col(config.report_month_column).cast(pl.String)
+        )
+        joined = reference_scores.join(
+            candidate_scores, on=join_columns, suffix="_fmlib", validate="1:1"
+        )
+        if (
+            joined.height != reference_scores.height
+            or joined.height != candidate_scores.height
+        ):
             msg = "Reference and fmlib score populations do not match by client/month"
             raise AssertionError(msg)
         return {
@@ -150,21 +182,37 @@ def compare(reference: Mapping[str, Any], candidate: Mapping[str, Any], config: 
             for learner in _LEARNERS
         }
 
-    distributions = distributions_for(reference["scores_path"], candidate["scores_path"])
-    metric_differences = metric_differences_for(reference["metrics"], candidate["metrics"])
+    distributions = distributions_for(
+        reference["scores_path"], candidate["scores_path"]
+    )
+    metric_differences = metric_differences_for(
+        reference["metrics"], candidate["metrics"]
+    )
     calibrated_distributions = None
     calibrated_metric_differences = None
-    if reference.get("calibrated_scores_path") and candidate.get("calibrated_scores_path"):
-        calibrated_distributions = distributions_for(reference["calibrated_scores_path"], candidate["calibrated_scores_path"])
-        calibrated_metric_differences = metric_differences_for(reference["calibrated_metrics"], candidate["calibrated_metrics"])
+    if reference.get("calibrated_scores_path") and candidate.get(
+        "calibrated_scores_path"
+    ):
+        calibrated_distributions = distributions_for(
+            reference["calibrated_scores_path"], candidate["calibrated_scores_path"]
+        )
+        calibrated_metric_differences = metric_differences_for(
+            reference["calibrated_metrics"], candidate["calibrated_metrics"]
+        )
     return {
         "reference_uses_real_trainer_evaluator": True,
-        "best_params": {"reference": reference["best_params"], "fmlib": candidate["best_params"]},
+        "best_params": {
+            "reference": reference["best_params"],
+            "fmlib": candidate["best_params"],
+        },
         "metric_absolute_differences": metric_differences,
         "calibrated_metric_absolute_differences": calibrated_metric_differences,
         "score_distributions": distributions,
         "calibrated_score_distributions": calibrated_distributions,
-        "timing_seconds": {"reference": reference["timing_seconds"], "fmlib": candidate["timing_seconds"]},
+        "timing_seconds": {
+            "reference": reference["timing_seconds"],
+            "fmlib": candidate["timing_seconds"],
+        },
         "categorical_note": (
             "Small differences are expected when fmlib uses native CatBoost categorical features while the "
             "reference preprocessing supplies a legacy numeric matrix."
@@ -177,14 +225,18 @@ def main() -> None:
     parser.add_argument("--reference-config", required=True, type=Path)
     parser.add_argument("--fmlib-config", required=True, type=Path)
     parser.add_argument("--autocampaign-root", required=True, type=Path)
-    parser.add_argument("--autocampaign-python", type=Path, default=Path(sys.executable))
+    parser.add_argument(
+        "--autocampaign-python", type=Path, default=Path(sys.executable)
+    )
     args = parser.parse_args()
     config = UpliftTaskConfig.from_yaml(args.fmlib_config)
     if config.n_trials != 3:
         msg = "Uplift terminal parity requires n_trials=3"
         raise ConfigError(msg)
     reference_payload = (
-        json.loads(args.reference_config.read_text(encoding="utf-8")) if args.reference_config.suffix == ".json" else None
+        json.loads(args.reference_config.read_text(encoding="utf-8"))
+        if args.reference_config.suffix == ".json"
+        else None
     )
     if reference_payload and "data" in reference_payload:
         data = reference_payload["data"]["input_dir"]
@@ -193,7 +245,9 @@ def main() -> None:
 
         if not OmegaConf.has_resolver("date"):
             OmegaConf.register_new_resolver("date", date.fromisoformat)
-        data = OmegaConf.to_container(OmegaConf.load(args.reference_config), resolve=True)["data"]["input_dir"]
+        data = OmegaConf.to_container(
+            OmegaConf.load(args.reference_config), resolve=True
+        )["data"]["input_dir"]
     output = Path(config.output_dir).expanduser().resolve() / "parity"
     output.mkdir(parents=True, exist_ok=True)
     reference = run_reference(
@@ -203,9 +257,17 @@ def main() -> None:
         autocampaign_python=args.autocampaign_python.resolve(),
         output=output / "reference",
     )
-    candidate = run_fmlib(config, Path(data["train"]), Path(data["valid"]), Path(data["test"]), output / "fmlib")
+    candidate = run_fmlib(
+        config,
+        Path(data["train"]),
+        Path(data["valid"]),
+        Path(data["test"]),
+        output / "fmlib",
+    )
     report = compare(reference, candidate, config)
-    (output / "comparison.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    (output / "comparison.json").write_text(
+        json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
 
 if __name__ == "__main__":

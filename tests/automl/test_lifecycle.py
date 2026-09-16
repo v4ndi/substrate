@@ -70,40 +70,60 @@ def test_active_duplicate_prediction_for_the_same_path_is_rejected(tmp_path):
         store.start_operation("predict", dataset_path=dataset)
 
 
-def test_dead_local_owner_is_interrupted_and_no_longer_blocks_retry(tmp_path, monkeypatch):
+def test_dead_local_owner_is_interrupted_and_no_longer_blocks_retry(
+    tmp_path, monkeypatch
+):
     store = _store(tmp_path)
     dataset = tmp_path / "test"
-    operation = store.start_operation("predict", dataset_path=dataset, runtime={"env_type": "local"})
+    operation = store.start_operation(
+        "predict", dataset_path=dataset, runtime={"env_type": "local"}
+    )
     store.update_operation(operation, state="running")
-    monkeypatch.setattr(AutoMLStore, "_local_owner_is_alive", staticmethod(lambda _owner: False))
+    monkeypatch.setattr(
+        AutoMLStore, "_local_owner_is_alive", staticmethod(lambda _owner: False)
+    )
 
     recovered = store.reconcile_local_operations()
 
     assert len(recovered) == 1
     assert recovered[0]["state"] == "interrupted"
-    retry = store.start_operation("predict", dataset_path=dataset, runtime={"env_type": "osiris"})
+    retry = store.start_operation(
+        "predict", dataset_path=dataset, runtime={"env_type": "osiris"}
+    )
     assert retry["state"] == "created"
 
 
 def test_live_local_owner_keeps_duplicate_prediction_locked(tmp_path, monkeypatch):
     store = _store(tmp_path)
     dataset = tmp_path / "test"
-    operation = store.start_operation("predict", dataset_path=dataset, runtime={"env_type": "local"})
+    operation = store.start_operation(
+        "predict", dataset_path=dataset, runtime={"env_type": "local"}
+    )
     store.update_operation(operation, state="running")
-    monkeypatch.setattr(AutoMLStore, "_local_owner_is_alive", staticmethod(lambda _owner: True))
+    monkeypatch.setattr(
+        AutoMLStore, "_local_owner_is_alive", staticmethod(lambda _owner: True)
+    )
 
     assert store.reconcile_local_operations() == []
     with pytest.raises(RemoteExecutionError, match="already active"):
-        store.start_operation("predict", dataset_path=dataset, runtime={"env_type": "osiris"})
+        store.start_operation(
+            "predict", dataset_path=dataset, runtime={"env_type": "osiris"}
+        )
 
 
 def test_expired_cross_host_heartbeat_is_interrupted(tmp_path, monkeypatch):
     store = _store(tmp_path)
-    operation = store.start_operation("evaluate", dataset_path=tmp_path / "test", runtime={"env_type": "local"})
+    operation = store.start_operation(
+        "evaluate", dataset_path=tmp_path / "test", runtime={"env_type": "local"}
+    )
     store.update_operation(
         operation,
         state="running",
-        owner={"hostname": "another-host", "pid": 123, "token": operation["owner"]["token"]},
+        owner={
+            "hostname": "another-host",
+            "pid": 123,
+            "token": operation["owner"]["token"],
+        },
         heartbeat_at=0.0,
     )
     monkeypatch.setattr("avatar.automl.lifecycle.time.time", lambda: 121.0)

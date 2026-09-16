@@ -7,16 +7,21 @@ import json
 import os
 import subprocess
 import sys
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from datetime import date
 from pathlib import Path
 from time import perf_counter
-from typing import Any, Mapping
+from typing import Any
 
 import numpy as np
 import polars as pl
 from omegaconf import OmegaConf
-from sklearn.metrics import mean_absolute_error, mean_absolute_percentage_error, mean_squared_error
+from sklearn.metrics import (
+    mean_absolute_error,
+    mean_absolute_percentage_error,
+    mean_squared_error,
+)
 
 from avatar.automl import RegressionTask, RegressionTaskConfig
 from avatar.automl.exceptions import ConfigError
@@ -60,7 +65,9 @@ def _absolute(value: str | Path, name: str) -> Path:
     return path.resolve()
 
 
-def load_case(autocampaign_config_path: str | Path, fmlib_config_path: str | Path) -> RegressionParityCase:
+def load_case(
+    autocampaign_config_path: str | Path, fmlib_config_path: str | Path
+) -> RegressionParityCase:
     """Load and cross-check independent native regression configurations."""
     if not OmegaConf.has_resolver("date"):
         OmegaConf.register_new_resolver("date", date.fromisoformat)
@@ -81,7 +88,11 @@ def load_case(autocampaign_config_path: str | Path, fmlib_config_path: str | Pat
         "n_trials": int(train["trials"]),
         "metric": train["optimization_type"],
     }
-    mismatches = {name: (value, getattr(config, name)) for name, value in expected.items() if value != getattr(config, name)}
+    mismatches = {
+        name: (value, getattr(config, name))
+        for name, value in expected.items()
+        if value != getattr(config, name)
+    }
     if payload.get("task_type") != "reg" or mismatches:
         msg = f"Regression parity configs disagree: task_type={payload.get('task_type')!r}, fields={mismatches}"
         raise ConfigError(msg)
@@ -131,7 +142,11 @@ def run_fmlib(case: RegressionParityCase) -> dict[str, Any]:
     prediction = task.predict(case.test_path)
     predict_seconds = perf_counter() - started
     evaluation = task.evaluate(case.test_path, prediction)
-    raw_scores = prediction.raw_scores if prediction.raw_scores is not None else prediction.scores
+    raw_scores = (
+        prediction.raw_scores
+        if prediction.raw_scores is not None
+        else prediction.scores
+    )
     calibrated_scores = prediction.scores if prediction.raw_scores is not None else None
     scores_path = output / "scores.parquet"
     raw_scores.write_parquet(scores_path)
@@ -144,23 +159,37 @@ def run_fmlib(case: RegressionParityCase) -> dict[str, Any]:
         "validation_objective": training.validation_metrics,
         "test_metrics": evaluation.metrics,
         "calibrated_test_metrics": evaluation.calibrated_metrics,
-        "timing_seconds": {"train": train_seconds, "predict": predict_seconds, "total": train_seconds + predict_seconds},
+        "timing_seconds": {
+            "train": train_seconds,
+            "predict": predict_seconds,
+            "total": train_seconds + predict_seconds,
+        },
         "scores_path": str(scores_path),
-        "calibrated_scores_path": str(calibrated_scores_path) if calibrated_scores is not None else None,
+        "calibrated_scores_path": str(calibrated_scores_path)
+        if calibrated_scores is not None
+        else None,
     }
-    (output / "result.json").write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+    (output / "result.json").write_text(
+        json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     return result
 
 
-def _distribution(reference: pl.DataFrame, candidate: pl.DataFrame, case: RegressionParityCase) -> dict[str, Any]:
+def _distribution(
+    reference: pl.DataFrame, candidate: pl.DataFrame, case: RegressionParityCase
+) -> dict[str, Any]:
     keys = [case.client_id_column, case.report_month_column]
     reference = reference.with_columns(pl.col(case.report_month_column).cast(pl.String))
     candidate = candidate.with_columns(pl.col(case.report_month_column).cast(pl.String))
-    joined = reference.rename({"score": "reference"}).join(candidate.rename({"score": "candidate"}), on=keys, validate="1:1")
+    joined = reference.rename({"score": "reference"}).join(
+        candidate.rename({"score": "candidate"}), on=keys, validate="1:1"
+    )
     left, right = joined["reference"].to_numpy(), joined["candidate"].to_numpy()
     grid = np.asarray([0.01, 0.05, 0.25, 0.5, 0.75, 0.95, 0.99])
     scale = max(float(np.std(left)), np.finfo(float).eps)
-    quantile_difference = float(np.max(np.abs(np.quantile(left, grid) - np.quantile(right, grid))) / scale)
+    quantile_difference = float(
+        np.max(np.abs(np.quantile(left, grid) - np.quantile(right, grid))) / scale
+    )
     combined = np.sort(np.concatenate((left, right)))
     left_cdf = np.searchsorted(np.sort(left), combined, side="right") / len(left)
     right_cdf = np.searchsorted(np.sort(right), combined, side="right") / len(right)
@@ -169,45 +198,66 @@ def _distribution(reference: pl.DataFrame, candidate: pl.DataFrame, case: Regres
         "rows": joined.height,
         "ks_statistic": ks,
         "normalized_max_quantile_difference": quantile_difference,
-        "passed": ks <= case.max_score_ks_statistic and quantile_difference <= case.max_score_quantile_difference,
+        "passed": ks <= case.max_score_ks_statistic
+        and quantile_difference <= case.max_score_quantile_difference,
     }
 
 
-def compare_results(reference: Mapping[str, Any], candidate: Mapping[str, Any], case: RegressionParityCase) -> dict[str, Any]:
+def compare_results(
+    reference: Mapping[str, Any],
+    candidate: Mapping[str, Any],
+    case: RegressionParityCase,
+) -> dict[str, Any]:
     """Compare all regression metrics, score distributions, params and elapsed time."""
+
     def compare_metrics(reference_metrics, candidate_metrics):
         rows = {}
         for name in ("mse", "mae", "mape"):
             left, right = float(reference_metrics[name]), float(candidate_metrics[name])
             relative = abs(left - right) / max(abs(left), np.finfo(float).eps)
-            rows[name] = {"autocampaignxfm": left, "fmlib": right, "relative_difference": relative}
+            rows[name] = {
+                "autocampaignxfm": left,
+                "fmlib": right,
+                "relative_difference": relative,
+            }
         return rows
 
     metric_rows = compare_metrics(reference["test_metrics"], candidate["test_metrics"])
     calibrated_metric_rows = None
-    if reference.get("calibrated_test_metrics") and candidate.get("calibrated_test_metrics"):
+    if reference.get("calibrated_test_metrics") and candidate.get(
+        "calibrated_test_metrics"
+    ):
         calibrated_metric_rows = compare_metrics(
             reference["calibrated_test_metrics"], candidate["calibrated_test_metrics"]
         )
-    distribution = _distribution(pl.read_parquet(reference["scores_path"]), pl.read_parquet(candidate["scores_path"]), case)
+    distribution = _distribution(
+        pl.read_parquet(reference["scores_path"]),
+        pl.read_parquet(candidate["scores_path"]),
+        case,
+    )
     calibrated_distribution = None
-    if reference.get("calibrated_scores_path") and candidate.get("calibrated_scores_path"):
+    if reference.get("calibrated_scores_path") and candidate.get(
+        "calibrated_scores_path"
+    ):
         calibrated_distribution = _distribution(
             pl.read_parquet(reference["calibrated_scores_path"]),
             pl.read_parquet(candidate["calibrated_scores_path"]),
             case,
         )
     all_metric_rows = list(metric_rows.values()) + (
-        list(calibrated_metric_rows.values()) if calibrated_metric_rows is not None else []
+        list(calibrated_metric_rows.values())
+        if calibrated_metric_rows is not None
+        else []
     )
     metrics_passed = all(
-        row["relative_difference"] <= case.max_relative_metric_difference for row in all_metric_rows
+        row["relative_difference"] <= case.max_relative_metric_difference
+        for row in all_metric_rows
     )
     params_equal = reference["selected_params"] == candidate["selected_params"]
     return {
-        "passed": metrics_passed and distribution["passed"] and (
-            calibrated_distribution is None or calibrated_distribution["passed"]
-        ),
+        "passed": metrics_passed
+        and distribution["passed"]
+        and (calibrated_distribution is None or calibrated_distribution["passed"]),
         "metrics": metric_rows,
         "calibrated_metrics": calibrated_metric_rows,
         "score_distribution": distribution,
@@ -217,19 +267,30 @@ def compare_results(reference: Mapping[str, Any], candidate: Mapping[str, Any], 
             "Native categorical CatBoost features in fmlib can change objectives and the selected trial versus the "
             "numeric encoded matrix; fmlib intentionally keeps native categorical handling."
         ),
-        "selected_params": {"autocampaignxfm": reference["selected_params"], "fmlib": candidate["selected_params"]},
-        "timing_seconds": {"autocampaignxfm": reference["timing_seconds"], "fmlib": candidate["timing_seconds"]},
+        "selected_params": {
+            "autocampaignxfm": reference["selected_params"],
+            "fmlib": candidate["selected_params"],
+        },
+        "timing_seconds": {
+            "autocampaignxfm": reference["timing_seconds"],
+            "fmlib": candidate["timing_seconds"],
+        },
     }
 
 
-def run_reference(case: RegressionParityCase, autocampaign_root: Path, autocampaign_python: Path) -> dict[str, Any]:
+def run_reference(
+    case: RegressionParityCase, autocampaign_root: Path, autocampaign_python: Path
+) -> dict[str, Any]:
     """Run the configured reference trainer/evaluator in its own environment."""
     environment = os.environ.copy()
     repo_root = Path(__file__).resolve().parents[2]
-    environment["PYTHONPATH"] = os.pathsep.join((str(autocampaign_root.resolve()), str(repo_root)))
+    environment["PYTHONPATH"] = os.pathsep.join((
+        str(autocampaign_root.resolve()),
+        str(repo_root),
+    ))
     environment["PYTHONIOENCODING"] = "utf-8"
     environment["MPLBACKEND"] = "Agg"
-    subprocess.run(  # noqa: S603 - executable and repository inputs are explicit CLI parameters
+    subprocess.run(
         [
             str(autocampaign_python.resolve()),
             "-m",
@@ -243,7 +304,11 @@ def run_reference(case: RegressionParityCase, autocampaign_root: Path, autocampa
         env=environment,
         check=True,
     )
-    return json.loads((case.output_dir / "autocampaignxfm" / "result.json").read_text(encoding="utf-8"))
+    return json.loads(
+        (case.output_dir / "autocampaignxfm" / "result.json").read_text(
+            encoding="utf-8"
+        )
+    )
 
 
 def run_comparison(
@@ -259,7 +324,9 @@ def run_comparison(
     candidate = run_fmlib(case)
     comparison = compare_results(reference, candidate, case)
     case.output_dir.mkdir(parents=True, exist_ok=True)
-    (case.output_dir / "comparison.json").write_text(json.dumps(comparison, ensure_ascii=False, indent=2), encoding="utf-8")
+    (case.output_dir / "comparison.json").write_text(
+        json.dumps(comparison, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     return comparison
 
 
@@ -268,7 +335,9 @@ def main() -> None:
     parser.add_argument("--autocampaign-config", required=True, type=Path)
     parser.add_argument("--fmlib-config", required=True, type=Path)
     parser.add_argument("--autocampaign-root", required=True, type=Path)
-    parser.add_argument("--autocampaign-python", type=Path, default=Path(sys.executable))
+    parser.add_argument(
+        "--autocampaign-python", type=Path, default=Path(sys.executable)
+    )
     args = parser.parse_args()
     result = run_comparison(
         args.autocampaign_config,

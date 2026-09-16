@@ -20,7 +20,11 @@ def _output_from_message(message: dict[str, Any]) -> dict[str, Any] | None:
     message_type = message["header"]["msg_type"]
     content = message["content"]
     if message_type == "stream":
-        return {"name": content["name"], "output_type": "stream", "text": content["text"]}
+        return {
+            "name": content["name"],
+            "output_type": "stream",
+            "text": content["text"],
+        }
     if message_type in {"display_data", "execute_result"}:
         output = {
             "data": content["data"],
@@ -46,7 +50,9 @@ def execute_notebook(path: Path, *, working_directory: Path) -> None:
 
     def save() -> None:
         """Persist progress so a later failing cell keeps earlier outputs."""
-        path.write_text(json.dumps(notebook, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+        path.write_text(
+            json.dumps(notebook, ensure_ascii=False, indent=1) + "\n", encoding="utf-8"
+        )
 
     manager = KernelManager()
     with tempfile.TemporaryDirectory(
@@ -98,7 +104,9 @@ def main() -> None:
     args = parser.parse_args()
     for notebook in args.notebooks:
         logger.info("Executing %s", notebook)
-        execute_notebook(notebook.resolve(), working_directory=args.working_directory.resolve())
+        execute_notebook(
+            notebook.resolve(), working_directory=args.working_directory.resolve()
+        )
 
 
 if __name__ == "__main__":

@@ -3,13 +3,18 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping, Sequence
-from typing import Any, Callable
+from collections.abc import Callable, Mapping, Sequence
+from typing import Any
 
 import polars as pl
 
 from avatar.automl.config.base import BaseTaskConfig
-from avatar.automl.data import CanonicalColumnMapper, ParquetSource, normalize_date, prepare_data
+from avatar.automl.data import (
+    CanonicalColumnMapper,
+    ParquetSource,
+    normalize_date,
+    prepare_data,
+)
 from avatar.automl.exceptions import SchemaError
 from avatar.automl.types import CalibrationResult, ParquetPath, PredictionResult
 
@@ -22,12 +27,21 @@ def metric_slices(config: BaseTaskConfig) -> tuple[tuple[str, tuple[str, ...]], 
     if config.group_column is not None:
         slices.append(("group", (config.group_column,)))
     if config.date_column is not None:
-        columns = (config.date_column, config.group_column) if config.group_column is not None else (config.date_column,)
-        slices.append(("date_group" if config.group_column is not None else "date", columns))
+        columns = (
+            (config.date_column, config.group_column)
+            if config.group_column is not None
+            else (config.date_column,)
+        )
+        slices.append((
+            "date_group" if config.group_column is not None else "date",
+            columns,
+        ))
     return tuple(slices)
 
 
-def combine_metric_slices(tables: Sequence[pl.DataFrame], config: BaseTaskConfig) -> pl.DataFrame | None:
+def combine_metric_slices(
+    tables: Sequence[pl.DataFrame], config: BaseTaskConfig
+) -> pl.DataFrame | None:
     """Combine heterogeneous slice tables with a stable role-first column order."""
     if not tables:
         return None
@@ -50,7 +64,11 @@ def prepare_evaluation_truth(
         config.group_column if model.layout == "global" else None,
         getattr(config, "treatment_column", None),
     )
-    excluded = (config.group_column,) if model.layout == "per_group" and config.group_column else ()
+    excluded = (
+        (config.group_column,)
+        if model.layout == "per_group" and config.group_column
+        else ()
+    )
     prepared, _ = prepare_data(
         frame,
         config,
@@ -67,7 +85,7 @@ def scalar_score_inputs(
     scores: PredictionResult | CalibrationResult | ParquetPath,
 ) -> pl.DataFrame:
     """Return the explicitly selected scalar score frame."""
-    if isinstance(scores, (PredictionResult, CalibrationResult)):
+    if isinstance(scores, PredictionResult | CalibrationResult):
         return scores.scores
     return ParquetSource.resolve(scores).read()
 
@@ -82,7 +100,12 @@ def scalar_prediction_result(
     columns = ["__row_id", config.client_id_column]
     if config.date_column is not None:
         columns.append(config.date_column)
-    result = frame.select(columns).with_columns(pl.Series("score", scores)).sort("__row_id").drop("__row_id")
+    result = (
+        frame.select(columns)
+        .with_columns(pl.Series("score", scores))
+        .sort("__row_id")
+        .drop("__row_id")
+    )
     return PredictionResult(scores=mapper.restore_frame(result))
 
 
@@ -124,13 +147,18 @@ def align_prediction_scores(
     occurrence order. Calibrated scores retain validation without repeating it.
     """
     if "model_scope" in external_scores.columns:
-        msg = "Scores use incompatible legacy model_scope metadata; expected model_layout"
+        msg = (
+            "Scores use incompatible legacy model_scope metadata; expected model_layout"
+        )
         raise SchemaError(msg)
     scores = mapper.normalize_frame(external_scores)
     if config.date_column is not None:
         scores = normalize_date(scores, config.date_column)
     truth_duplicates = _check_global_keys(
-        truth, config, source=f"{operation_name.lower()} data", public_column_names=mapper.to_external
+        truth,
+        config,
+        source=f"{operation_name.lower()} data",
+        public_column_names=mapper.to_external,
     )
     score_duplicates = _check_global_keys(
         scores,
@@ -153,11 +181,21 @@ def align_prediction_scores(
         )
     if "model_layout" in scores.columns:
         branches = []
-        for key, branch in scores.partition_by("model_layout", as_dict=True, maintain_order=True).items():
+        for key, branch in scores.partition_by(
+            "model_layout", as_dict=True, maintain_order=True
+        ).items():
             scope = key[0] if isinstance(key, tuple) else key
             branch_truth = truth
-            if scope == "per_group" and config.group_column and config.group_column in branch.columns:
-                branch_truth = truth.filter(pl.col(config.group_column).is_in(branch[config.group_column].unique().to_list()))
+            if (
+                scope == "per_group"
+                and config.group_column
+                and config.group_column in branch.columns
+            ):
+                branch_truth = truth.filter(
+                    pl.col(config.group_column).is_in(
+                        branch[config.group_column].unique().to_list()
+                    )
+                )
             aligned = _align_prediction_branch(
                 branch.drop("model_layout"),
                 branch_truth,
@@ -190,14 +228,24 @@ def _check_global_keys(
     join_columns.extend(extra_keys)
     missing = sorted(set(join_columns) - set(frame.columns))
     if missing:
-        visible = [public_column_names.get(name, name) for name in missing] if public_column_names else missing
+        visible = (
+            [public_column_names.get(name, name) for name in missing]
+            if public_column_names
+            else missing
+        )
         msg = (
             f"Scores are missing required columns: {visible}"
             if source == "scores"
             else f"{source.capitalize()} is missing identity key columns: {visible}"
         )
         raise SchemaError(msg)
-    duplicates = frame.group_by(join_columns).len().filter(pl.col("len") > 1).select(join_columns).head(3)
+    duplicates = (
+        frame.group_by(join_columns)
+        .len()
+        .filter(pl.col("len") > 1)
+        .select(join_columns)
+        .head(3)
+    )
     return duplicates.to_dicts()
 
 
@@ -218,27 +266,46 @@ def _align_prediction_branch(
         msg = f"Scores are missing required columns: {missing}"
         raise SchemaError(msg)
     metric_columns = [
-        column for column in (config.group_column,) if column and column in truth.columns and column not in join_columns
+        column
+        for column in (config.group_column,)
+        if column and column in truth.columns and column not in join_columns
     ]
     occurrence_column = "__fmlib_key_occurrence"
-    scores = scores.with_columns(pl.int_range(pl.len()).over(join_columns).alias(occurrence_column))
-    truth = truth.with_columns(pl.int_range(pl.len()).over(join_columns).alias(occurrence_column))
+    scores = scores.with_columns(
+        pl.int_range(pl.len()).over(join_columns).alias(occurrence_column)
+    )
+    truth = truth.with_columns(
+        pl.int_range(pl.len()).over(join_columns).alias(occurrence_column)
+    )
     occurrence_keys = [*join_columns, occurrence_column]
     score_keys = scores.select(occurrence_keys)
     truth_keys = truth.select(occurrence_keys)
     missing_scores = truth_keys.join(score_keys, on=occurrence_keys, how="anti")
     extra_scores = score_keys.join(truth_keys, on=occurrence_keys, how="anti")
-    if scores.height != truth.height or not missing_scores.is_empty() or not extra_scores.is_empty():
-        msg = (
-            f"Scores must match evaluation rows one-to-one by {join_columns}; expected {truth.height} rows, got {scores.height}"
-        )
+    if (
+        scores.height != truth.height
+        or not missing_scores.is_empty()
+        or not extra_scores.is_empty()
+    ):
+        msg = f"Scores must match evaluation rows one-to-one by {join_columns}; expected {truth.height} rows, got {scores.height}"
         raise SchemaError(msg)
     selected_truth_columns = list(
-        dict.fromkeys([*occurrence_keys, *metric_columns, config.target_column, *truth_columns])
+        dict.fromkeys([
+            *occurrence_keys,
+            *metric_columns,
+            config.target_column,
+            *truth_columns,
+        ])
     )
-    truth_values = truth.select(selected_truth_columns).with_row_index("__fmlib_truth_row")
+    truth_values = truth.select(selected_truth_columns).with_row_index(
+        "__fmlib_truth_row"
+    )
     return (
-        truth_values.join(scores.select([*occurrence_keys, *score_columns]), on=occurrence_keys, how="left")
+        truth_values.join(
+            scores.select([*occurrence_keys, *score_columns]),
+            on=occurrence_keys,
+            how="left",
+        )
         .sort("__fmlib_truth_row")
         .drop("__fmlib_truth_row", occurrence_column)
     )

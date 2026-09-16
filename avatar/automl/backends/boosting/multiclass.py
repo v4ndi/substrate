@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, ClassVar, Mapping
+from typing import Any, ClassVar
 
 import numpy as np
 
 from avatar.automl.backends.boosting.base import BaseBoostingBackend
-from avatar.automl.exceptions import ArtifactIntegrityError, MissingDependencyError, UnsupportedBackendError
+from avatar.automl.exceptions import (
+    ArtifactIntegrityError,
+    MissingDependencyError,
+    UnsupportedBackendError,
+)
 
 
 @dataclass
@@ -35,7 +40,9 @@ class MulticlassBoostingBackend(BaseBoostingBackend):
             msg = f"Unsupported local boosting device: {self.device!r}"
             raise UnsupportedBackendError(msg)
         if self.num_classes < 3:
-            msg = f"Multiclass backend requires num_classes >= 3; got {self.num_classes}"
+            msg = (
+                f"Multiclass backend requires num_classes >= 3; got {self.num_classes}"
+            )
             raise ArtifactIntegrityError(msg)
         if self.engine == "catboost":
             params = self._model_params_with_defaults(excluded=("boost_from_average",))
@@ -76,14 +83,20 @@ class MulticlassBoostingBackend(BaseBoostingBackend):
             raise UnsupportedBackendError(msg)
 
     def _after_fit(self) -> None:
-        classes = np.asarray(getattr(self.model, "classes_", np.arange(self.num_classes))).reshape(-1)
+        classes = np.asarray(
+            getattr(self.model, "classes_", np.arange(self.num_classes))
+        ).reshape(-1)
         self.estimator_class_order = tuple(int(value) for value in classes)
 
     def predict_prepared_score(self, features: Any) -> np.ndarray:
         """Return a finite normalized matrix aligned to encoded classes ``0..K-1``."""
         kwargs = {"task_type": "CPU"} if self.engine == "catboost" else {}
-        probabilities = np.asarray(self.model.predict_proba(features, **kwargs), dtype=float)
-        if probabilities.ndim != 2 or probabilities.shape[1] != len(self.estimator_class_order):
+        probabilities = np.asarray(
+            self.model.predict_proba(features, **kwargs), dtype=float
+        )
+        if probabilities.ndim != 2 or probabilities.shape[1] != len(
+            self.estimator_class_order
+        ):
             msg = (
                 "Estimator probability output is inconsistent with its class mapping: "
                 f"shape={probabilities.shape}, classes={self.estimator_class_order}"
@@ -96,11 +109,15 @@ class MulticlassBoostingBackend(BaseBoostingBackend):
                 raise ArtifactIntegrityError(msg)
             aligned[:, encoded_class] = probabilities[:, source_index]
         if not np.isfinite(aligned).all() or np.any(aligned < 0) or np.any(aligned > 1):
-            msg = "Estimator returned non-finite or out-of-range multiclass probabilities"
+            msg = (
+                "Estimator returned non-finite or out-of-range multiclass probabilities"
+            )
             raise ArtifactIntegrityError(msg)
         totals = aligned.sum(axis=1)
         if np.any(totals <= 0):
-            msg = "Estimator returned a multiclass probability row with non-positive sum"
+            msg = (
+                "Estimator returned a multiclass probability row with non-positive sum"
+            )
             raise ArtifactIntegrityError(msg)
         aligned /= totals[:, None]
         return aligned
@@ -113,4 +130,6 @@ class MulticlassBoostingBackend(BaseBoostingBackend):
 
     def _restore_artifact_state(self, state: Mapping[str, Any]) -> None:
         self.num_classes = int(state.get("num_classes", 0))
-        self.estimator_class_order = tuple(int(value) for value in state.get("estimator_class_order", ()))
+        self.estimator_class_order = tuple(
+            int(value) for value in state.get("estimator_class_order", ())
+        )

@@ -23,12 +23,10 @@ def _schema():
 
 
 def _frame():
-    return pl.DataFrame(
-        {
-            "segment": ["a", "b", "a", "b", "a", "b", "a", "b"],
-            "balance": [-2.0, -1.0, -0.5, -0.1, 0.1, 0.5, 1.0, 2.0],
-        }
-    )
+    return pl.DataFrame({
+        "segment": ["a", "b", "a", "b", "a", "b", "a", "b"],
+        "balance": [-2.0, -1.0, -0.5, -0.1, 0.1, 0.5, 1.0, 2.0],
+    })
 
 
 def test_supported_catboost_accepts_native_polars_pool_input():
@@ -52,7 +50,9 @@ def test_supported_catboost_accepts_native_polars_pool_input():
         ("xgboost", {"n_estimators": 8, "max_depth": 2}),
     ],
 )
-def test_backend_fit_predict_is_deterministic_and_ignores_column_order(tmp_path, engine, params):
+def test_backend_fit_predict_is_deterministic_and_ignores_column_order(
+    tmp_path, engine, params
+):
     pytest.importorskip(engine)
     frame = _frame()
     target = np.array([0, 0, 0, 0, 1, 1, 1, 1])
@@ -61,7 +61,10 @@ def test_backend_fit_predict_is_deterministic_and_ignores_column_order(tmp_path,
     backend.fit(frame, target, _schema(), valid_frame=frame, valid_target=target)
     direct = backend.predict_score(frame, _schema())
     reordered = backend.predict_score(
-        frame.with_columns(pl.lit("unused").alias("extra")).select("extra", "balance", "segment"), _schema()
+        frame.with_columns(pl.lit("unused").alias("extra")).select(
+            "extra", "balance", "segment"
+        ),
+        _schema(),
     )
     artifact = tmp_path / engine
     backend.save(artifact)
@@ -89,18 +92,26 @@ def test_unknown_category_is_handled_at_inference(engine):
     pytest.importorskip(engine)
     frame = _frame()
     target = np.array([0, 0, 0, 0, 1, 1, 1, 1])
-    params = {"iterations": 6, "depth": 2} if engine == "catboost" else {"n_estimators": 6, "max_depth": 2}
+    params = (
+        {"iterations": 6, "depth": 2}
+        if engine == "catboost"
+        else {"n_estimators": 6, "max_depth": 2}
+    )
     backend = BinaryBoostingBackend(engine, params, random_state=42, device="cpu")
     backend.fit(frame, target, _schema(), valid_frame=frame, valid_target=target)
 
-    scores = backend.predict_score(pl.DataFrame({"segment": ["new"], "balance": [0.0]}), _schema())
+    scores = backend.predict_score(
+        pl.DataFrame({"segment": ["new"], "balance": [0.0]}), _schema()
+    )
 
     assert scores.shape == (1,)
     assert 0 <= scores[0] <= 1
 
 
 @pytest.mark.parametrize("train_has_null", [False, True])
-def test_xgboost_polars_categories_match_pandas_on_synthetic_data(tmp_path, train_has_null):
+def test_xgboost_polars_categories_match_pandas_on_synthetic_data(
+    tmp_path, train_has_null
+):
     pytest.importorskip("xgboost")
     pd = pytest.importorskip("pandas")
     rng = np.random.default_rng(42)
@@ -108,11 +119,18 @@ def test_xgboost_polars_categories_match_pandas_on_synthetic_data(tmp_path, trai
     frame = pl.DataFrame({"segment": segments, "balance": rng.normal(size=256)})
     target = np.asarray([segment in ("b", "c") for segment in segments], dtype=int)
     train, valid = frame[:192], frame[192:]
-    backend = BinaryBoostingBackend("xgboost", {"n_estimators": 12, "max_depth": 2}, 42, "cpu", verbose=False)
-    prepared = backend.prepare_fit_data(train, target[:192], _schema(), valid_frame=valid, valid_target=target[192:])
+    backend = BinaryBoostingBackend(
+        "xgboost", {"n_estimators": 12, "max_depth": 2}, 42, "cpu", verbose=False
+    )
+    prepared = backend.prepare_fit_data(
+        train, target[:192], _schema(), valid_frame=valid, valid_target=target[192:]
+    )
     assert isinstance(prepared.train_features, pl.DataFrame)
     assert isinstance(prepared.valid_features, pl.DataFrame)
-    assert prepared.train_features["segment"].dtype == prepared.valid_features["segment"].dtype
+    assert (
+        prepared.train_features["segment"].dtype
+        == prepared.valid_features["segment"].dtype
+    )
     assert isinstance(prepared.train_features["segment"].dtype, pl.Enum)
     backend.fit_prepared(prepared)
 
@@ -121,7 +139,9 @@ def test_xgboost_polars_categories_match_pandas_on_synthetic_data(tmp_path, trai
     def pandas_features(source):
         result = source.to_pandas()
         values = result["segment"].fillna("__FMLIB_NULL__")
-        values = values.where(values.isin(backend.category_values["segment"]), "__FMLIB_UNKNOWN__")
+        values = values.where(
+            values.isin(backend.category_values["segment"]), "__FMLIB_UNKNOWN__"
+        )
         result["segment"] = pd.Categorical(values, categories=categories)
         return result
 
@@ -134,7 +154,9 @@ def test_xgboost_polars_categories_match_pandas_on_synthetic_data(tmp_path, trai
     )
     test = pl.DataFrame({"segment": ["c", "new", None, "a", "b"], "balance": [0.0] * 5})
     scores = backend.predict_score(test.select("balance", "segment"), _schema())
-    np.testing.assert_allclose(scores, reference.predict_proba(pandas_features(test))[:, 1])
+    np.testing.assert_allclose(
+        scores, reference.predict_proba(pandas_features(test))[:, 1]
+    )
     assert scores[0] > scores[3]
     artifact = tmp_path / "polars"
     backend.save(artifact)
@@ -246,9 +268,17 @@ def test_catboost_feature_importance_uses_native_method_instead_of_scalar_proper
         ({"border_count": {"type": "int", "low": 32, "high": 64}}, False),
     ],
 )
-def test_catboost_prequantization_is_disabled_only_for_tuned_quantization(search_space, expected):
-    assert BinaryBoostingBackend("catboost", {}, 42, "cpu").can_prequantize(search_space) is expected
-    assert BinaryBoostingBackend("xgboost", {}, 42, "cpu").can_prequantize(search_space) is False
+def test_catboost_prequantization_is_disabled_only_for_tuned_quantization(
+    search_space, expected
+):
+    assert (
+        BinaryBoostingBackend("catboost", {}, 42, "cpu").can_prequantize(search_space)
+        is expected
+    )
+    assert (
+        BinaryBoostingBackend("xgboost", {}, 42, "cpu").can_prequantize(search_space)
+        is False
+    )
 
 
 def test_backend_rejects_unknown_engine_without_implicit_fallback():

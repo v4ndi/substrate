@@ -41,7 +41,9 @@ def _config(tmp_path, config_class=BinaryTaskConfig, engine="catboost", **update
         "hyperopt": False,
         "output_dir": tmp_path / "output",
         "verbose": False,
-        "model_params": {"iterations": 4, "depth": 2} if engine == "catboost" else {"n_estimators": 4, "max_depth": 2},
+        "model_params": {"iterations": 4, "depth": 2}
+        if engine == "catboost"
+        else {"n_estimators": 4, "max_depth": 2},
     }
     if config_class in {ResponseTaskConfig, UpliftTaskConfig}:
         values.update(treatment_column="treatment", inverse_treatment=False)
@@ -62,15 +64,27 @@ def test_device_override_isolates_native_state_and_partial_composite_failure():
                 msg = "native device failed"
                 raise RuntimeError(msg)
 
-    component = BinaryBoostingBackend(engine="xgboost", params={}, random_state=42, device="cpu", model=NativeModel())
+    component = BinaryBoostingBackend(
+        engine="xgboost", params={}, random_state=42, device="cpu", model=NativeModel()
+    )
     assert component.for_execution("cpu") is component
     isolated = component.for_execution("gpu")
     assert isolated.model is not component.model
     assert isolated.device == "gpu" and isolated.model.device == "cuda"
     assert component.device == component.model.device == "cpu"
-    failing = BinaryBoostingBackend(engine="xgboost", params={}, random_state=42, device="cpu", model=NativeModel(True))
+    failing = BinaryBoostingBackend(
+        engine="xgboost",
+        params={},
+        random_state=42,
+        device="cpu",
+        model=NativeModel(True),
+    )
     composite = UpliftBoostingBackend(
-        engine="xgboost", params={}, random_state=42, device="cpu", components={"first": component, "second": failing}
+        engine="xgboost",
+        params={},
+        random_state=42,
+        device="cpu",
+        components={"first": component, "second": failing},
     )
     with pytest.raises(RuntimeError, match="native device failed"):
         composite.for_execution("gpu")
@@ -89,7 +103,9 @@ def test_device_override_isolates_native_state_and_partial_composite_failure():
         (UpliftTask, UpliftTaskConfig, True),
     ],
 )
-def test_synthetic_runtime_isolation_and_artifact_round_trip(tmp_path, monkeypatch, engine, task_class, config_class, hyperopt):
+def test_synthetic_runtime_isolation_and_artifact_round_trip(
+    tmp_path, monkeypatch, engine, task_class, config_class, hyperopt
+):
     paths = []
     for split, rows in enumerate((120, 72, 72)):
         index = np.arange(rows)
@@ -98,25 +114,30 @@ def test_synthetic_runtime_isolation_and_artifact_round_trip(tmp_path, monkeypat
         if task_class is RegressionTask:
             target = 0.7 * x + index / rows
         path = tmp_path / f"split-{split}.parquet"
-        pl.DataFrame(
-            {
-                "epk_id": index + split * 1000,
-                "report_month": ["2026-01-01"] * rows,
-                "group": np.where(index % 2, "a", "b"),
-                "treatment": (index // 2) % 2,
-                "target": target,
-                "x": x,
-            }
-        ).write_parquet(path)
+        pl.DataFrame({
+            "epk_id": index + split * 1000,
+            "report_month": ["2026-01-01"] * rows,
+            "group": np.where(index % 2, "a", "b"),
+            "treatment": (index // 2) % 2,
+            "target": target,
+            "x": x,
+        }).write_parquet(path)
         paths.append(path)
     updates = {}
     if hyperopt:
-        params = {"iterations": 4, "depth": 2} if engine == "catboost" else {"n_estimators": 4, "max_depth": 2}
+        params = (
+            {"iterations": 4, "depth": 2}
+            if engine == "catboost"
+            else {"n_estimators": 4, "max_depth": 2}
+        )
         updates = {
             "hyperopt": True,
             "n_trials": 2,
             "model_params": {},
-            "search_space": {key: {"type": "int", "low": value, "high": value} for (key, value) in params.items()},
+            "search_space": {
+                key: {"type": "int", "low": value, "high": value}
+                for (key, value) in params.items()
+            },
         }
     config = _config(tmp_path, config_class, engine, **updates)
     task = task_class(config)
@@ -125,7 +146,10 @@ def test_synthetic_runtime_isolation_and_artifact_round_trip(tmp_path, monkeypat
 
     def observe_training(execution, *args, **kwargs):
         assert task.config is config and task._internal_config is internal
-        assert execution is not task and execution.config.environment.log_dir == tmp_path / "runtime-logs"
+        assert (
+            execution is not task
+            and execution.config.environment.log_dir == tmp_path / "runtime-logs"
+        )
         return training(execution, *args, **kwargs)
 
     monkeypatch.setattr(task_class, "_execute_train", observe_training)
@@ -160,11 +184,21 @@ def test_synthetic_runtime_isolation_and_artifact_round_trip(tmp_path, monkeypat
 
     def fail_prediction(execution, *args, **kwargs):
         assert execution is not task and execution.config.model_layout == "global"
-        assert task.config is config and task.config.model_layout == "global_and_per_group"
-        assert all(left.backend is right.backend for left, right in zip(task._models, execution._models, strict=True))
-        nested = task._execution_view(ExecutionContext.from_config(config).derive(model_layout="per_group"))
+        assert (
+            task.config is config and task.config.model_layout == "global_and_per_group"
+        )
+        assert all(
+            left.backend is right.backend
+            for left, right in zip(task._models, execution._models, strict=True)
+        )
+        nested = task._execution_view(
+            ExecutionContext.from_config(config).derive(model_layout="per_group")
+        )
         assert predict(nested, *args, **kwargs).scores.height == 72
-        assert execution.config.model_layout == "global" and task.config.model_layout == "global_and_per_group"
+        assert (
+            execution.config.model_layout == "global"
+            and task.config.model_layout == "global_and_per_group"
+        )
         msg = "prediction failed inside operation"
         raise RuntimeError(msg)
 
@@ -188,12 +222,18 @@ def test_synthetic_runtime_isolation_and_artifact_round_trip(tmp_path, monkeypat
             paths[2],
             baseline,
             "raw",
-            tuple(metric.name for metric in resolve_evaluation_metrics(None, task.config.task_name)),
+            tuple(
+                metric.name
+                for metric in resolve_evaluation_metrics(None, task.config.task_name)
+            ),
         )
     assert data.result.figures_raw == data.result.excel_paths_raw == {}
     assert data.feature_importance is not None
     if task_class is MulticlassTask:
-        assert set(data.confusions) == {"multiclass_confusion_matrix_global", "multiclass_confusion_matrix_per_group"}
+        assert set(data.confusions) == {
+            "multiclass_confusion_matrix_global",
+            "multiclass_confusion_matrix_per_group",
+        }
         assert all(matrix.matrix.shape == (3, 3) for matrix in data.confusions.values())
     if task_class is UpliftTask:
         assert set(data.curves) == {
@@ -202,7 +242,9 @@ def test_synthetic_runtime_isolation_and_artifact_round_trip(tmp_path, monkeypat
             "uplift_curves_global",
             "uplift_curves_per_group",
         }
-        assert all(set(curve.learners) == {"s", "t", "x"} for curve in data.curves.values())
+        assert all(
+            set(curve.learners) == {"s", "t", "x"} for curve in data.curves.values()
+        )
     evaluation = task.evaluate(paths[2], baseline)
     assert evaluation.metrics_raw == pytest.approx(data.result.metrics_raw)
     assert evaluation.metrics_by_group_raw.equals(data.result.metrics_by_group_raw)
@@ -217,10 +259,17 @@ def test_synthetic_runtime_isolation_and_artifact_round_trip(tmp_path, monkeypat
         environment={"venv_path": "/different/runtime/environment"},
     )
     entity_artifact_config_path.write_text(json.dumps(entity_artifact_config))
-    for restored in (task_class.load(task.path), task_class.load(task.save(tmp_path / "snapshot"))):
+    for restored in (
+        task_class.load(task.path),
+        task_class.load(task.save(tmp_path / "snapshot")),
+    ):
         actual = restored.predict(paths[2]).scores.select(columns).to_numpy()
         np.testing.assert_allclose(actual, values, atol=2e-7)
     if task_class is UpliftTask:
         production = tmp_path / "production.parquet"
         pl.read_parquet(paths[2]).drop("target", "treatment").write_parquet(production)
-        np.testing.assert_allclose(task.predict(production).scores.select(columns).to_numpy(), values, atol=2e-7)
+        np.testing.assert_allclose(
+            task.predict(production).scores.select(columns).to_numpy(),
+            values,
+            atol=2e-7,
+        )

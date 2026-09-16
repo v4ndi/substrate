@@ -6,9 +6,21 @@ import numpy as np
 import polars as pl
 import pytest
 
-from avatar.automl import BinaryTask, BinaryTaskConfig, PredictionResult, ResponseTask, ResponseTaskConfig
+from avatar.automl import (
+    BinaryTask,
+    BinaryTaskConfig,
+    PredictionResult,
+    ResponseTask,
+    ResponseTaskConfig,
+)
 from avatar.automl.backends.boosting import BinaryBoostingBackend, suggest_params
-from avatar.automl.exceptions import ArtifactError, ArtifactIntegrityError, ConfigError, NotFittedError, SchemaError
+from avatar.automl.exceptions import (
+    ArtifactError,
+    ArtifactIntegrityError,
+    ConfigError,
+    NotFittedError,
+    SchemaError,
+)
 from avatar.automl.metrics import DEFAULT_EVALUATION_METRICS, binary_top_k_metrics
 
 
@@ -41,7 +53,10 @@ def _config(**overrides):
 
 
 def _response_config(**overrides):
-    values = asdict(_config()) | {"treatment_column": "treatment", "inverse_treatment": True}
+    values = asdict(_config()) | {
+        "treatment_column": "treatment",
+        "inverse_treatment": True,
+    }
     values.update(overrides)
     return ResponseTaskConfig(**values)
 
@@ -53,17 +68,15 @@ def _write_splits(tmp_path):
         feature = generator.normal(size=size)
         category = np.where(feature > 0, "a", "b")
         target = (feature + generator.normal(scale=0.4, size=size) > 0).astype(int)
-        frame = pl.DataFrame(
-            {
-                "epk_id": np.arange(size),
-                "target": target,
-                "segment": category,
-                "balance": feature,
-                "group": np.where(feature > 0, "channel_a", "channel_b"),
-                "treatment": generator.integers(0, 2, size=size),
-                "report_month": ["2026-01-01"] * size,
-            }
-        )
+        frame = pl.DataFrame({
+            "epk_id": np.arange(size),
+            "target": target,
+            "segment": category,
+            "balance": feature,
+            "group": np.where(feature > 0, "channel_a", "channel_b"),
+            "treatment": generator.integers(0, 2, size=size),
+            "report_month": ["2026-01-01"] * size,
+        })
         path = tmp_path / f"{name}.parquet"
         frame.write_parquet(path)
         paths.append(path)
@@ -84,17 +97,17 @@ def _write_calibration_splits(tmp_path):
             size = 80
             feature = generator.normal(size=size)
             frames.append(
-                pl.DataFrame(
-                    {
-                        "epk_id": np.arange(size) + len(frames) * size,
-                        "target": (feature + generator.normal(scale=0.8, size=size) > 0).astype(int),
-                        "segment": np.where(feature > 0, "a", "b"),
-                        "balance": feature,
-                        "group": np.where(np.arange(size) % 2, "channel_a", "channel_b"),
-                        "treatment": generator.integers(0, 2, size=size),
-                        "report_month": [month] * size,
-                    }
-                )
+                pl.DataFrame({
+                    "epk_id": np.arange(size) + len(frames) * size,
+                    "target": (
+                        feature + generator.normal(scale=0.8, size=size) > 0
+                    ).astype(int),
+                    "segment": np.where(feature > 0, "a", "b"),
+                    "balance": feature,
+                    "group": np.where(np.arange(size) % 2, "channel_a", "channel_b"),
+                    "treatment": generator.integers(0, 2, size=size),
+                    "report_month": [month] * size,
+                })
             )
         path = tmp_path / f"calibration_{split}.parquet"
         pl.concat(frames).write_parquet(path)
@@ -134,7 +147,9 @@ def test_binary_treatment_inversion_is_configurable():
         ("xgboost", {"n_estimators": 20, "max_depth": 3}),
     ],
 )
-def test_binary_train_predict_evaluate_and_artifact_round_trip(tmp_path, engine, model_params):
+def test_binary_train_predict_evaluate_and_artifact_round_trip(
+    tmp_path, engine, model_params
+):
     pytest.importorskip(engine)
     train_path, valid_path, test_path = _write_splits(tmp_path)
     config = _config(
@@ -220,10 +235,15 @@ def test_binary_train_predict_evaluate_and_artifact_round_trip(tmp_path, engine,
     assert second_evaluation.excel_paths_raw["metrics_raw"].parent == evaluation_dir
     assert task.load_evaluation(test_path).metrics_raw == second_evaluation.metrics_raw
     assert task.config.output_dir == tmp_path / "reports"
-    assert default_artifact == (tmp_path / "reports" / "artifacts" / "binary_model").resolve()
+    assert (
+        default_artifact
+        == (tmp_path / "reports" / "artifacts" / "binary_model").resolve()
+    )
     importance = task._models[0].backend.feature_importance(task._models[0].schema)
     assert importance is not None
-    assert importance["importance"].to_list() == sorted(importance["importance"].to_list(), reverse=True)
+    assert importance["importance"].to_list() == sorted(
+        importance["importance"].to_list(), reverse=True
+    )
     with ZipFile(evaluation.excel_paths_raw["feature_importance_raw"]) as workbook:
         table_xml = workbook.read("xl/tables/table1.xml")
     assert b"<autoFilter" in table_xml
@@ -232,10 +252,17 @@ def test_binary_train_predict_evaluate_and_artifact_round_trip(tmp_path, engine,
     assert not hasattr(loaded_entity.config, "inverse_treatment")
     assert "format_version" not in manifest
     assert "trials" not in manifest
-    assert [item["path"] for item in manifest["source_manifests"]["train"]] == [str(train_path.resolve())]
-    assert [item["path"] for item in manifest["source_manifests"]["valid"]] == [str(valid_path.resolve())]
+    assert [item["path"] for item in manifest["source_manifests"]["train"]] == [
+        str(train_path.resolve())
+    ]
+    assert [item["path"] for item in manifest["source_manifests"]["valid"]] == [
+        str(valid_path.resolve())
+    ]
     assert manifest["source_manifests"]["train"][0]["size"] == train_path.stat().st_size
-    assert manifest["source_manifests"]["train"][0]["modified_ns"] == train_path.stat().st_mtime_ns
+    assert (
+        manifest["source_manifests"]["train"][0]["modified_ns"]
+        == train_path.stat().st_mtime_ns
+    )
 
     operation_count = len(task._store.operations(action="evaluate"))
     invalid_selections = (
@@ -253,7 +280,9 @@ def test_binary_train_predict_evaluate_and_artifact_round_trip(tmp_path, engine,
 
 def test_evaluate_warns_and_aligns_repeated_client_month_keys(tmp_path, caplog):
     train_path, valid_path, test_path = _write_splits(tmp_path)
-    test = pl.read_parquet(test_path).with_columns((pl.col("epk_id") // 2).alias("epk_id"))
+    test = pl.read_parquet(test_path).with_columns(
+        (pl.col("epk_id") // 2).alias("epk_id")
+    )
     test.write_parquet(test_path)
     task = BinaryTask(
         _config(
@@ -275,7 +304,12 @@ def test_evaluate_warns_and_aligns_repeated_client_month_keys(tmp_path, caplog):
     stored_result = task.evaluate(test_path, PredictionResult(prediction.scores))
 
     assert result.metrics_raw == stored_result.metrics_raw
-    assert caplog.text.count("Evaluation contains duplicate rows by ['epk_id', 'report_month']") == 2
+    assert (
+        caplog.text.count(
+            "Evaluation contains duplicate rows by ['epk_id', 'report_month']"
+        )
+        == 2
+    )
 
 
 def test_unfitted_task_rejects_predict_evaluate_and_save(tmp_path):
@@ -297,7 +331,9 @@ def test_unfitted_task_rejects_predict_evaluate_and_save(tmp_path):
         task.save(tmp_path / "artifact")
 
 
-def test_failed_artifact_save_rolls_back_fitted_state_and_training_result(tmp_path, monkeypatch):
+def test_failed_artifact_save_rolls_back_fitted_state_and_training_result(
+    tmp_path, monkeypatch
+):
     train_path, valid_path, test_path = _write_splits(tmp_path)
     task = BinaryTask(
         _config(
@@ -323,7 +359,9 @@ def test_failed_artifact_save_rolls_back_fitted_state_and_training_result(tmp_pa
 
     assert task.is_fitted is False
     assert task.status()["state"].to_list() == ["failed"]
-    with pytest.raises(ArtifactIntegrityError, match="Training result is not available"):
+    with pytest.raises(
+        ArtifactIntegrityError, match="Training result is not available"
+    ):
         task.training_result()
     with pytest.raises(NotFittedError):
         task.predict(test_path)
@@ -345,10 +383,21 @@ def test_predict_preserves_input_row_order_and_ignores_extra_columns(tmp_path):
     task.train(train_path, valid_path)
     original = pl.read_parquet(test_path)
     reordered_path = tmp_path / "reordered.parquet"
-    reordered = original.with_row_index("source_order").sort("balance", descending=True).with_columns(pl.lit(1).alias("extra"))
-    reordered.select("extra", "balance", "treatment", "epk_id", "report_month", "group", "segment", "target").write_parquet(
-        reordered_path
+    reordered = (
+        original.with_row_index("source_order")
+        .sort("balance", descending=True)
+        .with_columns(pl.lit(1).alias("extra"))
     )
+    reordered.select(
+        "extra",
+        "balance",
+        "treatment",
+        "epk_id",
+        "report_month",
+        "group",
+        "segment",
+        "target",
+    ).write_parquet(reordered_path)
 
     original_scores = task.predict(test_path).scores.sort("epk_id")
     reordered_scores = task.predict(reordered_path).scores
@@ -430,12 +479,19 @@ def test_binary_training_allows_disabled_group(tmp_path):
     evaluation = task.evaluate(paths[2], task.predict(paths[2]))
 
     assert training.feature_names == ("segment", "balance")
-    assert evaluation.metrics_by_group_raw.columns == ["scope", "report_month", "n_samples", *evaluation.metrics_raw]
+    assert evaluation.metrics_by_group_raw.columns == [
+        "scope",
+        "report_month",
+        "n_samples",
+        *evaluation.metrics_raw,
+    ]
     assert evaluation.metrics_by_group_raw["scope"].unique().to_list() == ["date"]
 
 
 @pytest.mark.parametrize("group_column", [None, "group"])
-def test_binary_lifecycle_without_date_has_no_synthetic_date_and_expected_slices(tmp_path, group_column):
+def test_binary_lifecycle_without_date_has_no_synthetic_date_and_expected_slices(
+    tmp_path, group_column
+):
     source_paths = _write_splits(tmp_path)
     paths = []
     for index, source in enumerate(source_paths):
@@ -511,10 +567,15 @@ def test_missing_custom_treatment_column_uses_public_name_in_error(tmp_path):
     [
         ("global", {"global"}),
         ("per_group", {"per_group:channel_a", "per_group:channel_b"}),
-        ("global_and_per_group", {"global", "per_group:channel_a", "per_group:channel_b"}),
+        (
+            "global_and_per_group",
+            {"global", "per_group:channel_a", "per_group:channel_b"},
+        ),
     ],
 )
-def test_model_layout_trains_the_requested_global_and_group_models(tmp_path, model_layout, expected_names):
+def test_model_layout_trains_the_requested_global_and_group_models(
+    tmp_path, model_layout, expected_names
+):
     train_path, valid_path, _ = _write_splits(tmp_path)
     task = BinaryTask(
         _config(
@@ -534,8 +595,12 @@ def test_model_layout_trains_the_requested_global_and_group_models(tmp_path, mod
     result = task.train(train_path, valid_path)
     artifact = task.save(tmp_path / f"artifact_{model_layout}")
     restored = BinaryTask.load(artifact)
-    model_names = {task._model_name(item.layout, item.group_value) for item in task._models}
-    restored_names = {restored._model_name(item.layout, item.group_value) for item in restored._models}
+    model_names = {
+        task._model_name(item.layout, item.group_value) for item in task._models
+    }
+    restored_names = {
+        restored._model_name(item.layout, item.group_value) for item in restored._models
+    }
 
     assert model_names == expected_names
     assert restored_names == expected_names
@@ -570,12 +635,17 @@ def test_combined_layout_rejects_unknown_group_before_scoring(tmp_path, monkeypa
             lambda frame, _schema, value=value: np.full(frame.height, value),
         )
     test = pl.read_parquet(test_path).with_columns(
-        pl.when(pl.col("epk_id") == 0).then(pl.lit("new_channel")).otherwise(pl.col("group")).alias("group")
+        pl.when(pl.col("epk_id") == 0)
+        .then(pl.lit("new_channel"))
+        .otherwise(pl.col("group"))
+        .alias("group")
     )
     routed_path = tmp_path / "routed.parquet"
     test.write_parquet(routed_path)
 
-    with pytest.raises(SchemaError, match=r"Unknown group values.*'new_channel'.*1 rows"):
+    with pytest.raises(
+        SchemaError, match=r"Unknown group values.*'new_channel'.*1 rows"
+    ):
         task.predict(routed_path)
 
     global_prediction = task.predict(routed_path, model_layout="global")
@@ -586,7 +656,9 @@ def test_combined_layout_rejects_unknown_group_before_scoring(tmp_path, monkeypa
 def test_collapsed_combined_layout_rejects_unknown_group_after_artifact_load(tmp_path):
     train_path, valid_path, test_path = _write_splits(tmp_path)
     for path in (train_path, valid_path, test_path):
-        pl.read_parquet(path).with_columns(pl.lit("only").alias("group")).write_parquet(path)
+        pl.read_parquet(path).with_columns(pl.lit("only").alias("group")).write_parquet(
+            path
+        )
     task = BinaryTask(
         _config(
             env_type="local",
@@ -604,12 +676,16 @@ def test_collapsed_combined_layout_rejects_unknown_group_after_artifact_load(tmp
     artifact = task.save(tmp_path / "collapsed")
     restored = BinaryTask.load(artifact)
     unknown_path = tmp_path / "unknown-collapsed.parquet"
-    pl.read_parquet(test_path).with_columns(pl.lit("unknown").alias("group")).write_parquet(unknown_path)
+    pl.read_parquet(test_path).with_columns(
+        pl.lit("unknown").alias("group")
+    ).write_parquet(unknown_path)
 
     assert task._models[0].single_group_value == "only"
     assert restored._models[0].single_group_value == "only"
     for fitted in (task, restored):
-        with pytest.raises(SchemaError, match=r"Unknown group values.*'unknown'.*60 rows"):
+        with pytest.raises(
+            SchemaError, match=r"Unknown group values.*'unknown'.*60 rows"
+        ):
             fitted.predict(unknown_path)
         assert fitted.predict(unknown_path, model_layout="global").scores.height == 60
 
@@ -646,8 +722,14 @@ def test_both_artifact_supports_runtime_scope_overrides(tmp_path, monkeypatch):
     both = task.predict(test_path, model_layout="global_and_per_group")
 
     assert product.scores["score"].to_list() == [0.1] * product.scores.height
-    assert both.scores.filter(pl.col("model_layout") == "global")["score"].to_list() == product.scores["score"].to_list()
-    assert both.scores.filter(pl.col("model_layout") == "per_group")["score"].to_list() == group.scores["score"].to_list()
+    assert (
+        both.scores.filter(pl.col("model_layout") == "global")["score"].to_list()
+        == product.scores["score"].to_list()
+    )
+    assert (
+        both.scores.filter(pl.col("model_layout") == "per_group")["score"].to_list()
+        == group.scores["score"].to_list()
+    )
     assert set(observed_devices) == {"cpu"}
     assert task.config.model_layout == "global_and_per_group"
     assert task.config.device == "cpu"
@@ -671,7 +753,9 @@ def test_runtime_scope_rejects_models_missing_from_artifact(tmp_path):
     )
     task.train(train_path, valid_path)
 
-    with pytest.raises(ConfigError, match="requires unavailable model branches.*per_group"):
+    with pytest.raises(
+        ConfigError, match="requires unavailable model branches.*per_group"
+    ):
         task.predict(test_path, model_layout="per_group")
 
 
@@ -691,7 +775,11 @@ def test_runtime_environment_is_resolved_independently_from_training_config():
         environment={"venv_path": "/shared/fmlib/predict-env"},
     )
 
-    assert (remote.env_type, remote.device, remote.resolved_device) == ("osiris", "gpu", "gpu")
+    assert (remote.env_type, remote.device, remote.resolved_device) == (
+        "osiris",
+        "gpu",
+        "gpu",
+    )
     assert str(remote.environment.venv_path) == "/shared/fmlib/predict-env"
     assert (task.config.env_type, task.config.device) == ("local", "cpu")
     assert str(task.config.environment.venv_path) == "/shared/fmlib/env"
@@ -710,7 +798,11 @@ def test_remote_runtime_defaults_to_gpu_when_switched_to_local():
 
     local = task._resolve_runtime_config(env_type="local")
 
-    assert (local.env_type, local.device, local.resolved_device) == ("local", "gpu", "gpu")
+    assert (local.env_type, local.device, local.resolved_device) == (
+        "local",
+        "gpu",
+        "gpu",
+    )
     assert (task.config.env_type, task.config.device) == ("osiris", "gpu")
 
 
@@ -744,12 +836,20 @@ def test_gpu_catboost_logs_cpu_prediction_policy(monkeypatch, caplog):
         msg = "stop after policy log"
         raise RuntimeError(msg)
 
-    monkeypatch.setattr("avatar.automl.tasks.training.ParquetSource.resolve", stop_after_policy_log)
-    with caplog.at_level("INFO"), pytest.raises(RuntimeError, match="stop after policy log"):
+    monkeypatch.setattr(
+        "avatar.automl.tasks.training.ParquetSource.resolve", stop_after_policy_log
+    )
+    with (
+        caplog.at_level("INFO"),
+        pytest.raises(RuntimeError, match="stop after policy log"),
+    ):
         task._execute_train("train.parquet", "valid.parquet")
 
     assert "training uses GPU; prediction always uses CPU" in caplog.text
-    assert "GPU evaluation is not implemented for models with categorical features" in caplog.text
+    assert (
+        "GPU evaluation is not implemented for models with categorical features"
+        in caplog.text
+    )
 
 
 def test_per_group_layout_rejects_unknown_group_at_prediction(tmp_path):
@@ -769,7 +869,9 @@ def test_per_group_layout_rejects_unknown_group_at_prediction(tmp_path):
     )
     task.train(train_path, valid_path)
     unknown_path = tmp_path / "unknown.parquet"
-    pl.read_parquet(test_path).with_columns(pl.lit("unknown").alias("group")).write_parquet(unknown_path)
+    pl.read_parquet(test_path).with_columns(
+        pl.lit("unknown").alias("group")
+    ).write_parquet(unknown_path)
 
     with pytest.raises(SchemaError, match=r"Unknown group values.*'unknown'.*60 rows"):
         task.predict(unknown_path)
@@ -792,7 +894,9 @@ def test_group_scope_requires_non_null_group_in_train_and_validation(tmp_path):
         )
     )
 
-    with pytest.raises(SchemaError, match="group_column='group'.*model_layout='per_group'"):
+    with pytest.raises(
+        SchemaError, match="group_column='group'.*model_layout='per_group'"
+    ):
         task.train(no_group_path, valid_path)
 
 
@@ -828,7 +932,9 @@ def test_predict_rejects_feature_dtype_drift(tmp_path):
     )
     task.train(train_path, valid_path)
     drift_path = tmp_path / "drift.parquet"
-    pl.read_parquet(test_path).with_columns(pl.col("balance").cast(pl.Float32)).write_parquet(drift_path)
+    pl.read_parquet(test_path).with_columns(
+        pl.col("balance").cast(pl.Float32)
+    ).write_parquet(drift_path)
 
     with pytest.raises(SchemaError, match="balance: expected Float64, got Float32"):
         task.predict(drift_path)
@@ -892,7 +998,11 @@ def test_custom_column_aliases_are_used_for_train_predict_and_evaluate(tmp_path)
 
     assert {"channel", "treatment_flag"}.issubset(training.feature_names)
     assert prediction.scores.columns == ["client", "period", "score"]
-    assert evaluation.metrics_by_group_raw.columns[0:3] == ["scope", "period", "channel"]
+    assert evaluation.metrics_by_group_raw.columns[0:3] == [
+        "scope",
+        "period",
+        "channel",
+    ]
     assert set(evaluation.metrics_by_group_raw["scope"]) == {"group", "date_group"}
     with ZipFile(evaluation.excel_paths_raw["feature_importance_raw"]) as workbook:
         shared_strings = workbook.read("xl/sharedStrings.xml")
@@ -941,7 +1051,10 @@ def test_named_metric_artifact_round_trip_and_overwrite_can_be_disabled(tmp_path
     named_restored = BinaryTask.load(named_artifact)
 
     assert named_restored.config.optimization_metric == "roc_auc"
-    assert np.allclose(task.predict(test_path).scores["score"], named_restored.predict(test_path).scores["score"])
+    assert np.allclose(
+        task.predict(test_path).scores["score"],
+        named_restored.predict(test_path).scores["score"],
+    )
 
     regular_task = BinaryTask(
         _config(
@@ -963,7 +1076,10 @@ def test_named_metric_artifact_round_trip_and_overwrite_can_be_disabled(tmp_path
 def test_binary_target_must_contain_zero_and_one(tmp_path):
     train_path, valid_path, _ = _write_splits(tmp_path)
     train = pl.read_parquet(train_path).with_columns(
-        pl.when(pl.col("target") == 1).then(pl.lit("yes")).otherwise(pl.lit("no")).alias("target")
+        pl.when(pl.col("target") == 1)
+        .then(pl.lit("yes"))
+        .otherwise(pl.lit("no"))
+        .alias("target")
     )
     train.write_parquet(train_path)
     task = BinaryTask(
@@ -1014,15 +1130,24 @@ def test_hyperopt_reuses_best_trial_model_without_an_extra_fit(tmp_path, monkeyp
     )
 
     result = task.train(train_path, valid_path)
-    train_log = next((tmp_path / "hyperopt_reports" / "logs").glob("*.train.log")).read_text(encoding="utf-8")
+    train_log = next(
+        (tmp_path / "hyperopt_reports" / "logs").glob("*.train.log")
+    ).read_text(encoding="utf-8")
 
     assert fit_count == 2
     assert result.validation_metrics["global"] > 0.5
     assert "[train 1/5] completed duration_seconds=" in train_log
     assert "[train 5/5] completed duration_seconds=" in train_log
-    assert "[train 4/5][model 1/1] model=global completed duration_seconds=" in train_log
-    assert "[boosting prepare 1/1] engine=catboost completed duration_seconds=" in train_log
-    assert "[optuna 2/2] engine=catboost search completed duration_seconds=" in train_log
+    assert (
+        "[train 4/5][model 1/1] model=global completed duration_seconds=" in train_log
+    )
+    assert (
+        "[boosting prepare 1/1] engine=catboost completed duration_seconds="
+        in train_log
+    )
+    assert (
+        "[optuna 2/2] engine=catboost search completed duration_seconds=" in train_log
+    )
 
 
 class _RecordingTrial:
@@ -1052,7 +1177,9 @@ def test_float_search_space_forwards_step():
             engine="catboost",
             device="cpu",
             hyperopt=True,
-            search_space={"learning_rate": {"type": "float", "low": 0.1, "high": 0.5, "step": 0.1}},
+            search_space={
+                "learning_rate": {"type": "float", "low": 0.1, "high": 0.5, "step": 0.1}
+            },
         )
     )
     trial = _RecordingTrial()
@@ -1073,7 +1200,9 @@ def test_float_search_space_forwards_step():
 
 
 def test_hyperopt_rejects_fixed_model_params():
-    with pytest.raises(ConfigError, match="model_params cannot be configured when hyperopt=True"):
+    with pytest.raises(
+        ConfigError, match="model_params cannot be configured when hyperopt=True"
+    ):
         _config(
             env_type="local",
             backend="boosting",
@@ -1083,7 +1212,10 @@ def test_hyperopt_rejects_fixed_model_params():
             model_params={"depth": 9, "fixed": "value"},
             search_space={
                 "depth": {"type": "int", "low": 3, "high": 7, "step": 2},
-                "bootstrap_type": {"type": "categorical", "choices": ["Bayesian", "Bernoulli"]},
+                "bootstrap_type": {
+                    "type": "categorical",
+                    "choices": ["Bayesian", "Bernoulli"],
+                },
             },
         )
 
@@ -1096,7 +1228,15 @@ def test_float_search_space_rejects_step_with_log_scale():
             engine="catboost",
             device="cpu",
             hyperopt=True,
-            search_space={"learning_rate": {"type": "float", "low": 0.1, "high": 0.5, "step": 0.1, "log": True}},
+            search_space={
+                "learning_rate": {
+                    "type": "float",
+                    "low": 0.1,
+                    "high": 0.5,
+                    "step": 0.1,
+                    "log": True,
+                }
+            },
         )
     )
 
@@ -1117,7 +1257,15 @@ def test_integer_search_space_rejects_non_unit_step_with_log_scale():
             engine="catboost",
             device="cpu",
             hyperopt=True,
-            search_space={"iterations": {"type": "int", "low": 10, "high": 100, "step": 10, "log": True}},
+            search_space={
+                "iterations": {
+                    "type": "int",
+                    "low": 10,
+                    "high": 100,
+                    "step": 10,
+                    "log": True,
+                }
+            },
         )
     )
 

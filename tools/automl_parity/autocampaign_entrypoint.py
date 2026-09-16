@@ -90,7 +90,9 @@ def configured_optuna_ranges() -> Iterator[None]:
     config_name = Path(sys.argv[config_name_index]).stem
     config_file = config_directory / f"{config_name}.yaml"
     config = OmegaConf.load(config_file)
-    ranges = OmegaConf.to_container(OmegaConf.select(config, "optuna_ranges") or {}, resolve=True)
+    ranges = OmegaConf.to_container(
+        OmegaConf.select(config, "optuna_ranges") or {}, resolve=True
+    )
     original = BoosterWrapper._get_optuna_ranges
 
     def get_ranges(self: Any, boosting_type: str) -> dict[str, Any]:

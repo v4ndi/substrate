@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal, Mapping, TypeAlias
+from typing import Any, Literal, TypeAlias
 
 import polars as pl
 
@@ -100,17 +101,15 @@ class EvaluationResult:
         metrics: Mapping[str, float],
         metrics_by_group: pl.DataFrame | None = None,
         metrics_by_class: pl.DataFrame | None = None,
-    ) -> "EvaluationResult":
+    ) -> EvaluationResult:
         """Create the half of a result produced by one evaluate call."""
-        return cls(
-            **{
-                f"metrics_{kind}": metrics,
-                f"metrics_by_group_{kind}": metrics_by_group,
-                f"metrics_by_class_{kind}": metrics_by_class,
-            }
-        )
+        return cls(**{
+            f"metrics_{kind}": metrics,
+            f"metrics_by_group_{kind}": metrics_by_group,
+            f"metrics_by_class_{kind}": metrics_by_class,
+        })
 
-    def merge(self, other: "EvaluationResult") -> "EvaluationResult":
+    def merge(self, other: EvaluationResult) -> EvaluationResult:
         """Replace only the raw/calibrated halves present in ``other``."""
         values: dict[str, Any] = {}
         for kind in ("raw", "calibrated"):

@@ -82,7 +82,8 @@ def test_worker_dispatch_selects_registered_task_identity_without_changing_exist
             "train_path": "train",
             "valid_path": "valid",
             "artifact_path": str(tmp_path / "artifact"),
-            "entity_config": config | {"environment": {"log_dir": str(tmp_path / "entity-logs")}},
+            "entity_config": config
+            | {"environment": {"log_dir": str(tmp_path / "entity-logs")}},
         },
         "result_path": str(result_path),
         "log_path": str(tmp_path / "worker.log"),
@@ -129,14 +130,12 @@ def test_prediction_worker_runs_only_the_requested_model_part(tmp_path, monkeypa
         def _execute_predict(self, test_path, **kwargs):
             captured["prediction"] = (test_path, kwargs)
             return PredictionResult(
-                pl.DataFrame(
-                    {
-                        "epk_id": [7],
-                        "group": ["channel-a"],
-                        "score": [0.75],
-                        "__fmlib_remote_row_id": [2],
-                    }
-                )
+                pl.DataFrame({
+                    "epk_id": [7],
+                    "group": ["channel-a"],
+                    "score": [0.75],
+                    "__fmlib_remote_row_id": [2],
+                })
             )
 
         @staticmethod
@@ -168,24 +167,22 @@ def test_prediction_worker_runs_only_the_requested_model_part(tmp_path, monkeypa
     }
     spec = tmp_path / "spec.json"
     spec.write_text(
-        json.dumps(
-            {
-                "run_id": "run",
-                "task": "binary",
-                "action": "predict",
-                "config": config,
-                "requested_config": config | {"env_type": "osiris"},
-                "payload": {
-                    "test_path": "/data/test",
-                    "artifact_path": str(artifact_path),
-                    "scores_path": str(scores_path),
-                    "remote_layout": "per_group",
-                    "remote_group_value": "channel-a",
-                },
-                "result_path": str(result_path),
-                "log_path": str(tmp_path / "worker.log"),
-            }
-        ),
+        json.dumps({
+            "run_id": "run",
+            "task": "binary",
+            "action": "predict",
+            "config": config,
+            "requested_config": config | {"env_type": "osiris"},
+            "payload": {
+                "test_path": "/data/test",
+                "artifact_path": str(artifact_path),
+                "scores_path": str(scores_path),
+                "remote_layout": "per_group",
+                "remote_group_value": "channel-a",
+            },
+            "result_path": str(result_path),
+            "log_path": str(tmp_path / "worker.log"),
+        }),
         encoding="utf-8",
     )
 
@@ -199,7 +196,11 @@ def test_prediction_worker_runs_only_the_requested_model_part(tmp_path, monkeypa
     assert captured["validated"] is True
     assert captured["prediction"] == (
         "/data/test",
-        {"remote_group_value": "channel-a", "include_row_id": True, "include_group": True},
+        {
+            "remote_group_value": "channel-a",
+            "include_row_id": True,
+            "include_group": True,
+        },
     )
     assert result["scores_path"] == str(scores_path)
     assert pl.read_parquet(scores_path)["__fmlib_remote_row_id"].to_list() == [2]
@@ -220,8 +221,15 @@ def test_evaluation_worker_preserves_explicit_score_kind(tmp_path, monkeypatch, 
             assert not prepare_backends
             return self
 
-        def _execute_evaluate(self, test_path, scores_path, evaluation_kind, metric_names):
-            captured["evaluate"] = (test_path, scores_path, evaluation_kind, metric_names)
+        def _execute_evaluate(
+            self, test_path, scores_path, evaluation_kind, metric_names
+        ):
+            captured["evaluate"] = (
+                test_path,
+                scores_path,
+                evaluation_kind,
+                metric_names,
+            )
             return EvaluationResult.for_kind(
                 evaluation_kind,
                 metrics={"roc_auc": 0.75},
@@ -255,23 +263,21 @@ def test_evaluation_worker_preserves_explicit_score_kind(tmp_path, monkeypatch, 
     }
     spec = tmp_path / f"evaluate_{kind}.json"
     spec.write_text(
-        json.dumps(
-            {
-                "run_id": f"evaluate-{kind}",
-                "task": "response",
-                "action": "evaluate",
-                "config": config,
-                "payload": {
-                    "test_path": "/data/test",
-                    "artifact_path": str(artifact_path),
-                    "scores_path": str(scores_path),
-                    "evaluation_kind": kind,
-                    "metrics": ["roc_auc"],
-                },
-                "result_path": str(result_path),
-                "log_path": str(tmp_path / "worker.log"),
-            }
-        ),
+        json.dumps({
+            "run_id": f"evaluate-{kind}",
+            "task": "response",
+            "action": "evaluate",
+            "config": config,
+            "payload": {
+                "test_path": "/data/test",
+                "artifact_path": str(artifact_path),
+                "scores_path": str(scores_path),
+                "evaluation_kind": kind,
+                "metrics": ["roc_auc"],
+            },
+            "result_path": str(result_path),
+            "log_path": str(tmp_path / "worker.log"),
+        }),
         encoding="utf-8",
     )
 

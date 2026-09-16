@@ -20,6 +20,7 @@ class BinaryTaskConfig(BaseTaskConfig):
 
     task_name = "binary"
 
+
 @dataclass(frozen=True, kw_only=True)
 class ResponseTaskConfig(BinaryTaskConfig):
     """Configure binary response modelling with an optional treatment feature.
@@ -46,6 +47,7 @@ class RegressionTaskConfig(BaseTaskConfig):
 
     task_name = "regression"
 
+
 @dataclass(frozen=True, kw_only=True)
 class MulticlassTaskConfig(BaseTaskConfig):
     """Configure a multiclass classification task.
@@ -58,6 +60,7 @@ class MulticlassTaskConfig(BaseTaskConfig):
     """
 
     task_name = "multiclass"
+
 
 @dataclass(frozen=True, kw_only=True)
 class UpliftTaskConfig(BaseTaskConfig):
@@ -91,7 +94,11 @@ class UpliftTaskConfig(BaseTaskConfig):
             msg = "UpliftTaskConfig requires treatment_column"
             raise ConfigError(msg)
         super().__post_init__()
-        if self.treatment_column in {*self.categorical_columns, *self.numerical_columns, *self.hidden_state_columns}:
+        if self.treatment_column in {
+            *self.categorical_columns,
+            *self.numerical_columns,
+            *self.hidden_state_columns,
+        }:
             msg = "Uplift treatment_column is learner-controlled and cannot be listed as a feature"
             raise ConfigError(msg)
         if not isinstance(self.estimate_propensity, bool):

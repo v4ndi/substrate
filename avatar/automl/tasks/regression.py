@@ -24,7 +24,12 @@ from avatar.automl.tasks.evaluation import (
     scalar_score_inputs,
 )
 from avatar.automl.tasks.supervised import SupervisedBoostingTask
-from avatar.automl.types import EvaluationKind, EvaluationResult, ParquetPath, PredictionResult
+from avatar.automl.types import (
+    EvaluationKind,
+    EvaluationResult,
+    ParquetPath,
+    PredictionResult,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +46,9 @@ class RegressionTask(SupervisedBoostingTask[RegressionBoostingBackend]):
     _task_name = "regression"
     _artifact_directory = "regression_model"
 
-    def __init__(self, config: RegressionTaskConfig, *, _entity_path: Path | None = None):
+    def __init__(
+        self, config: RegressionTaskConfig, *, _entity_path: Path | None = None
+    ):
         """Initialize regression-task orchestration.
 
         Args:
@@ -63,7 +70,9 @@ class RegressionTask(SupervisedBoostingTask[RegressionBoostingBackend]):
             msg = f"Target column {self.config.target_column!r} contains null values"
             raise SchemaError(msg)
         if target.cast(pl.Float64).is_infinite().any():
-            msg = f"Target column {self.config.target_column!r} contains infinite values"
+            msg = (
+                f"Target column {self.config.target_column!r} contains infinite values"
+            )
             raise SchemaError(msg)
         values = target.to_numpy()
         if not np.isfinite(values).all():
@@ -79,7 +88,9 @@ class RegressionTask(SupervisedBoostingTask[RegressionBoostingBackend]):
         """Calculate the explicitly directed MSE/MAE Optuna objective."""
         return self._metric(target, scores)
 
-    def _prediction_result(self, frame: pl.DataFrame, raw: np.ndarray) -> PredictionResult:
+    def _prediction_result(
+        self, frame: pl.DataFrame, raw: np.ndarray
+    ) -> PredictionResult:
         """Assemble scalar raw scores with the configured roles."""
         return scalar_prediction_result(
             frame,
@@ -97,34 +108,56 @@ class RegressionTask(SupervisedBoostingTask[RegressionBoostingBackend]):
         if "model_layout" in evaluated.columns:
             overall: dict[str, float] = {}
             grouped: list[pl.DataFrame] = []
-            for key, branch in evaluated.partition_by("model_layout", as_dict=True, maintain_order=True).items():
+            for key, branch in evaluated.partition_by(
+                "model_layout", as_dict=True, maintain_order=True
+            ).items():
                 scope = key[0] if isinstance(key, tuple) else key
-                branch_metrics, branch_grouped = self._metric_table(branch.drop("model_layout"), metric_names)
-                overall.update({f"{scope}_{name}": value for name, value in branch_metrics.items()})
+                branch_metrics, branch_grouped = self._metric_table(
+                    branch.drop("model_layout"), metric_names
+                )
+                overall.update({
+                    f"{scope}_{name}": value for name, value in branch_metrics.items()
+                })
                 if branch_grouped is not None:
-                    grouped.append(branch_grouped.with_columns(pl.lit(scope).alias("model_layout")))
+                    grouped.append(
+                        branch_grouped.with_columns(pl.lit(scope).alias("model_layout"))
+                    )
             return overall, combine_metric_slices(grouped, self._internal_config)
         config = self._internal_config
         selected = resolve_evaluation_metrics(metric_names, self._task_name)
         target = self._target(evaluated)
         scores = evaluated["score"].to_numpy()
-        overall = {metric.name: float(metric.compute(MetricInput(target, scores))) for metric in selected}
+        overall = {
+            metric.name: float(metric.compute(MetricInput(target, scores)))
+            for metric in selected
+        }
         tables: list[pl.DataFrame] = []
         for slice_name, group_columns in metric_slices(config):
             rows: list[dict[str, Any]] = []
             for keys, group in evaluated.group_by(group_columns, maintain_order=True):
                 key_values = keys if isinstance(keys, tuple) else (keys,)
                 rows.append(
-                    {"scope": slice_name, **dict(zip(group_columns, key_values, strict=True))}
+                    {
+                        "scope": slice_name,
+                        **dict(zip(group_columns, key_values, strict=True)),
+                    }
                     | {"n_samples": group.height}
                     | {
-                        metric.name: float(metric.compute(MetricInput(self._target(group), group["score"].to_numpy())))
+                        metric.name: float(
+                            metric.compute(
+                                MetricInput(
+                                    self._target(group), group["score"].to_numpy()
+                                )
+                            )
+                        )
                         for metric in selected
                     }
                 )
             table = pl.DataFrame(rows)
             if config.date_column in group_columns:
-                table = table.with_columns(pl.col(config.date_column).dt.strftime("%Y-%m-%d"))
+                table = table.with_columns(
+                    pl.col(config.date_column).dt.strftime("%Y-%m-%d")
+                )
             tables.append(table.sort(group_columns))
         return overall, combine_metric_slices(tables, config)
 
@@ -138,16 +171,24 @@ class RegressionTask(SupervisedBoostingTask[RegressionBoostingBackend]):
         """Compute continuous-score metrics and report data without writing files."""
         self._require_fitted()
         config = self._internal_config
-        truth = prepare_evaluation_truth(self._normalize_model_frame(self._read(test_path)), config, self._models[0])
+        truth = prepare_evaluation_truth(
+            self._normalize_model_frame(self._read(test_path)), config, self._models[0]
+        )
         raw_external = scalar_score_inputs(scores)
-        evaluated = align_scalar_scores(raw_external, truth, config, self._column_mapper)
+        evaluated = align_scalar_scores(
+            raw_external, truth, config, self._column_mapper
+        )
         metrics, metrics_by_group = self._metric_table(evaluated, metric_names)
 
-        importance_table = feature_importance_table(self._models, self._column_mapper, self._model_name)
+        importance_table = feature_importance_table(
+            self._models, self._column_mapper, self._model_name
+        )
         result = EvaluationResult.for_kind(
             evaluation_kind,
             metrics=metrics,
-            metrics_by_group=None if metrics_by_group is None else self._column_mapper.restore_frame(metrics_by_group),
+            metrics_by_group=None
+            if metrics_by_group is None
+            else self._column_mapper.restore_frame(metrics_by_group),
         )
 
         return EvaluationData(

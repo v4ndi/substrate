@@ -32,7 +32,9 @@ def binary_top_k_metrics(
         cutoff = max(1, int(np.ceil(target.size * k / 100)))
         true_positives = int(target[order[:cutoff]].sum())
         metrics[f"precision@{k}"] = true_positives / cutoff
-        metrics[f"recall@{k}"] = true_positives / positive_count if positive_count else float("nan")
+        metrics[f"recall@{k}"] = (
+            true_positives / positive_count if positive_count else float("nan")
+        )
     return metrics
 
 

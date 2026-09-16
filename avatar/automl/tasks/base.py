@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import shutil
 from abc import ABC, abstractmethod
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from copy import copy
 from dataclasses import asdict, replace
 from pathlib import Path
-from typing import Any, Generic, Literal, Mapping, TypeVar
+from typing import Any, Generic, Literal, TypeVar
 
 import numpy as np
 import polars as pl
@@ -28,7 +28,11 @@ from avatar.automl.metrics import resolve_evaluation_metrics
 from avatar.automl.reporting import EvaluationData, export_evaluation
 from avatar.automl.tasks.artifacts import ArtifactRepository, ArtifactState
 from avatar.automl.tasks.artifacts import jsonable as _jsonable
-from avatar.automl.tasks.operations import OperationHooks, OperationRunner, RemoteTrainingParts
+from avatar.automl.tasks.operations import (
+    OperationHooks,
+    OperationRunner,
+    RemoteTrainingParts,
+)
 from avatar.automl.tasks.planning import ModelPlan
 from avatar.automl.tasks.prediction import execute_prediction
 from avatar.automl.tasks.preparation import DataPreparation
@@ -91,7 +95,9 @@ class BaseBoostingTask(ABC, Generic[_BackendT]):
         self._source_manifests: dict[str, tuple[dict[str, Any], ...]] = {}
         self._environment_runner: EnvironmentRunner | None = None
         if _entity_path is None:
-            self._store = AutoMLStore.create(config.output_dir, self._task_name, _jsonable(asdict(config)))
+            self._store = AutoMLStore.create(
+                config.output_dir, self._task_name, _jsonable(asdict(config))
+            )
         else:
             self._store = AutoMLStore(_entity_path)
 
@@ -118,12 +124,16 @@ class BaseBoostingTask(ABC, Generic[_BackendT]):
     def _target(self, frame: pl.DataFrame) -> np.ndarray:
         """Validate and return the task-specific target vector."""
 
-    def _prepare_training_state(self, train_frame: pl.DataFrame, valid_frame: pl.DataFrame) -> None:
+    def _prepare_training_state(
+        self, train_frame: pl.DataFrame, valid_frame: pl.DataFrame
+    ) -> None:
         """Resolve task-specific fitted state before model parts are trained."""
         return None
 
     def _context(self) -> ExecutionContext:
-        return getattr(self, "_execution_context", None) or ExecutionContext.from_config(self.config)
+        return getattr(
+            self, "_execution_context", None
+        ) or ExecutionContext.from_config(self.config)
 
     def _data_preparation(self) -> DataPreparation:
         return DataPreparation(self._context())
@@ -140,11 +150,11 @@ class BaseBoostingTask(ABC, Generic[_BackendT]):
         """Return a stable public key for global or per-group model results."""
         return "global" if layout == "global" else f"per_group:{group_value}"
 
-    def _copy_task_state(self, other: "BaseBoostingTask") -> None:
+    def _copy_task_state(self, other: BaseBoostingTask) -> None:
         """Copy concrete task state from one complete loaded artifact."""
         return None
 
-    def _merge_task_state(self, other: "BaseBoostingTask") -> None:
+    def _merge_task_state(self, other: BaseBoostingTask) -> None:
         """Merge concrete task state from one independently trained model part."""
         self._copy_task_state(other)
 
@@ -197,27 +207,51 @@ class BaseBoostingTask(ABC, Generic[_BackendT]):
             self._task_name,
             self._prepare_training_state,
             self._fit_one,
-        ).execute(train_path, valid_path, remote_layout=remote_layout, remote_group_value=remote_group_value)
+        ).execute(
+            train_path,
+            valid_path,
+            remote_layout=remote_layout,
+            remote_group_value=remote_group_value,
+        )
         self._models = list(outcome.models)
         self._source_manifests = dict(outcome.source_manifests)
         return outcome.result
 
-    def _remote_training_parts(self, train_path: ParquetPath) -> list[tuple[str, Any | None]]:
+    def _remote_training_parts(
+        self, train_path: ParquetPath
+    ) -> list[tuple[str, Any | None]]:
         """Resolve the submission plan without reading unused global data."""
         frame = None
-        if self._internal_config.resolved_model_layout in {"per_group", "global_and_per_group"}:
-            values, has_nulls = ParquetSource.resolve(train_path).unique_column_values(self.config.group_column)
-            frame = pl.DataFrame({self._internal_config.group_column: [*values, *([None] if has_nulls else [])]})
+        if self._internal_config.resolved_model_layout in {
+            "per_group",
+            "global_and_per_group",
+        }:
+            values, has_nulls = ParquetSource.resolve(train_path).unique_column_values(
+                self.config.group_column
+            )
+            frame = pl.DataFrame({
+                self._internal_config.group_column: [
+                    *values,
+                    *([None] if has_nulls else []),
+                ]
+            })
         return list(ModelPlan.remote_training(self._context(), frame).parts)
 
-    def _remote_prediction_parts(self, test_path: ParquetPath) -> list[tuple[str, Any | None]]:
+    def _remote_prediction_parts(
+        self, test_path: ParquetPath
+    ) -> list[tuple[str, Any | None]]:
         """Resolve independently runnable prediction branches without loading all columns."""
         return self._prediction_router().remote_parts(test_path)
 
-    def _select_remote_prediction_part(self, layout: str, group_value: Any | None) -> None:
+    def _select_remote_prediction_part(
+        self, layout: str, group_value: Any | None
+    ) -> None:
         """Keep exactly the fitted model used by one remote prediction job."""
         selected = [
-            item for item in self._models if item.layout == layout and (layout == "global" or item.group_value == group_value)
+            item
+            for item in self._models
+            if item.layout == layout
+            and (layout == "global" or item.group_value == group_value)
         ]
         if len(selected) != 1:
             msg = f"Remote prediction part {(layout, group_value)!r} resolved to {len(selected)} fitted models"
@@ -242,7 +276,9 @@ class BaseBoostingTask(ABC, Generic[_BackendT]):
             require_fitted=self._require_fitted,
             storage_frame=self._prediction_storage_frame,
         )
-        return OperationRunner(self._context().config, self._store, self._runner(), hooks, self.is_fitted)
+        return OperationRunner(
+            self._context().config, self._store, self._runner(), hooks, self.is_fitted
+        )
 
     def train(
         self,
@@ -275,24 +311,35 @@ class BaseBoostingTask(ABC, Generic[_BackendT]):
             SchemaError: If required columns, group partitions, or feature
                 types are invalid.
         """
-        return self._operation_runner().train(train_path, valid_path, env_type=env_type, device=device, environment=environment)
+        return self._operation_runner().train(
+            train_path,
+            valid_path,
+            env_type=env_type,
+            device=device,
+            environment=environment,
+        )
 
     def _set_entity_artifact(self, artifact_path: Path) -> None:
         """Record the internal fitted artifact used to restore this entity."""
         entity = self._store.entity
-        write_json(self.path / "entity.json", entity | {"artifact_path": str(artifact_path.resolve())})
+        write_json(
+            self.path / "entity.json",
+            entity | {"artifact_path": str(artifact_path.resolve())},
+        )
 
     def training_result(self) -> TrainingResult:
         """Load the completed training summary for this entity."""
         return self._store.load_training()
 
-    def _adopt(self, restored: "BaseBoostingTask") -> None:
+    def _adopt(self, restored: BaseBoostingTask) -> None:
         """Adopt fitted model and task-specific state from an artifact instance."""
         self._models = restored._models
         self._source_manifests = restored._source_manifests
         self._copy_task_state(restored)
 
-    def _assemble_remote_training(self, request: RemoteTrainingParts) -> tuple[str, ...]:
+    def _assemble_remote_training(
+        self, request: RemoteTrainingParts
+    ) -> tuple[str, ...]:
         """Adopt complete worker artifacts and merge formulation-specific state."""
         if request.artifact_path.exists():
             self._restore_artifact(request.artifact_path)
@@ -301,7 +348,9 @@ class BaseBoostingTask(ABC, Generic[_BackendT]):
             self._source_manifests = {}
             repository = self._artifact_repository()
             for part_root in request.part_paths:
-                part_config = repository.read_config(part_root, type(self)._config_class)
+                part_config = repository.read_config(
+                    part_root, type(self)._config_class
+                )
                 part = type(self)(part_config, _entity_path=self.path)
                 part._restore_artifact(part_root)
                 self._models.extend(part._models)
@@ -310,7 +359,9 @@ class BaseBoostingTask(ABC, Generic[_BackendT]):
             self.save(request.artifact_path)
         return tuple(
             self._column_mapper.to_external.get(name, name)
-            for name in dict.fromkeys(name for item in self._models for name in item.schema.feature_order)
+            for name in dict.fromkeys(
+                name for item in self._models for name in item.schema.feature_order
+            )
         )
 
     def status(self, *, wait: bool = False) -> pl.DataFrame:
@@ -338,14 +389,17 @@ class BaseBoostingTask(ABC, Generic[_BackendT]):
         env_type: Literal["local", "osiris"] | None,
         device: Literal["cpu", "gpu"] | None = None,
         environment: EnvironmentConfig | Mapping[str, Any] | None = None,
-        model_layout: Literal["global", "per_group", "global_and_per_group"] | None = None,
+        model_layout: Literal["global", "per_group", "global_and_per_group"]
+        | None = None,
         output_dir: str | Path | None = None,
     ) -> BaseTaskConfig:
         """Build a validated inference config without changing training state."""
         updates: dict[str, Any] = {}
         if env_type is not None:
             updates["env_type"] = env_type
-            if env_type != "local" or (device is None and self.config.env_type != "local"):
+            if env_type != "local" or (
+                device is None and self.config.env_type != "local"
+            ):
                 updates["device"] = "gpu"
         effective_env = env_type or self.config.env_type
         if device is not None:
@@ -361,7 +415,9 @@ class BaseBoostingTask(ABC, Generic[_BackendT]):
             updates["output_dir"] = output_dir
         return replace(self.config, **updates)
 
-    def _execution_view(self, context: ExecutionContext, *, prepare_backends: bool = False):
+    def _execution_view(
+        self, context: ExecutionContext, *, prepare_backends: bool = False
+    ):
         """Bind operation settings and scratch state without mutating the entity.
 
         This shallow view shares fitted data and the persistent store. Only
@@ -373,7 +429,11 @@ class BaseBoostingTask(ABC, Generic[_BackendT]):
         execution.config = context.config
         execution._internal_config = context.internal_config
         execution._models = [
-            replace(item, backend=item.backend.for_execution(context.config.resolved_device)) if prepare_backends else item
+            replace(
+                item, backend=item.backend.for_execution(context.config.resolved_device)
+            )
+            if prepare_backends
+            else item
             for item in self._models
         ]
         execution._source_manifests = dict(self._source_manifests)
@@ -384,7 +444,9 @@ class BaseBoostingTask(ABC, Generic[_BackendT]):
         return self._prediction_router().validate_layout()
 
     @abstractmethod
-    def _predict_entry(self, frame: pl.DataFrame, item: _ModelEntry[_BackendT]) -> np.ndarray:
+    def _predict_entry(
+        self, frame: pl.DataFrame, item: _ModelEntry[_BackendT]
+    ) -> np.ndarray:
         """Prepare task-specific roles and score one fitted model part."""
 
     @abstractmethod
@@ -399,7 +461,9 @@ class BaseBoostingTask(ABC, Generic[_BackendT]):
         """Return validated raw branch scores."""
 
     @abstractmethod
-    def _prediction_result(self, frame: pl.DataFrame, raw: np.ndarray) -> PredictionResult:
+    def _prediction_result(
+        self, frame: pl.DataFrame, raw: np.ndarray
+    ) -> PredictionResult:
         """Construct the public raw-score table."""
 
     def _execute_predict(
@@ -431,12 +495,16 @@ class BaseBoostingTask(ABC, Generic[_BackendT]):
             frame, remote_group_value=remote_group_value, include_row_id=include_row_id
         )
 
-    def _filter_prediction_group(self, frame: pl.DataFrame, remote_group_value: Any | None) -> pl.DataFrame:
+    def _filter_prediction_group(
+        self, frame: pl.DataFrame, remote_group_value: Any | None
+    ) -> pl.DataFrame:
         """Select one remote group part from a normalized prediction frame."""
         return self._prediction_router().filter_group(frame, remote_group_value)
 
     @staticmethod
-    def _with_prediction_row_id(result: PredictionResult, frame: pl.DataFrame) -> PredictionResult:
+    def _with_prediction_row_id(
+        result: PredictionResult, frame: pl.DataFrame
+    ) -> PredictionResult:
         """Attach an internal source row ID used only to merge remote job outputs."""
         return PredictionRouter.attach_row_id(result, frame)
 
@@ -460,11 +528,15 @@ class BaseBoostingTask(ABC, Generic[_BackendT]):
         """
         return self._prediction_router().layout_frames(frame)
 
-    def _combine_layout_predictions(self, results: list[tuple[str, PredictionResult]]) -> PredictionResult:
+    def _combine_layout_predictions(
+        self, results: list[tuple[str, PredictionResult]]
+    ) -> PredictionResult:
         """Combine independent global and per-group branches into one self-describing result."""
         return self._prediction_router().combine(results)
 
-    def _with_prediction_group(self, result: PredictionResult, frame: pl.DataFrame) -> PredictionResult:
+    def _with_prediction_group(
+        self, result: PredictionResult, frame: pl.DataFrame
+    ) -> PredictionResult:
         """Attach the row's group so long-form branch scores remain unambiguous."""
         return self._prediction_router().attach_group(result, frame)
 
@@ -491,7 +563,8 @@ class BaseBoostingTask(ABC, Generic[_BackendT]):
         env_type: Literal["local", "osiris"] | None = None,
         device: Literal["cpu", "gpu"] | None = None,
         environment: EnvironmentConfig | Mapping[str, Any] | None = None,
-        model_layout: Literal["global", "per_group", "global_and_per_group"] | None = None,
+        model_layout: Literal["global", "per_group", "global_and_per_group"]
+        | None = None,
     ) -> PredictionResult | None:
         """Return model scores for every row under ``test_path``.
 
@@ -583,7 +656,10 @@ class BaseBoostingTask(ABC, Generic[_BackendT]):
                 is unsupported by this task.
             SchemaError: If targets and scores cannot be aligned.
         """
-        metric_names = tuple(metric.name for metric in resolve_evaluation_metrics(metrics, self._task_name))
+        metric_names = tuple(
+            metric.name
+            for metric in resolve_evaluation_metrics(metrics, self._task_name)
+        )
         return self._operation_runner().evaluate(
             test_path,
             scores,
@@ -626,7 +702,7 @@ class BaseBoostingTask(ABC, Generic[_BackendT]):
         return self._artifact_repository().save(state, path, overwrite=overwrite)
 
     @classmethod
-    def load(cls, path: str | Path) -> "BaseBoostingTask":
+    def load(cls, path: str | Path) -> BaseBoostingTask:
         """Restore a complete AutoML entity or a standalone model artifact.
 
         Args:
@@ -661,7 +737,9 @@ class BaseBoostingTask(ABC, Generic[_BackendT]):
             if artifact:
                 repository = cls._repository()
                 artifact_root = Path(artifact)
-                artifact_config = repository.read_config(artifact_root, cls._config_class)
+                artifact_config = repository.read_config(
+                    artifact_root, cls._config_class
+                )
                 cls._validate_entity_artifact_config(config, artifact_config)
                 state = repository.restore(
                     artifact_root,
@@ -689,7 +767,7 @@ class BaseBoostingTask(ABC, Generic[_BackendT]):
         return task
 
     @classmethod
-    def _load_artifact(cls, root: Path) -> "BaseBoostingTask":
+    def _load_artifact(cls, root: Path) -> BaseBoostingTask:
         """Load a standalone artifact into a fresh AutoML entity."""
         repository = cls._repository()
         config = repository.read_config(root, cls._config_class)
@@ -709,7 +787,9 @@ class BaseBoostingTask(ABC, Generic[_BackendT]):
             msg = f"Artifact task metadata cannot be restored: {exc}"
             raise ArtifactIntegrityError(msg) from exc
 
-    def _restore_artifact(self, root: Path, *, manifest: Mapping[str, Any] | None = None) -> None:
+    def _restore_artifact(
+        self, root: Path, *, manifest: Mapping[str, Any] | None = None
+    ) -> None:
         """Apply artifact values at the explicit fitted-state boundary."""
         repository = self._artifact_repository()
         artifact_config = repository.read_config(root, type(self)._config_class)
@@ -722,7 +802,9 @@ class BaseBoostingTask(ABC, Generic[_BackendT]):
         self._adopt_artifact_state(state)
 
     @staticmethod
-    def _validate_entity_artifact_config(entity_config: BaseTaskConfig, artifact_config: BaseTaskConfig) -> None:
+    def _validate_entity_artifact_config(
+        entity_config: BaseTaskConfig, artifact_config: BaseTaskConfig
+    ) -> None:
         """Require an entity and artifact to agree on model interpretation."""
         entity_payload = _jsonable(asdict(entity_config))
         artifact_payload = _jsonable(asdict(artifact_config))
@@ -740,10 +822,15 @@ class BaseBoostingTask(ABC, Generic[_BackendT]):
             "hidden_state_columns",
             "model_layout",
         }
-        if "estimate_propensity" in entity_payload or "estimate_propensity" in artifact_payload:
+        if (
+            "estimate_propensity" in entity_payload
+            or "estimate_propensity" in artifact_payload
+        ):
             comparable_fields.add("estimate_propensity")
         differing_fields = sorted(
-            field for field in comparable_fields if entity_payload.get(field) != artifact_payload.get(field)
+            field
+            for field in comparable_fields
+            if entity_payload.get(field) != artifact_payload.get(field)
         )
         if not differing_fields:
             return
@@ -758,7 +845,9 @@ class BaseBoostingTask(ABC, Generic[_BackendT]):
 
     @classmethod
     def _repository(cls) -> ArtifactRepository:
-        return ArtifactRepository(cls._task_name, cls._artifact_directory, cls._backend_class)
+        return ArtifactRepository(
+            cls._task_name, cls._artifact_directory, cls._backend_class
+        )
 
     def _artifact_repository(self) -> ArtifactRepository:
         return type(self)._repository()

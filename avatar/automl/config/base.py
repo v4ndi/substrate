@@ -2,18 +2,17 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, fields
 from pathlib import Path
-from typing import Any, ClassVar, Literal, Mapping, Sequence
+from typing import Any, ClassVar, Literal
 
 from avatar.automl.exceptions import ConfigError, UnsupportedBackendError
 from avatar.automl.metrics import default_optimization_metric, resolve_metric
 
 FeatureColumns = Sequence[str] | str | Path
 
-_DEFAULT_REMOTE_IMAGE = (
-    "registry.ca.sbrf.ru/ci02684173/ci02697916/notebooks/python3.12/cuda12.4/d-03.000.00:d-03.000.00-gigachat"
-)
+_DEFAULT_REMOTE_IMAGE = "registry.ca.sbrf.ru/ci02684173/ci02697916/notebooks/python3.12/cuda12.4/d-03.000.00:d-03.000.00-gigachat"
 _DEFAULT_SHARED_FMLIB_VENV = "/home/datalab/nfs/sber-amazme-fmlib/env"
 
 
@@ -42,20 +41,30 @@ class EnvironmentConfig:
     num_gpus: int | None = None
     num_nodes: int | None = None
     venv_path: str | Path = _DEFAULT_SHARED_FMLIB_VENV
-    env: Mapping[str, str] = field(default_factory=lambda: {"OMP_NUM_THREADS": "7", "NCCL_DEBUG": "INFO"})
+    env: Mapping[str, str] = field(
+        default_factory=lambda: {"OMP_NUM_THREADS": "7", "NCCL_DEBUG": "INFO"}
+    )
     poll_interval_seconds: float = 30.0
     log_dir: str | Path | None = None
 
     def __post_init__(self) -> None:
         """Normalize collection fields and validate generic environment values."""
-        if self.pool is not None and (not isinstance(self.pool, str) or not self.pool.strip()):
+        if self.pool is not None and (
+            not isinstance(self.pool, str) or not self.pool.strip()
+        ):
             msg = f"environment.pool={self.pool!r}: expected None or a non-empty string"
             raise ConfigError(msg)
         if self.venv_path is None:
             msg = "environment.venv_path cannot be None; omit it to use the default shared fmlib environment"
             raise ConfigError(msg)
-        object.__setattr__(self, "env", {str(key): str(value) for key, value in self.env.items()})
-        reserved = sorted(name for name in self.env if name.upper() in {"CUDA_VISIBLE_DEVICES", "PYTHONPATH"})
+        object.__setattr__(
+            self, "env", {str(key): str(value) for key, value in self.env.items()}
+        )
+        reserved = sorted(
+            name
+            for name in self.env
+            if name.upper() in {"CUDA_VISIBLE_DEVICES", "PYTHONPATH"}
+        )
         if reserved:
             msg = f"Environment variables are managed by the fmlib launcher and cannot be configured: {reserved}"
             raise ConfigError(msg)
@@ -64,8 +73,12 @@ class EnvironmentConfig:
             raise ConfigError(msg)
         for name in ("num_gpus", "num_nodes"):
             value = getattr(self, name)
-            if value is not None and (isinstance(value, bool) or not isinstance(value, int) or value < 1):
-                msg = f"environment.{name}={value!r}: expected a positive integer or None"
+            if value is not None and (
+                isinstance(value, bool) or not isinstance(value, int) or value < 1
+            ):
+                msg = (
+                    f"environment.{name}={value!r}: expected a positive integer or None"
+                )
                 raise ConfigError(msg)
         if self.pool in {None, "common"}:
             conflicting = {
@@ -101,7 +114,7 @@ class EnvironmentConfig:
 
 def _resolve_feature_columns(value: FeatureColumns, field_name: str) -> tuple[str, ...]:
     """Resolve a feature list supplied inline or in an absolute YAML file."""
-    if not isinstance(value, (str, Path)):
+    if not isinstance(value, str | Path):
         try:
             columns = tuple(value)
         except TypeError as exc:
@@ -129,7 +142,9 @@ def _resolve_feature_columns(value: FeatureColumns, field_name: str) -> tuple[st
         raise ConfigError(msg) from exc
     if isinstance(columns, Mapping):
         columns = columns.get(field_name)
-    if not isinstance(columns, list) or not all(isinstance(column, str) for column in columns):
+    if not isinstance(columns, list) or not all(
+        isinstance(column, str) for column in columns
+    ):
         msg = f"{field_name} YAML must contain a list of column names: {columns_path}"
         raise ConfigError(msg)
     return tuple(columns)
@@ -252,11 +267,13 @@ class BaseTaskConfig:
         if not isinstance(self.hyperopt, bool):
             msg = f"hyperopt={self.hyperopt!r}: expected True or False"
             raise ConfigError(msg)
-        if not isinstance(self.output_dir, (str, Path)) or not str(self.output_dir):
+        if not isinstance(self.output_dir, str | Path) or not str(self.output_dir):
             msg = f"output_dir={self.output_dir!r}: expected a non-empty path"
             raise ConfigError(msg)
         for name in ("categorical_columns", "numerical_columns"):
-            object.__setattr__(self, name, _resolve_feature_columns(getattr(self, name), name))
+            object.__setattr__(
+                self, name, _resolve_feature_columns(getattr(self, name), name)
+            )
         hidden_state_columns = self.hidden_state_columns
         if hidden_state_columns is None:
             msg = "hidden_state_columns=None: expected a sequence of non-empty column names"
@@ -269,13 +286,17 @@ class BaseTaskConfig:
             except TypeError as exc:
                 msg = f"hidden_state_columns={hidden_state_columns!r}: expected a sequence of non-empty column names"
                 raise ConfigError(msg) from exc
-        if not all(isinstance(column, str) and column for column in hidden_state_columns):
+        if not all(
+            isinstance(column, str) and column for column in hidden_state_columns
+        ):
             msg = f"hidden_state_columns={hidden_state_columns!r}: expected a sequence of non-empty column names"
             raise ConfigError(msg)
         object.__setattr__(self, "hidden_state_columns", tuple(hidden_state_columns))
         object.__setattr__(self, "model_params", dict(self.model_params))
         if isinstance(self.environment, Mapping):
-            object.__setattr__(self, "environment", EnvironmentConfig(**self.environment))
+            object.__setattr__(
+                self, "environment", EnvironmentConfig(**self.environment)
+            )
         if self.search_space is not None:
             object.__setattr__(self, "search_space", dict(self.search_space))
 
@@ -301,10 +322,16 @@ class BaseTaskConfig:
             msg = f"tabnn backend does not support engine={self.engine!r}"
             raise UnsupportedBackendError(msg)
         if set(self.categorical_columns) & set(self.numerical_columns):
-            overlap = sorted(set(self.categorical_columns) & set(self.numerical_columns))
+            overlap = sorted(
+                set(self.categorical_columns) & set(self.numerical_columns)
+            )
             msg = f"categorical_columns and numerical_columns overlap: {overlap}"
             raise ConfigError(msg)
-        all_features = [*self.categorical_columns, *self.numerical_columns, *self.hidden_state_columns]
+        all_features = [
+            *self.categorical_columns,
+            *self.numerical_columns,
+            *self.hidden_state_columns,
+        ]
         if len(all_features) != len(set(all_features)):
             msg = "Feature names must be unique across categorical_columns, numerical_columns and hidden_state_columns"
             raise ConfigError(msg)
@@ -320,13 +347,19 @@ class BaseTaskConfig:
         if self.hyperopt:
             if self.n_trials is None:
                 object.__setattr__(self, "n_trials", 50)
-            elif isinstance(self.n_trials, bool) or not isinstance(self.n_trials, int) or self.n_trials < 1:
+            elif (
+                isinstance(self.n_trials, bool)
+                or not isinstance(self.n_trials, int)
+                or self.n_trials < 1
+            ):
                 msg = "n_trials must be an integer greater than or equal to 1"
                 raise ConfigError(msg)
         elif self.n_trials is not None:
             msg = "n_trials can be configured only when hyperopt=True"
             raise ConfigError(msg)
-        if not isinstance(self.verbose, (bool, int)) or (isinstance(self.verbose, int) and self.verbose < 0):
+        if not isinstance(self.verbose, bool | int) or (
+            isinstance(self.verbose, int) and self.verbose < 0
+        ):
             msg = "verbose must be a boolean or a non-negative integer logging period"
             raise ConfigError(msg)
         task_owned_model_params = {
@@ -349,8 +382,12 @@ class BaseTaskConfig:
             "verbose_eval",
             "verbosity",
         }
-        misplaced_model_params = sorted(task_owned_model_params.intersection(self.model_params))
-        misplaced_search_params = sorted(task_owned_model_params.intersection(self.search_space or {}))
+        misplaced_model_params = sorted(
+            task_owned_model_params.intersection(self.model_params)
+        )
+        misplaced_search_params = sorted(
+            task_owned_model_params.intersection(self.search_space or {})
+        )
         if misplaced_model_params or misplaced_search_params:
             misplaced = sorted(set(misplaced_model_params + misplaced_search_params))
             msg = (
@@ -367,7 +404,9 @@ class BaseTaskConfig:
                 "use search_space to control the values Optuna may choose"
             )
             raise ConfigError(msg)
-        overlapping_parameters = sorted(set(self.model_params).intersection(self.search_space or {}))
+        overlapping_parameters = sorted(
+            set(self.model_params).intersection(self.search_space or {})
+        )
         if overlapping_parameters:
             msg = (
                 "Parameters cannot be fixed in model_params and tuned in search_space at the same time: "
@@ -400,9 +439,13 @@ class BaseTaskConfig:
             "group_column": self.group_column,
             "treatment_column": treatment_column,
         }
-        populated_roles = {name: value for name, value in roles.items() if value is not None}
+        populated_roles = {
+            name: value for name, value in roles.items() if value is not None
+        }
         duplicate_roles = sorted(
-            value for value in set(populated_roles.values()) if list(populated_roles.values()).count(value) > 1
+            value
+            for value in set(populated_roles.values())
+            if list(populated_roles.values()).count(value) > 1
         )
         if duplicate_roles:
             msg = f"Column names cannot be shared by multiple roles: {duplicate_roles}"
@@ -412,13 +455,24 @@ class BaseTaskConfig:
             self.client_id_column,
             self.date_column,
         }
-        configured_features = set(self.categorical_columns) | set(self.numerical_columns) | set(self.hidden_state_columns)
+        configured_features = (
+            set(self.categorical_columns)
+            | set(self.numerical_columns)
+            | set(self.hidden_state_columns)
+        )
         leaked = sorted(forbidden_features & configured_features)
         if leaked:
             msg = f"Role columns cannot be model features: {leaked}"
             raise ConfigError(msg)
-        categorical_roles = {value for value in (self.group_column, treatment_column) if value is not None}
-        numerical_roles = sorted(categorical_roles & (set(self.numerical_columns) | set(self.hidden_state_columns)))
+        categorical_roles = {
+            value
+            for value in (self.group_column, treatment_column)
+            if value is not None
+        }
+        numerical_roles = sorted(
+            categorical_roles
+            & (set(self.numerical_columns) | set(self.hidden_state_columns))
+        )
         if numerical_roles:
             msg = f"group/treatment roles are categorical and cannot be in numerical_columns: {numerical_roles}"
             raise ConfigError(msg)
@@ -433,7 +487,9 @@ class BaseTaskConfig:
         return self.device
 
     @property
-    def resolved_model_layout(self) -> Literal["global", "per_group", "global_and_per_group"]:
+    def resolved_model_layout(
+        self,
+    ) -> Literal["global", "per_group", "global_and_per_group"]:
         """Return the internal global layout when the public field is disabled."""
         return "global" if self.model_layout is None else self.model_layout
 
@@ -458,7 +514,13 @@ class BaseTaskConfig:
             legacy_fields
             & {
                 key
-                for section in (mapping, *(mapping.get(name, {}) for name in ("task", "data", "train", "evaluate")))
+                for section in (
+                    mapping,
+                    *(
+                        mapping.get(name, {})
+                        for name in ("task", "data", "train", "evaluate")
+                    ),
+                )
                 if isinstance(section, Mapping)
                 for key in section
             }
@@ -487,7 +549,9 @@ class BaseTaskConfig:
 
         values: dict[str, Any] = {}
         for section in sections:
-            values.update({key: value for key, value in section.items() if key in valid_names})
+            values.update({
+                key: value for key, value in section.items() if key in valid_names
+            })
         environment = mapping.get("environment")
         if environment is not None:
             if isinstance(environment, EnvironmentConfig):
@@ -496,7 +560,9 @@ class BaseTaskConfig:
                 if not isinstance(environment, Mapping):
                     msg = "Configuration section 'environment' must be a mapping"
                     raise ConfigError(msg)
-                valid_environment_names = {item.name for item in fields(EnvironmentConfig)}
+                valid_environment_names = {
+                    item.name for item in fields(EnvironmentConfig)
+                }
                 unknown_environment = sorted(set(environment) - valid_environment_names)
                 if unknown_environment:
                     msg = f"Unknown EnvironmentConfig fields: {unknown_environment}"

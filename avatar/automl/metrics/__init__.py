@@ -16,7 +16,12 @@ from .binary import (
     binary_roc_auc,
     binary_top_k_metrics,
 )
-from .multiclass import MulticlassMetric, multiclass_class_metrics, multiclass_metrics, multiclass_objective
+from .multiclass import (
+    MulticlassMetric,
+    multiclass_class_metrics,
+    multiclass_metrics,
+    multiclass_objective,
+)
 from .regression import RegressionMetric
 from .uplift import (
     UpliftArmRocAuc,
@@ -62,8 +67,14 @@ DEFAULT_OPTIMIZATION_METRICS: dict[str, str] = {
     "uplift": "qini_auc",
 }
 DEFAULT_EVALUATION_METRICS: dict[str, tuple[str, ...]] = {
-    "binary": ("roc_auc", *(name for k in DEFAULT_TOP_K for name in (f"precision@{k}", f"recall@{k}"))),
-    "response": ("roc_auc", *(name for k in DEFAULT_TOP_K for name in (f"precision@{k}", f"recall@{k}"))),
+    "binary": (
+        "roc_auc",
+        *(name for k in DEFAULT_TOP_K for name in (f"precision@{k}", f"recall@{k}")),
+    ),
+    "response": (
+        "roc_auc",
+        *(name for k in DEFAULT_TOP_K for name in (f"precision@{k}", f"recall@{k}")),
+    ),
     "regression": ("mse", "mae", "mape"),
     "multiclass": (
         "roc_auc_ovr_macro",
@@ -113,12 +124,14 @@ def default_optimization_metric(task: str) -> str:
         raise ConfigError(msg) from exc
 
 
-def resolve_evaluation_metrics(names: Sequence[str] | None, task: str) -> tuple[Metric, ...]:
+def resolve_evaluation_metrics(
+    names: Sequence[str] | None, task: str
+) -> tuple[Metric, ...]:
     """Normalize and resolve a complete evaluation metric selection."""
     if names is None:
         selected = DEFAULT_EVALUATION_METRICS[task]
     else:
-        if isinstance(names, (str, bytes)):
+        if isinstance(names, str | bytes):
             msg = "metrics must be a non-empty sequence of unique metric names, not a string"
             raise ConfigError(msg)
         try:
@@ -136,6 +149,7 @@ def resolve_evaluation_metrics(names: Sequence[str] | None, task: str) -> tuple[
             msg = f"metrics must contain unique names; got {selected!r}"
             raise ConfigError(msg)
     return tuple(resolve_metric(name, task, "evaluation") for name in selected)
+
 
 __all__ = [
     "DEFAULT_EVALUATION_METRICS",

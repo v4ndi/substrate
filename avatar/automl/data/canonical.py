@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
-from typing import Mapping
 
 import polars as pl
 
@@ -32,7 +32,7 @@ class CanonicalColumnMapper:
     to_external: Mapping[str, str]
 
     @classmethod
-    def from_config(cls, config: BaseTaskConfig) -> "CanonicalColumnMapper":
+    def from_config(cls, config: BaseTaskConfig) -> CanonicalColumnMapper:
         """Build a reversible role mapping from task configuration.
 
         Args:
@@ -67,9 +67,16 @@ class CanonicalColumnMapper:
         return replace(
             config,
             **role_values,
-            categorical_columns=tuple(self.to_canonical.get(name, name) for name in config.categorical_columns),
-            numerical_columns=tuple(self.to_canonical.get(name, name) for name in config.numerical_columns),
-            hidden_state_columns=tuple(self.to_canonical.get(name, name) for name in config.hidden_state_columns),
+            categorical_columns=tuple(
+                self.to_canonical.get(name, name) for name in config.categorical_columns
+            ),
+            numerical_columns=tuple(
+                self.to_canonical.get(name, name) for name in config.numerical_columns
+            ),
+            hidden_state_columns=tuple(
+                self.to_canonical.get(name, name)
+                for name in config.hidden_state_columns
+            ),
         )
 
     def normalize_frame(self, frame: pl.DataFrame) -> pl.DataFrame:
@@ -84,8 +91,16 @@ class CanonicalColumnMapper:
         Raises:
             SchemaError: If an alias and its canonical name are both present.
         """
-        active = {source: target for source, target in self.to_canonical.items() if source in frame.columns}
-        collisions = sorted(target for source, target in active.items() if target in frame.columns and target != source)
+        active = {
+            source: target
+            for source, target in self.to_canonical.items()
+            if source in frame.columns
+        }
+        collisions = sorted(
+            target
+            for source, target in active.items()
+            if target in frame.columns and target != source
+        )
         if collisions:
             msg = f"Custom role aliases collide with canonical input columns: {collisions}"
             raise SchemaError(msg)
@@ -100,5 +115,9 @@ class CanonicalColumnMapper:
         Returns:
             Frame with applicable public names restored.
         """
-        active = {source: target for source, target in self.to_external.items() if source in frame.columns}
+        active = {
+            source: target
+            for source, target in self.to_external.items()
+            if source in frame.columns
+        }
         return frame.rename(active)

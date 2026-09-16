@@ -1,7 +1,8 @@
 """Persist evaluation tables in result metadata and scores under predictions."""
 
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 import polars as pl
 
@@ -45,17 +46,25 @@ def evaluation_payload(result: EvaluationResult) -> dict[str, Any]:
             else {
                 column: {
                     "dtype": str(_DTYPES[str(dtype)]),
-                    "values": frame[column].cast(pl.String).to_list() if dtype == pl.Date else frame[column].to_list(),
+                    "values": frame[column].cast(pl.String).to_list()
+                    if dtype == pl.Date
+                    else frame[column].to_list(),
                 }
                 for column, dtype in frame.schema.items()
             }
         )
     return {
         "metrics_raw": None if result.metrics_raw is None else dict(result.metrics_raw),
-        "metrics_calibrated": None if result.metrics_calibrated is None else dict(result.metrics_calibrated),
+        "metrics_calibrated": None
+        if result.metrics_calibrated is None
+        else dict(result.metrics_calibrated),
         "metric_tables": tables,
-        "excel_paths_raw": {name: str(path) for name, path in result.excel_paths_raw.items()},
-        "excel_paths_calibrated": {name: str(path) for name, path in result.excel_paths_calibrated.items()},
+        "excel_paths_raw": {
+            name: str(path) for name, path in result.excel_paths_raw.items()
+        },
+        "excel_paths_calibrated": {
+            name: str(path) for name, path in result.excel_paths_calibrated.items()
+        },
     }
 
 
@@ -67,24 +76,28 @@ def evaluation_from_payload(value: Mapping[str, Any]) -> EvaluationResult:
         if table is None:
             tables[name] = None
         else:
-            tables[name] = pl.DataFrame(
-                [
-                    pl.Series(column, data["values"], dtype=pl.String).cast(pl.Date)
-                    if data["dtype"] == "Date"
-                    else pl.Series(column, data["values"], dtype=_DTYPES[data["dtype"]])
-                    for column, data in table.items()
-                ]
-            )
+            tables[name] = pl.DataFrame([
+                pl.Series(column, data["values"], dtype=pl.String).cast(pl.Date)
+                if data["dtype"] == "Date"
+                else pl.Series(column, data["values"], dtype=_DTYPES[data["dtype"]])
+                for column, data in table.items()
+            ])
     return EvaluationResult(
         metrics_raw=value.get("metrics_raw"),
         metrics_calibrated=value.get("metrics_calibrated"),
-        figures_raw={name: Path(path) for name, path in value.get("figure_paths_raw", {}).items()},
-        figures_calibrated={
-            name: Path(path) for name, path in value.get("figure_paths_calibrated", {}).items()
+        figures_raw={
+            name: Path(path) for name, path in value.get("figure_paths_raw", {}).items()
         },
-        excel_paths_raw={name: Path(path) for name, path in value.get("excel_paths_raw", {}).items()},
+        figures_calibrated={
+            name: Path(path)
+            for name, path in value.get("figure_paths_calibrated", {}).items()
+        },
+        excel_paths_raw={
+            name: Path(path) for name, path in value.get("excel_paths_raw", {}).items()
+        },
         excel_paths_calibrated={
-            name: Path(path) for name, path in value.get("excel_paths_calibrated", {}).items()
+            name: Path(path)
+            for name, path in value.get("excel_paths_calibrated", {}).items()
         },
         **tables,
     )

@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 import polars as pl
 
@@ -44,7 +45,7 @@ class FeatureSchema:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, value: Mapping[str, Any]) -> "FeatureSchema":
+    def from_dict(cls, value: Mapping[str, Any]) -> FeatureSchema:
         """Restore a feature schema from serialized values.
 
         Args:
@@ -103,7 +104,13 @@ def normalize_date(frame: pl.DataFrame, column: str) -> pl.DataFrame:
             (value + "01").str.strptime(pl.Date, "%Y%m%d", strict=False),
         )
         checked = frame.with_columns(parsed.alias(parsed_column))
-        invalid = checked.filter(pl.col(column).is_not_null() & pl.col(parsed_column).is_null()).select(column).head(5)
+        invalid = (
+            checked.filter(
+                pl.col(column).is_not_null() & pl.col(parsed_column).is_null()
+            )
+            .select(column)
+            .head(5)
+        )
         if invalid.height:
             msg = f"Column {column!r} contains invalid date values: {invalid.to_series().to_list()}"
             raise SchemaError(msg)
@@ -142,7 +149,9 @@ def normalize_optional_binary_treatment(
         raise SchemaError(msg)
     values = set(treatment.unique().to_list())
     if not values <= {0, 1}:
-        msg = f"Treatment column must contain only 0 and 1; got {sorted(values, key=str)}"
+        msg = (
+            f"Treatment column must contain only 0 and 1; got {sorted(values, key=str)}"
+        )
         raise SchemaError(msg)
     expression = pl.col(column).cast(pl.Int8)
     if inverse:
@@ -169,20 +178,31 @@ def _expand_hidden_states(
             msg = f"Missing hidden-state column: {column!r}"
             raise SchemaError(msg)
         dtype = frame.schema[column]
-        if not isinstance(dtype, (pl.Array, pl.List)) or dtype.inner not in {pl.Float32, pl.Float64}:
+        if not isinstance(dtype, pl.Array | pl.List) or dtype.inner not in {
+            pl.Float32,
+            pl.Float64,
+        }:
             msg = f"Hidden-state column {column!r} must be List or Array with Float32/Float64 elements; got {dtype}"
             raise SchemaError(msg)
         if frame.select(pl.col(column).is_null().any()).item():
             msg = f"Hidden-state column {column!r} contains null embeddings"
             raise SchemaError(msg)
 
-        as_list = pl.col(column).arr.to_list() if isinstance(dtype, pl.Array) else pl.col(column)
+        as_list = (
+            pl.col(column).arr.to_list()
+            if isinstance(dtype, pl.Array)
+            else pl.col(column)
+        )
         frame = frame.with_columns(as_list.cast(pl.List(pl.Float32)).alias(column))
-        if frame.select(pl.col(column).list.eval(pl.element().is_null()).list.any().any()).item():
+        if frame.select(
+            pl.col(column).list.eval(pl.element().is_null()).list.any().any()
+        ).item():
             msg = f"Hidden-state column {column!r} contains null elements"
             raise SchemaError(msg)
 
-        observed_dimensions = frame.select(pl.col(column).list.len().unique()).to_series().to_list()
+        observed_dimensions = (
+            frame.select(pl.col(column).list.len().unique()).to_series().to_list()
+        )
         if len(observed_dimensions) != 1 or observed_dimensions[0] == 0:
             msg = f"Hidden-state column {column!r} must have one non-zero fixed dimension; got {observed_dimensions}"
             raise SchemaError(msg)
@@ -191,7 +211,10 @@ def _expand_hidden_states(
             msg = f"Hidden-state dimension mismatch for {column!r}: expected {expected.get(column)}, got {dimension}"
             raise SchemaError(msg)
         names = tuple(f"{column}__{index}" for index in range(dimension))
-        expanded_expressions = [pl.col(column).list.get(index).alias(name) for index, name in enumerate(names)]
+        expanded_expressions = [
+            pl.col(column).list.get(index).alias(name)
+            for index, name in enumerate(names)
+        ]
         frame = frame.with_columns(expanded_expressions).drop(column)
         dimensions[column] = dimension
         expanded.extend(names)
@@ -236,7 +259,11 @@ def prepare_data(
     role_fields = {
         config.target_column: "target_column",
         config.client_id_column: "client_id_column",
-        **({config.date_column: "date_column"} if config.date_column is not None else {}),
+        **(
+            {config.date_column: "date_column"}
+            if config.date_column is not None
+            else {}
+        ),
     }
     if config.group_column is not None:
         role_fields[config.group_column] = "group_column"
@@ -255,7 +282,11 @@ def prepare_data(
         required.append(config.target_column)
     missing = sorted(set(required) - set(frame.columns))
     if missing:
-        visible = [public_column_names.get(name, name) for name in missing] if public_column_names else missing
+        visible = (
+            [public_column_names.get(name, name) for name in missing]
+            if public_column_names
+            else missing
+        )
         details = []
         for internal, public in zip(missing, visible, strict=True):
             field_name = role_fields.get(internal)
@@ -272,7 +303,9 @@ def prepare_data(
 
     if config.date_column is not None:
         frame = normalize_date(frame, config.date_column)
-    frame, expanded, dimensions = _expand_hidden_states(frame, tuple(config.hidden_state_columns), hidden_dimensions)
+    frame, expanded, dimensions = _expand_hidden_states(
+        frame, tuple(config.hidden_state_columns), hidden_dimensions
+    )
 
     categorical = list(config.categorical_columns)
     for column in categorical_role_columns:
@@ -302,13 +335,18 @@ def prepare_data(
         }
         if dtype_mismatches:
             details = ", ".join(
-                f"{name}: expected {expected}, got {actual}" for name, (expected, actual) in dtype_mismatches.items()
+                f"{name}: expected {expected}, got {actual}"
+                for name, (expected, actual) in dtype_mismatches.items()
             )
             msg = f"Feature dtype mismatch: {details}"
             raise SchemaError(msg)
 
     bad_inf = [
-        name for name in numerical if frame.select(pl.col(name).cast(pl.Float64, strict=False).is_infinite().any()).item()
+        name
+        for name in numerical
+        if frame.select(
+            pl.col(name).cast(pl.Float64, strict=False).is_infinite().any()
+        ).item()
     ]
     if bad_inf:
         msg = f"Infinite values are not allowed in numerical columns: {bad_inf}"

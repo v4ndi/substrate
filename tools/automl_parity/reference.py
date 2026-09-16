@@ -22,7 +22,9 @@ from tools.automl_parity.autocampaign_entrypoint import _decode_name, _encode_pa
 from tools.automl_parity.binary import BinaryParityCase, _jsonable, load_case
 
 
-def _run_entrypoint(script: Path, config_path: Path, *, cwd: Path, environment: dict[str, str]) -> float:
+def _run_entrypoint(
+    script: Path, config_path: Path, *, cwd: Path, environment: dict[str, str]
+) -> float:
     """Run one Hydra CLI with the supplied native autocampaignxfm YAML."""
     started = perf_counter()
     command = [
@@ -31,7 +33,7 @@ def _run_entrypoint(script: Path, config_path: Path, *, cwd: Path, environment: 
         "tools.automl_parity.autocampaign_entrypoint",
         str(script),
     ]
-    subprocess.run(  # noqa: S603 - script and config paths are resolved repository inputs
+    subprocess.run(
         [
             *command,
             "--config-path",
@@ -63,15 +65,21 @@ def _parquet_files(source: Path) -> list[Path]:
     return source_files
 
 
-def _fit_label_encoders(source: Path, columns: tuple[str, ...]) -> dict[str, dict[str, int]]:
+def _fit_label_encoders(
+    source: Path, columns: tuple[str, ...]
+) -> dict[str, dict[str, int]]:
     """Build deterministic train-only integer mappings for string categorical columns."""
     values: dict[str, set[str]] = {column: set() for column in columns}
     string_types = (pl.String, pl.Categorical, pl.Enum)
     for source_file in _parquet_files(source):
         frame = pl.read_parquet(source_file, hive_partitioning=False)
         for column in columns:
-            if column in frame.columns and isinstance(frame.schema[column], string_types):
-                values[column].update(frame[column].cast(pl.String).drop_nulls().unique().to_list())
+            if column in frame.columns and isinstance(
+                frame.schema[column], string_types
+            ):
+                values[column].update(
+                    frame[column].cast(pl.String).drop_nulls().unique().to_list()
+                )
     return {
         column: {value: index for index, value in enumerate(sorted(column_values))}
         for column, column_values in values.items()
@@ -89,27 +97,48 @@ def _write_compatible_split(
     """Copy shards while adapting embeddings and string categories for autocampaignxfm."""
     source_files = _parquet_files(source)
     for source_file in source_files:
-        relative_path = Path(source_file.name) if source.is_file() else source_file.relative_to(source)
+        relative_path = (
+            Path(source_file.name)
+            if source.is_file()
+            else source_file.relative_to(source)
+        )
         destination_file = destination / relative_path
         destination_file.parent.mkdir(parents=True, exist_ok=True)
         frame = pl.read_parquet(source_file, hive_partitioning=False)
         array_columns = [
-            column for column in hidden_state_columns if column in frame.columns and isinstance(frame.schema[column], pl.Array)
+            column
+            for column in hidden_state_columns
+            if column in frame.columns and isinstance(frame.schema[column], pl.Array)
         ]
         if array_columns:
-            frame = frame.with_columns(pl.col(column).cast(pl.List(pl.Float32)).alias(column) for column in array_columns)
-        encoded_columns = [column for column in label_encoders if column in frame.columns]
+            frame = frame.with_columns(
+                pl.col(column).cast(pl.List(pl.Float32)).alias(column)
+                for column in array_columns
+            )
+        encoded_columns = [
+            column for column in label_encoders if column in frame.columns
+        ]
         if encoded_columns:
             frame = frame.with_columns(
                 pl.col(column)
                 .cast(pl.String)
-                .replace_strict(label_encoders[column], default=-1, return_dtype=pl.Int32)
+                .replace_strict(
+                    label_encoders[column], default=-1, return_dtype=pl.Int32
+                )
                 .alias(column)
                 for column in encoded_columns
             )
-        applicable_renames = {source: target for source, target in column_renames.items() if source in frame.columns}
+        applicable_renames = {
+            source: target
+            for source, target in column_renames.items()
+            if source in frame.columns
+        }
         if applicable_renames:
-            collisions = set(applicable_renames.values()).intersection(frame.columns).difference(applicable_renames)
+            collisions = (
+                set(applicable_renames.values())
+                .intersection(frame.columns)
+                .difference(applicable_renames)
+            )
             if collisions:
                 msg = f"Cannot prepare product-only parity data; rename targets already exist: {sorted(collisions)}"
                 raise RuntimeError(msg)
@@ -121,13 +150,15 @@ def _write_runtime_config(case: BinaryParityCase, directory: Path) -> Path:
     """Create an autocampaign-only YAML pointing to List-compatible parquet copies."""
     compatible_root = directory / "data"
     categorical_columns = tuple(
-        dict.fromkeys(
-            (
-                *case.categorical_columns,
-                *((case.group_column,) if case.model_scope == "product" and case.group_column is not None else ()),
-                *((case.treatment_column,) if case.treatment_column is not None else ()),
-            )
-        )
+        dict.fromkeys((
+            *case.categorical_columns,
+            *(
+                (case.group_column,)
+                if case.model_scope == "product" and case.group_column is not None
+                else ()
+            ),
+            *((case.treatment_column,) if case.treatment_column is not None else ()),
+        ))
     )
     label_encoders = _fit_label_encoders(case.train_path, categorical_columns)
     # The reference trainer has no product-only flag. For product parity a missing
@@ -137,7 +168,9 @@ def _write_runtime_config(case: BinaryParityCase, directory: Path) -> Path:
     product_group_column = "target_attr_2"
     column_renames = (
         {case.group_column: product_group_column}
-        if case.model_scope == "product" and case.group_column is not None and case.group_column != product_group_column
+        if case.model_scope == "product"
+        and case.group_column is not None
+        and case.group_column != product_group_column
         else {}
     )
     split_paths: dict[str, str] = {}
@@ -161,11 +194,15 @@ def _write_runtime_config(case: BinaryParityCase, directory: Path) -> Path:
     if case.model_scope == "product":
         config.data.group_column = "__product_only_group_column__"
         config.evaluate.is_product = True
-        config.evaluate.model_configs_dir = f"{config.train.output_dir}/configs_product/"
+        config.evaluate.model_configs_dir = (
+            f"{config.train.output_dir}/configs_product/"
+        )
     else:
         config.data.group_column = case.group_column
         config.evaluate.is_product = False
-        config.evaluate.model_configs_dir = str((directory / "evaluation_configs_channels").resolve())
+        config.evaluate.model_configs_dir = str(
+            (directory / "evaluation_configs_channels").resolve()
+        )
     runtime_config = directory / "autocampaignxfm_runtime.yaml"
     OmegaConf.save(config, runtime_config)
     return runtime_config
@@ -198,7 +235,9 @@ def _channel_from_params_path(path: Path) -> str:
     raise ValueError(msg)
 
 
-def _write_channel_training_configs(case: BinaryParityCase, runtime_config: Path, directory: Path) -> list[Path]:
+def _write_channel_training_configs(
+    case: BinaryParityCase, runtime_config: Path, directory: Path
+) -> list[Path]:
     """Create one native trainer config and filtered parquet set per channel.
 
     The reference trainer exits cleanly after a single-channel study and therefore
@@ -210,9 +249,15 @@ def _write_channel_training_configs(case: BinaryParityCase, runtime_config: Path
     if group_column is None:
         msg = "Channel parity requires group_column"
         raise ValueError(msg)
-    full_paths = {name: Path(base_config.data.input_dir[name]) for name in ("train", "valid", "test")}
+    full_paths = {
+        name: Path(base_config.data.input_dir[name])
+        for name in ("train", "valid", "test")
+    }
     train = pl.concat(
-        [pl.read_parquet(path, hive_partitioning=False) for path in _parquet_files(full_paths["train"])],
+        [
+            pl.read_parquet(path, hive_partitioning=False)
+            for path in _parquet_files(full_paths["train"])
+        ],
         how="diagonal_relaxed",
     )
     group_values = sorted(train[group_column].unique().to_list(), key=str)
@@ -224,7 +269,9 @@ def _write_channel_training_configs(case: BinaryParityCase, runtime_config: Path
             destination.mkdir(parents=True, exist_ok=True)
             row_count = 0
             for shard_index, source_file in enumerate(_parquet_files(source)):
-                frame = pl.read_parquet(source_file, hive_partitioning=False).filter(pl.col(group_column) == group_value)
+                frame = pl.read_parquet(source_file, hive_partitioning=False).filter(
+                    pl.col(group_column) == group_value
+                )
                 if frame.is_empty():
                     continue
                 row_count += frame.height
@@ -241,13 +288,17 @@ def _write_channel_training_configs(case: BinaryParityCase, runtime_config: Path
     return configs
 
 
-def _read_scores(predict_dir: Path, case: BinaryParityCase) -> tuple[pl.DataFrame, pl.DataFrame]:
+def _read_scores(
+    predict_dir: Path, case: BinaryParityCase
+) -> tuple[pl.DataFrame, pl.DataFrame]:
     """Read evaluator parquet shards and return validation and test score tables."""
     shards = sorted(predict_dir.glob("*.parquet"))
     if not shards:
         msg = f"Autocampaignxfm evaluator wrote no score shards to {predict_dir}"
         raise FileNotFoundError(msg)
-    scores = pl.concat([pl.read_parquet(path) for path in shards], how="diagonal_relaxed")
+    scores = pl.concat(
+        [pl.read_parquet(path) for path in shards], how="diagonal_relaxed"
+    )
     required = {case.client_id_column, case.target_column, "prediction", "split_type"}
     missing = required.difference(scores.columns)
     if missing:
@@ -279,7 +330,9 @@ def _read_calibrated_scores(root: Path, case: BinaryParityCase) -> pl.DataFrame:
     if not shards:
         msg = f"Autocampaignxfm produced no calibrated score shards in {root}"
         raise FileNotFoundError(msg)
-    scores = pl.concat([pl.read_parquet(path) for path in shards], how="diagonal_relaxed")
+    scores = pl.concat(
+        [pl.read_parquet(path) for path in shards], how="diagonal_relaxed"
+    )
     required = {
         case.client_id_column,
         case.report_month_column,
@@ -288,7 +341,9 @@ def _read_calibrated_scores(root: Path, case: BinaryParityCase) -> pl.DataFrame:
     }
     missing = required.difference(scores.columns)
     if missing:
-        msg = f"Autocampaignxfm calibrated scores are missing columns: {sorted(missing)}"
+        msg = (
+            f"Autocampaignxfm calibrated scores are missing columns: {sorted(missing)}"
+        )
         raise RuntimeError(msg)
     return scores
 
@@ -309,8 +364,12 @@ def run_reference(case: BinaryParityCase) -> dict[str, Any]:
     resolved_config = OmegaConf.to_container(config, resolve=True)
     train_output = Path(resolved_config["train"]["output_dir"]).resolve()
     evaluate_output = Path(resolved_config["evaluate"]["output_dir"]).resolve()
-    artifact_directory = "configs_product" if case.model_scope == "product" else "configs_channels"
-    metrics_output = evaluate_output / ("metrics_product" if case.model_scope == "product" else "metrics_channels")
+    artifact_directory = (
+        "configs_product" if case.model_scope == "product" else "configs_channels"
+    )
+    metrics_output = evaluate_output / (
+        "metrics_product" if case.model_scope == "product" else "metrics_channels"
+    )
 
     # Both entrypoints append artifacts. A parity run must not consume shards or
     # parameter files left by an earlier execution of the same case.
@@ -324,7 +383,9 @@ def run_reference(case: BinaryParityCase) -> dict[str, Any]:
     matplotlib_dir.mkdir(parents=True, exist_ok=True)
     environment["MPLCONFIGDIR"] = str(matplotlib_dir)
 
-    with tempfile.TemporaryDirectory(prefix="autocampaign_parity_", dir=case.output_dir) as temporary:
+    with tempfile.TemporaryDirectory(
+        prefix="autocampaign_parity_", dir=case.output_dir
+    ) as temporary:
         runtime_config = _write_runtime_config(case, Path(temporary))
         training_configs = (
             _write_channel_training_configs(case, runtime_config, Path(temporary))
@@ -357,15 +418,28 @@ def run_reference(case: BinaryParityCase) -> dict[str, Any]:
     if not params_paths:
         msg = f"No best-parameter files found in {train_output / artifact_directory}"
         raise FileNotFoundError(msg)
-    group_encoders = _fit_label_encoders(case.train_path, (case.group_column,)) if case.group_column else {}
-    inverse_groups = {str(value): key for key, value in group_encoders.get(case.group_column or "", {}).items()}
+    group_encoders = (
+        _fit_label_encoders(case.train_path, (case.group_column,))
+        if case.group_column
+        else {}
+    )
+    inverse_groups = {
+        str(value): key
+        for key, value in group_encoders.get(case.group_column or "", {}).items()
+    }
     selected_params: dict[str, Any] = {}
     resolved_model_params: dict[str, Any] = {}
     params_path_payload: dict[str, str] = {}
     for params_path in params_paths:
         channel = _channel_from_params_path(params_path)
-        model_name = "product" if case.model_scope == "product" else f"group:{inverse_groups.get(channel, channel)}"
-        params = ast.literal_eval(params_path.read_text(encoding="utf-8").splitlines()[0])
+        model_name = (
+            "product"
+            if case.model_scope == "product"
+            else f"group:{inverse_groups.get(channel, channel)}"
+        )
+        params = ast.literal_eval(
+            params_path.read_text(encoding="utf-8").splitlines()[0]
+        )
         selected_params[model_name] = params
         resolved_model_params[model_name] = instantiate_supervised_learner_from_params(
             case.engine, "binary_clf", params
@@ -383,9 +457,16 @@ def run_reference(case: BinaryParityCase) -> dict[str, Any]:
     calibrated_test_auc: dict[str, float] = {}
     if case.model_scope == "product":
         validation_auc["product"] = float(
-            roc_auc_score(validation[case.target_column].to_numpy(), validation["prediction"].to_numpy())
+            roc_auc_score(
+                validation[case.target_column].to_numpy(),
+                validation["prediction"].to_numpy(),
+            )
         )
-        test_auc["product"] = float(roc_auc_score(test[case.target_column].to_numpy(), test["prediction"].to_numpy()))
+        test_auc["product"] = float(
+            roc_auc_score(
+                test[case.target_column].to_numpy(), test["prediction"].to_numpy()
+            )
+        )
         if calibrated_test is not None:
             calibrated_test_auc["product"] = float(
                 roc_auc_score(
@@ -398,7 +479,9 @@ def run_reference(case: BinaryParityCase) -> dict[str, Any]:
         for encoded_value in validation[score_group_column].unique().to_list():
             group_value = inverse_groups.get(str(encoded_value), str(encoded_value))
             model_name = f"group:{group_value}"
-            validation_group = validation.filter(pl.col(score_group_column) == encoded_value)
+            validation_group = validation.filter(
+                pl.col(score_group_column) == encoded_value
+            )
             test_group = test.filter(pl.col(score_group_column) == encoded_value)
             validation_auc[model_name] = float(
                 roc_auc_score(
@@ -407,10 +490,15 @@ def run_reference(case: BinaryParityCase) -> dict[str, Any]:
                 )
             )
             test_auc[model_name] = float(
-                roc_auc_score(test_group[case.target_column].to_numpy(), test_group["prediction"].to_numpy())
+                roc_auc_score(
+                    test_group[case.target_column].to_numpy(),
+                    test_group["prediction"].to_numpy(),
+                )
             )
             if calibrated_test is not None:
-                calibrated_group = calibrated_test.filter(pl.col(score_group_column) == encoded_value)
+                calibrated_group = calibrated_test.filter(
+                    pl.col(score_group_column) == encoded_value
+                )
                 calibrated_test_auc[model_name] = float(
                     roc_auc_score(
                         calibrated_group[case.target_column].to_numpy(),
@@ -423,7 +511,9 @@ def run_reference(case: BinaryParityCase) -> dict[str, Any]:
     _normalized_scores(test, case).write_parquet(scores_path)
     calibrated_scores_path = output_dir / "scores_calibrated.parquet"
     if calibrated_test is not None:
-        _normalized_scores(calibrated_test, case, "prediction_cal").write_parquet(calibrated_scores_path)
+        _normalized_scores(calibrated_test, case, "prediction_cal").write_parquet(
+            calibrated_scores_path
+        )
     result = {
         "pipeline": "autocampaignxfm",
         "selected_params": selected_params,
@@ -441,7 +531,9 @@ def run_reference(case: BinaryParityCase) -> dict[str, Any]:
         "params_txt_path": params_path_payload,
         "raw_scores_path": str(metrics_output / "predict"),
         "scores_path": str(scores_path),
-        "calibrated_scores_path": str(calibrated_scores_path) if calibrated_test is not None else None,
+        "calibrated_scores_path": str(calibrated_scores_path)
+        if calibrated_test is not None
+        else None,
     }
     (output_dir / "result.json").write_text(
         json.dumps(_jsonable(result), ensure_ascii=False, indent=2),

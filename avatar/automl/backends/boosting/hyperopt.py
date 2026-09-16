@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from time import perf_counter
-from typing import Any, Callable, Literal, Mapping
+from typing import Any, Literal
 
 import numpy as np
 import polars as pl
@@ -56,13 +57,15 @@ def suggest_params(
         ConfigError: If a search-space definition is malformed.
     """
     space = (
-        resolve_default_search_space(engine, n_trials=n_trials, train_frame=train_frame, schema=schema)
+        resolve_default_search_space(
+            engine, n_trials=n_trials, train_frame=train_frame, schema=schema
+        )
         if search_space is None
         else search_space
     )
     suggested: dict[str, Any] = {}
     for name, raw_definition in space.items():
-        if isinstance(raw_definition, (list, tuple)):
+        if isinstance(raw_definition, list | tuple):
             if not raw_definition:
                 msg = f"Categorical search parameter {name!r} must contain at least one choice"
                 raise ConfigError(msg)
@@ -75,7 +78,7 @@ def suggest_params(
         parameter_type = raw_definition.get("type")
         if parameter_type == "categorical":
             choices = raw_definition.get("choices")
-            if not isinstance(choices, (list, tuple)) or not choices:
+            if not isinstance(choices, list | tuple) or not choices:
                 msg = f"Categorical search parameter {name!r} requires non-empty 'choices'"
                 raise ConfigError(msg)
             suggested[name] = trial.suggest_categorical(name, list(choices))
@@ -89,7 +92,12 @@ def suggest_params(
 
         low, high = raw_definition["low"], raw_definition["high"]
         numerical = (int, float)
-        if isinstance(low, bool) or isinstance(high, bool) or not isinstance(low, numerical) or not isinstance(high, numerical):
+        if (
+            isinstance(low, bool)
+            or isinstance(high, bool)
+            or not isinstance(low, numerical)
+            or not isinstance(high, numerical)
+        ):
             msg = f"Search parameter {name!r} bounds must be numerical; got low={low!r}, high={high!r}"
             raise ConfigError(msg)
         if low > high:
@@ -100,26 +108,38 @@ def suggest_params(
         if not isinstance(log, bool):
             msg = f"Search parameter {name!r} field 'log' must be boolean"
             raise ConfigError(msg)
-        if step is not None and (isinstance(step, bool) or not isinstance(step, numerical) or step <= 0):
+        if step is not None and (
+            isinstance(step, bool) or not isinstance(step, numerical) or step <= 0
+        ):
             msg = f"Search parameter {name!r} step must be positive; got {step!r}"
             raise ConfigError(msg)
         incompatible_step = (parameter_type == "float" and step is not None) or (
             parameter_type == "int" and step not in {None, 1}
         )
         if log and incompatible_step:
-            msg = f"Search parameter {name!r} cannot combine log=True with step={step!r}"
+            msg = (
+                f"Search parameter {name!r} cannot combine log=True with step={step!r}"
+            )
             raise ConfigError(msg)
         if log and low <= 0:
             msg = f"Log-scaled search parameter {name!r} requires low > 0; got {low!r}"
             raise ConfigError(msg)
 
         if parameter_type == "int":
-            if not isinstance(low, int) or not isinstance(high, int) or (step is not None and not isinstance(step, int)):
+            if (
+                not isinstance(low, int)
+                or not isinstance(high, int)
+                or (step is not None and not isinstance(step, int))
+            ):
                 msg = f"Integer search parameter {name!r} requires integer bounds and step"
                 raise ConfigError(msg)
-            suggested[name] = trial.suggest_int(name, low, high, step=step or 1, log=log)
+            suggested[name] = trial.suggest_int(
+                name, low, high, step=step or 1, log=log
+            )
         else:
-            suggested[name] = trial.suggest_float(name, float(low), float(high), step=step, log=log)
+            suggested[name] = trial.suggest_float(
+                name, float(low), float(high), step=step, log=log
+            )
     return dict(model_params) | suggested
 
 
@@ -244,7 +264,10 @@ def fit_boosting_model(
         log_progress("[boosting fit 1/1] engine=%s started", engine)
         backend = make_backend(model_params)
         backend.fit_prepared(prepared)
-        value = objective_metric(valid_target, backend.predict_prepared_score(prepared.valid_prediction_features))
+        value = objective_metric(
+            valid_target,
+            backend.predict_prepared_score(prepared.valid_prediction_features),
+        )
         log_progress(
             "[boosting fit 1/1] engine=%s completed duration_seconds=%.3f objective_value=%.12g",
             engine,
@@ -270,10 +293,18 @@ def fit_boosting_model(
     def objective(trial: Any) -> float:
         nonlocal best_backend, best_params, best_value
         trial_started = perf_counter()
-        params = suggest_params(trial, engine=engine, model_params=model_params, search_space=effective_space)
+        params = suggest_params(
+            trial,
+            engine=engine,
+            model_params=model_params,
+            search_space=effective_space,
+        )
         backend = make_backend(params)
         backend.fit_prepared(prepared)
-        value = objective_metric(valid_target, backend.predict_prepared_score(prepared.valid_prediction_features))
+        value = objective_metric(
+            valid_target,
+            backend.predict_prepared_score(prepared.valid_prediction_features),
+        )
         improved = value > best_value if direction == "maximize" else value < best_value
         if best_backend is None or improved:
             best_backend = backend
@@ -290,8 +321,15 @@ def fit_boosting_model(
         return value
 
     search_started = perf_counter()
-    log_progress("[optuna 0/%d] engine=%s creating study random_state=%d", n_trials, engine, random_state)
-    study = optuna.create_study(direction=direction, sampler=optuna.samplers.TPESampler(seed=random_state))
+    log_progress(
+        "[optuna 0/%d] engine=%s creating study random_state=%d",
+        n_trials,
+        engine,
+        random_state,
+    )
+    study = optuna.create_study(
+        direction=direction, sampler=optuna.samplers.TPESampler(seed=random_state)
+    )
     study.optimize(objective, n_trials=n_trials, show_progress_bar=bool(verbose))
     if best_backend is None:
         msg = "Hyperparameter search completed without a fitted model"

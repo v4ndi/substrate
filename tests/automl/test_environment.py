@@ -13,7 +13,12 @@ import pytest
 
 from avatar.automl import BinaryTask, BinaryTaskConfig, EnvironmentConfig
 from avatar.automl.environment import EnvironmentRunner
-from avatar.automl.exceptions import ArtifactIntegrityError, ConfigError, RemoteExecutionError, SchemaError
+from avatar.automl.exceptions import (
+    ArtifactIntegrityError,
+    ConfigError,
+    RemoteExecutionError,
+    SchemaError,
+)
 
 
 class _FakeOsiris:
@@ -32,10 +37,16 @@ class _FakeOsiris:
         return {"jobs": self.states[index]}
 
 
-def _remote_config(tmp_path, *, env_type="osiris", pool="common", num_gpus=None, num_nodes=None):
+def _remote_config(
+    tmp_path, *, env_type="osiris", pool="common", num_gpus=None, num_nodes=None
+):
     venv = tmp_path / "shared_venv"
     venv.mkdir(exist_ok=True)
-    remote_venv = f"/{venv.as_posix()}" if not venv.as_posix().startswith("/") else venv.as_posix()
+    remote_venv = (
+        f"/{venv.as_posix()}"
+        if not venv.as_posix().startswith("/")
+        else venv.as_posix()
+    )
     return BinaryTaskConfig(
         env_type=env_type,
         backend="boosting",
@@ -62,19 +73,19 @@ def _remote_config(tmp_path, *, env_type="osiris", pool="common", num_gpus=None,
 
 
 def _train_data(path):
-    pl.DataFrame(
-        {
-            "epk_id": [1, 2, 3],
-            "target": [0, 1, 0],
-            "feature": [0.0, 1.0, 2.0],
-            "group": ["a", "b", "a"],
-            "report_month": ["2026-01-01"] * 3,
-        }
-    ).write_parquet(path)
+    pl.DataFrame({
+        "epk_id": [1, 2, 3],
+        "target": [0, 1, 0],
+        "feature": [0.0, 1.0, 2.0],
+        "group": ["a", "b", "a"],
+        "report_month": ["2026-01-01"] * 3,
+    }).write_parquet(path)
 
 
 @pytest.mark.parametrize("pool", [None, "common"])
-def test_standard_osiris_profile_uses_shared_venv_without_scheduler_pool(tmp_path, pool):
+def test_standard_osiris_profile_uses_shared_venv_without_scheduler_pool(
+    tmp_path, pool
+):
     osiris = _FakeOsiris()
     runner = EnvironmentRunner(osiris)
     run_dir = tmp_path / "operation" / "job"
@@ -123,8 +134,13 @@ def test_local_runner_writes_success_and_error_logs(tmp_path):
     )
     runner = EnvironmentRunner(_FakeOsiris())
     assert runner.run_local(config=config, action="train", callback=lambda: 42) == 42
-    train_log = next((tmp_path / "logs").glob("*.train.log")).read_text(encoding="utf-8")
-    assert "Starting action=train" in train_log and "env_type=local device=cpu" in train_log
+    train_log = next((tmp_path / "logs").glob("*.train.log")).read_text(
+        encoding="utf-8"
+    )
+    assert (
+        "Starting action=train" in train_log
+        and "env_type=local device=cpu" in train_log
+    )
     assert "Finished action=train duration_seconds=" in train_log
 
     def fail():
@@ -133,7 +149,9 @@ def test_local_runner_writes_success_and_error_logs(tmp_path):
 
     with pytest.raises(RuntimeError, match="diagnostic failure"):
         runner.run_local(config=config, action="predict", callback=fail)
-    predict_log = next((tmp_path / "logs").glob("*.predict.log")).read_text(encoding="utf-8")
+    predict_log = next((tmp_path / "logs").glob("*.predict.log")).read_text(
+        encoding="utf-8"
+    )
     assert "diagnostic failure" in predict_log
     assert "AutoML action failed duration_seconds=" in predict_log
 
@@ -158,17 +176,23 @@ def test_local_always_exposes_only_cuda_device_zero(tmp_path, monkeypatch, devic
         environment={},
     )
     observed = EnvironmentRunner(_FakeOsiris()).run_local(
-        config=config, action="train", callback=lambda: os.environ["CUDA_VISIBLE_DEVICES"]
+        config=config,
+        action="train",
+        callback=lambda: os.environ["CUDA_VISIBLE_DEVICES"],
     )
     assert observed == "0"
 
 
 @pytest.mark.parametrize("action", ["train", "predict", "calibrate", "evaluate"])
 @pytest.mark.parametrize("pool", ["b2c", "custom-pool"])
-def test_custom_pool_uses_explicit_resources_and_exposes_device_zero(tmp_path, action, pool):
+def test_custom_pool_uses_explicit_resources_and_exposes_device_zero(
+    tmp_path, action, pool
+):
     osiris = _FakeOsiris()
     config = _remote_config(tmp_path, pool=pool, num_nodes=2, num_gpus=3)
-    EnvironmentRunner(osiris).submit(config=config, action=action, payload={}, run_dir=tmp_path / action)
+    EnvironmentRunner(osiris).submit(
+        config=config, action=action, payload={}, run_dir=tmp_path / action
+    )
     request = osiris.create_calls[0]
     assert request["pool"] == pool
     spec = json.loads((tmp_path / action / "run_spec.json").read_text(encoding="utf-8"))
@@ -189,22 +213,33 @@ def test_custom_pool_uses_explicit_resources_and_exposes_device_zero(tmp_path, a
         ({"pool": None, "num_gpus": 2}, "requires num_nodes=1 and num_gpus=1"),
     ],
 )
-def test_osiris_resource_profiles_reject_missing_or_conflicting_values(tmp_path, kwargs, message):
+def test_osiris_resource_profiles_reject_missing_or_conflicting_values(
+    tmp_path, kwargs, message
+):
     with pytest.raises(ConfigError, match=message):
         _remote_config(tmp_path, **kwargs)
 
 
 def test_remote_submit_requires_exact_job_id(tmp_path, monkeypatch):
     runner = EnvironmentRunner(_FakeOsiris())
-    monkeypatch.setattr(runner.osiris, "create", lambda **_kwargs: {"message": "created"})
+    monkeypatch.setattr(
+        runner.osiris, "create", lambda **_kwargs: {"message": "created"}
+    )
     with pytest.raises(RemoteExecutionError, match="exact job ID"):
-        runner.submit(config=_remote_config(tmp_path), action="train", payload={}, run_dir=tmp_path / "missing-id")
+        runner.submit(
+            config=_remote_config(tmp_path),
+            action="train",
+            payload={},
+            run_dir=tmp_path / "missing-id",
+        )
 
 
 def test_remote_train_is_owned_by_entity_and_returns_no_handle(tmp_path):
     train = tmp_path / "train.parquet"
     _train_data(train)
-    task = BinaryTask(replace(_remote_config(tmp_path), model_layout="global_and_per_group"))
+    task = BinaryTask(
+        replace(_remote_config(tmp_path), model_layout="global_and_per_group")
+    )
     osiris = _FakeOsiris()
     task._environment_runner = EnvironmentRunner(osiris)
     assert task.train(train, train) is None
@@ -227,7 +262,14 @@ def test_remote_train_is_owned_by_entity_and_returns_no_handle(tmp_path):
 def test_status_uses_exact_job_ids_and_ignores_unrelated_jobs(tmp_path):
     train = tmp_path / "train.parquet"
     _train_data(train)
-    osiris = _FakeOsiris(states=[[{"job_id": "job-1", "state": "running"}, {"job_id": "unrelated", "state": "failed"}]])
+    osiris = _FakeOsiris(
+        states=[
+            [
+                {"job_id": "job-1", "state": "running"},
+                {"job_id": "unrelated", "state": "failed"},
+            ]
+        ]
+    )
     task = BinaryTask(_remote_config(tmp_path))
     task._environment_runner = EnvironmentRunner(osiris)
     task.train(train, train)
@@ -240,15 +282,27 @@ def test_status_uses_exact_job_ids_and_ignores_unrelated_jobs(tmp_path):
 def test_entity_load_recovers_dead_local_operation(tmp_path, monkeypatch):
     task = BinaryTask(_remote_config(tmp_path))
     first = tmp_path / "first-test"
-    operation = task._store.start_operation("predict", dataset_path=first, runtime={"env_type": "local"})
+    operation = task._store.start_operation(
+        "predict", dataset_path=first, runtime={"env_type": "local"}
+    )
     task._store.update_operation(operation, state="running")
-    monkeypatch.setattr("avatar.automl.lifecycle.AutoMLStore._local_owner_is_alive", staticmethod(lambda _owner: False))
+    monkeypatch.setattr(
+        "avatar.automl.lifecycle.AutoMLStore._local_owner_is_alive",
+        staticmethod(lambda _owner: False),
+    )
 
     restored = BinaryTask.load(task.path)
-    assert restored.status().filter(pl.col("test_path") == str(first.resolve())).item(0, "state") == "interrupted"
+    assert (
+        restored.status()
+        .filter(pl.col("test_path") == str(first.resolve()))
+        .item(0, "state")
+        == "interrupted"
+    )
 
 
-def test_waiting_prediction_status_publishes_scores_for_the_exact_test_path(tmp_path, monkeypatch):
+def test_waiting_prediction_status_publishes_scores_for_the_exact_test_path(
+    tmp_path, monkeypatch
+):
     config = BinaryTaskConfig(
         env_type="local",
         backend="boosting",
@@ -282,18 +336,30 @@ def test_waiting_prediction_status_publishes_scores_for_the_exact_test_path(tmp_
     monkeypatch.setattr(
         EnvironmentRunner,
         "_remote_python",
-        staticmethod(lambda _config: "/home/datalab/nfs/sber-amazme-fmlib/env/bin/python"),
+        staticmethod(
+            lambda _config: "/home/datalab/nfs/sber-amazme-fmlib/env/bin/python"
+        ),
     )
-    monkeypatch.setattr("avatar.automl.tasks.operations.time.sleep", lambda _seconds: None)
+    monkeypatch.setattr(
+        "avatar.automl.tasks.operations.time.sleep", lambda _seconds: None
+    )
     test_path = tmp_path / "data" / "test"
 
     assert task.predict(test_path, env_type="osiris") is None
     operation = task._store.latest("predict", test_path)
     job = operation["jobs"][0]
     scores_path = Path(job["result_path"]).parent / "worker-scores.parquet"
-    pl.DataFrame({"epk_id": [1, 2], "score": [0.2, 0.8], "__fmlib_remote_row_id": [0, 1]}).write_parquet(scores_path)
+    pl.DataFrame({
+        "epk_id": [1, 2],
+        "score": [0.2, 0.8],
+        "__fmlib_remote_row_id": [0, 1],
+    }).write_parquet(scores_path)
     Path(job["result_path"]).write_text(
-        json.dumps({"status": "succeeded", "scores_path": str(scores_path), "class_order": None}),
+        json.dumps({
+            "status": "succeeded",
+            "scores_path": str(scores_path),
+            "class_order": None,
+        }),
         encoding="utf-8",
     )
 
@@ -309,12 +375,32 @@ def test_waiting_prediction_status_publishes_scores_for_the_exact_test_path(tmp_
 
 def test_remote_prediction_parts_reject_unknown_channels_before_submission(tmp_path):
     test_path = tmp_path / "test.parquet"
-    pl.DataFrame({"group": ["b", "unknown", "a"], "feature": [1.0, 2.0, 3.0]}).write_parquet(test_path)
-    task = BinaryTask(replace(_remote_config(tmp_path), model_layout="global_and_per_group"))
+    pl.DataFrame({
+        "group": ["b", "unknown", "a"],
+        "feature": [1.0, 2.0, 3.0],
+    }).write_parquet(test_path)
+    task = BinaryTask(
+        replace(_remote_config(tmp_path), model_layout="global_and_per_group")
+    )
     task._models = [
-        SimpleNamespace(layout="global", group_value=None, single_group_global=False, single_group_value=None),
-        SimpleNamespace(layout="per_group", group_value="a", single_group_global=False, single_group_value=None),
-        SimpleNamespace(layout="per_group", group_value="b", single_group_global=False, single_group_value=None),
+        SimpleNamespace(
+            layout="global",
+            group_value=None,
+            single_group_global=False,
+            single_group_value=None,
+        ),
+        SimpleNamespace(
+            layout="per_group",
+            group_value="a",
+            single_group_global=False,
+            single_group_value=None,
+        ),
+        SimpleNamespace(
+            layout="per_group",
+            group_value="b",
+            single_group_global=False,
+            single_group_value=None,
+        ),
     ]
 
     with pytest.raises(SchemaError, match=r"Unknown group values.*'unknown'.*1 rows"):
@@ -323,22 +409,24 @@ def test_remote_prediction_parts_reject_unknown_channels_before_submission(tmp_p
 
 def test_remote_group_prediction_filters_rows_without_losing_source_order(tmp_path):
     task = BinaryTask(replace(_remote_config(tmp_path), model_layout="per_group"))
-    frame = pl.DataFrame(
-        {
-            "epk_id": [1, 2, 3, 4],
-            "group": ["b", "a", "b", "a"],
-            "feature": [0.1, 0.2, 0.3, 0.4],
-        }
-    )
+    frame = pl.DataFrame({
+        "epk_id": [1, 2, 3, 4],
+        "group": ["b", "a", "b", "a"],
+        "feature": [0.1, 0.2, 0.3, 0.4],
+    })
 
-    selected = task._prediction_input_frame(frame, remote_group_value="b", include_row_id=True)
+    selected = task._prediction_input_frame(
+        frame, remote_group_value="b", include_row_id=True
+    )
 
     assert selected["epk_id"].to_list() == [1, 3]
     assert selected["__fmlib_remote_row_id"].to_list() == [0, 2]
     assert selected["__row_id"].to_list() == [0, 1]
 
 
-def test_remote_both_prediction_runs_and_merges_one_job_per_model_part(tmp_path, monkeypatch):
+def test_remote_both_prediction_runs_and_merges_one_job_per_model_part(
+    tmp_path, monkeypatch
+):
     osiris = _FakeOsiris(
         states=[
             [
@@ -348,7 +436,9 @@ def test_remote_both_prediction_runs_and_merges_one_job_per_model_part(tmp_path,
             ]
         ]
     )
-    task = BinaryTask(replace(_remote_config(tmp_path), model_layout="global_and_per_group"))
+    task = BinaryTask(
+        replace(_remote_config(tmp_path), model_layout="global_and_per_group")
+    )
     task._environment_runner = EnvironmentRunner(osiris)
     monkeypatch.setattr(task, "_require_fitted", lambda: None)
     monkeypatch.setattr(task, "_validate_prediction_layout", lambda: None)
@@ -364,36 +454,58 @@ def test_remote_both_prediction_runs_and_merges_one_job_per_model_part(tmp_path,
     operation = task._store.latest("predict", test_path)
     assert [job["job_id"] for job in operation["jobs"]] == ["job-1", "job-2", "job-3"]
 
-    payloads = [json.loads(Path(job["spec_path"]).read_text(encoding="utf-8"))["payload"] for job in operation["jobs"]]
-    assert [(item["remote_layout"], item["remote_group_value"]) for item in payloads] == [
+    payloads = [
+        json.loads(Path(job["spec_path"]).read_text(encoding="utf-8"))["payload"]
+        for job in operation["jobs"]
+    ]
+    assert [
+        (item["remote_layout"], item["remote_group_value"]) for item in payloads
+    ] == [
         ("global", None),
         ("per_group", "a"),
         ("per_group", "b"),
     ]
     frames = [
-        pl.DataFrame(
-            {
-                "epk_id": [2, 1],
-                "group": ["b", "a"],
-                "score": [0.8, 0.2],
-                "__fmlib_remote_row_id": [1, 0],
-            }
-        ),
-        pl.DataFrame({"epk_id": [1], "group": ["a"], "score": [0.3], "__fmlib_remote_row_id": [0]}),
-        pl.DataFrame({"epk_id": [2], "group": ["b"], "score": [0.7], "__fmlib_remote_row_id": [1]}),
+        pl.DataFrame({
+            "epk_id": [2, 1],
+            "group": ["b", "a"],
+            "score": [0.8, 0.2],
+            "__fmlib_remote_row_id": [1, 0],
+        }),
+        pl.DataFrame({
+            "epk_id": [1],
+            "group": ["a"],
+            "score": [0.3],
+            "__fmlib_remote_row_id": [0],
+        }),
+        pl.DataFrame({
+            "epk_id": [2],
+            "group": ["b"],
+            "score": [0.7],
+            "__fmlib_remote_row_id": [1],
+        }),
     ]
     for job, frame in zip(operation["jobs"], frames, strict=True):
         scores_path = Path(job["result_path"]).parent / "worker-scores.parquet"
         frame.write_parquet(scores_path)
         Path(job["result_path"]).write_text(
-            json.dumps({"status": "succeeded", "scores_path": str(scores_path), "class_order": None}),
+            json.dumps({
+                "status": "succeeded",
+                "scores_path": str(scores_path),
+                "class_order": None,
+            }),
             encoding="utf-8",
         )
 
     assert task.status()["state"].to_list() == ["succeeded", "succeeded", "succeeded"]
     scores = task.load_prediction(test_path).scores
     assert scores["epk_id"].to_list() == [1, 2, 1, 2]
-    assert scores["model_layout"].to_list() == ["global", "global", "per_group", "per_group"]
+    assert scores["model_layout"].to_list() == [
+        "global",
+        "global",
+        "per_group",
+        "per_group",
+    ]
     assert "__fmlib_remote_row_id" not in scores.columns
 
 
@@ -420,7 +532,10 @@ def test_remote_prediction_uses_operation_environment_override(
         num_gpus=num_gpus,
     )
 
-    assert task.predict(tmp_path / "test", env_type="osiris", environment=environment) is None
+    assert (
+        task.predict(tmp_path / "test", env_type="osiris", environment=environment)
+        is None
+    )
 
     request = osiris.create_calls[0]
     assert request["command"][0] == str(override_venv / "bin" / "python")
@@ -442,11 +557,19 @@ def test_remote_prediction_accepts_mapping_resource_override(tmp_path, monkeypat
     override_venv = tmp_path / "mapping_venv"
     override_venv.mkdir()
 
-    assert task.predict(
-        tmp_path / "test",
-        env_type="osiris",
-        environment={"venv_path": override_venv, "pool": "research", "num_nodes": 2, "num_gpus": 4},
-    ) is None
+    assert (
+        task.predict(
+            tmp_path / "test",
+            env_type="osiris",
+            environment={
+                "venv_path": override_venv,
+                "pool": "research",
+                "num_nodes": 2,
+                "num_gpus": 4,
+            },
+        )
+        is None
+    )
 
     request = osiris.create_calls[0]
     assert request["pool"] == "research"

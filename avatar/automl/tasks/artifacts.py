@@ -5,9 +5,10 @@ from __future__ import annotations
 import json
 import os
 import uuid
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 from avatar.automl.backends.boosting.interface import BoostingBackend
 from avatar.automl.config.base import BaseTaskConfig
@@ -49,11 +50,21 @@ class ArtifactRepository:
     artifact_directory: str
     backend_class: type[BoostingBackend]
 
-    def save(self, state: ArtifactState, path: str | Path | None = None, *, overwrite: bool = False) -> Path:
+    def save(
+        self,
+        state: ArtifactState,
+        path: str | Path | None = None,
+        *,
+        overwrite: bool = False,
+    ) -> Path:
         """Atomically save config, schema, metadata and native model files."""
         artifact_config = state.config
         artifact_path = (
-            Path(path) if path is not None else Path(artifact_config.output_dir) / "artifacts" / self.artifact_directory
+            Path(path)
+            if path is not None
+            else Path(artifact_config.output_dir)
+            / "artifacts"
+            / self.artifact_directory
         )
         target = artifact_path.expanduser().resolve()
         if target.exists() and not overwrite:
@@ -72,19 +83,17 @@ class ArtifactRepository:
             for index, item in enumerate(state.models):
                 relative = Path("model") / str(index)
                 item.backend.save(temporary / relative)
-                model_metadata.append(
-                    {
-                        "path": relative.as_posix(),
-                        "schema": item.schema.to_dict(),
-                        "hidden_dimensions": item.hidden_dimensions,
-                        "best_params": item.best_params,
-                        "validation_metric": item.validation_metric,
-                        "model_layout": item.layout,
-                        "group_value": item.group_value,
-                        "single_group_global": item.single_group_global,
-                        "single_group_value": item.single_group_value,
-                    }
-                )
+                model_metadata.append({
+                    "path": relative.as_posix(),
+                    "schema": item.schema.to_dict(),
+                    "hidden_dimensions": item.hidden_dimensions,
+                    "best_params": item.best_params,
+                    "validation_metric": item.validation_metric,
+                    "model_layout": item.layout,
+                    "group_value": item.group_value,
+                    "single_group_global": item.single_group_global,
+                    "single_group_value": item.single_group_value,
+                })
             manifest = {
                 "task": self.task_name,
                 "backend_family": artifact_config.backend,
@@ -157,7 +166,9 @@ class ArtifactRepository:
         for field, expected in expected_header.items():
             actual = manifest.get(field)
             if actual != expected:
-                msg = f"Artifact {field} mismatch: expected {expected!r}, got {actual!r}"
+                msg = (
+                    f"Artifact {field} mismatch: expected {expected!r}, got {actual!r}"
+                )
                 raise ArtifactIntegrityError(msg)
 
         raw_models = manifest.get("models")
@@ -180,14 +191,20 @@ class ArtifactRepository:
                 raise ArtifactIntegrityError(msg)
             group_value = item.get("group_value")
             single_group_global = item.get("single_group_global", False)
-            if not isinstance(single_group_global, bool) or (single_group_global and layout != "global"):
-                msg = f"Artifact model #{index} has invalid single_group_global metadata"
+            if not isinstance(single_group_global, bool) or (
+                single_group_global and layout != "global"
+            ):
+                msg = (
+                    f"Artifact model #{index} has invalid single_group_global metadata"
+                )
                 raise ArtifactIntegrityError(msg)
             single_group_value = item.get("single_group_value")
             if single_group_global != (single_group_value is not None):
                 msg = f"Artifact model #{index} has inconsistent single-group metadata"
                 raise ArtifactIntegrityError(msg)
-            if (layout == "global" and group_value is not None) or (layout == "per_group" and group_value is None):
+            if (layout == "global" and group_value is not None) or (
+                layout == "per_group" and group_value is None
+            ):
                 msg = f"Artifact model #{index} has inconsistent model_layout={layout!r} and group_value={group_value!r}"
                 raise ArtifactIntegrityError(msg)
             try:
@@ -224,7 +241,9 @@ class ArtifactRepository:
             except Exception as exc:
                 msg = f"Artifact model #{index} metadata or schema is invalid: {exc}"
                 raise ArtifactIntegrityError(msg) from exc
-            if not isinstance(hidden_dimensions, Mapping) or not isinstance(best_params, Mapping):
+            if not isinstance(hidden_dimensions, Mapping) or not isinstance(
+                best_params, Mapping
+            ):
                 msg = f"Artifact model #{index} hidden_dimensions and best_params must be mappings"
                 raise ArtifactIntegrityError(msg)
             features = tuple(schema.feature_order)
@@ -266,7 +285,10 @@ class ArtifactRepository:
                 else all(layout == "per_group" for layout in layouts)
                 if expected_layout == "per_group"
                 else layouts.count("global") == 1
-                and ("per_group" in layouts or validated[0][0].get("single_group_global", False))
+                and (
+                    "per_group" in layouts
+                    or validated[0][0].get("single_group_global", False)
+                )
             )
         if not valid_layout_set:
             msg = f"Artifact model layouts mismatch: config expects {expected_layout!r}, got {layouts!r}"
@@ -274,7 +296,8 @@ class ArtifactRepository:
 
         source_manifests = manifest.get("source_manifests", {})
         if not isinstance(source_manifests, Mapping) or any(
-            not isinstance(paths, (list, tuple)) or any(not isinstance(item, Mapping) for item in paths)
+            not isinstance(paths, list | tuple)
+            or any(not isinstance(item, Mapping) for item in paths)
             for paths in source_manifests.values()
         ):
             msg = "Artifact source_manifests must map split names to lists of file metadata"
@@ -295,18 +318,23 @@ class ArtifactRepository:
         device = runtime_device or config.resolved_device
         if manifest is None:
             manifest = self._read_manifest(root)
-        validated_models = self._validate_manifest(root, config, manifest, require_complete=require_complete)
+        validated_models = self._validate_manifest(
+            root, config, manifest, require_complete=require_complete
+        )
         runtime_device = device
         models = []
         source_manifests = {
-            split: tuple(dict(item) for item in paths) for split, paths in manifest.get("source_manifests", {}).items()
+            split: tuple(dict(item) for item in paths)
+            for split, paths in manifest.get("source_manifests", {}).items()
         }
         for index, (item, schema, model_root) in enumerate(validated_models):
             layout = item["model_layout"]
             try:
                 models.append(
                     ModelEntry(
-                        backend=self.backend_class.load(model_root, device=runtime_device),
+                        backend=self.backend_class.load(
+                            model_root, device=runtime_device
+                        ),
                         schema=schema,
                         hidden_dimensions=dict(item["hidden_dimensions"]),
                         best_params=dict(item["best_params"]),

@@ -37,10 +37,12 @@ def test_multiclass_defaults_and_objective_directions():
 
 def test_multiclass_config_is_an_independent_task_config_sibling():
     assert MulticlassTaskConfig.__bases__ == (BaseTaskConfig,)
-    assert not issubclass(MulticlassTaskConfig, (BinaryTaskConfig, RegressionTaskConfig))
+    assert not issubclass(MulticlassTaskConfig, BinaryTaskConfig | RegressionTaskConfig)
 
 
-@pytest.mark.parametrize("metric", ["roc_auc_ovr_macro", "accuracy", "f1_macro", "log_loss"])
+@pytest.mark.parametrize(
+    "metric", ["roc_auc_ovr_macro", "accuracy", "f1_macro", "log_loss"]
+)
 def test_multiclass_supported_objective_metrics(metric):
     assert _config(optimization_metric=metric).optimization_metric == metric
 
@@ -89,7 +91,10 @@ environment: {{}}
         search_space={
             "depth": {"type": "int", "low": 3, "high": 7, "step": 2},
             "learning_rate": {"type": "float", "low": 0.1, "high": 0.3, "step": 0.1},
-            "grow_policy": {"type": "categorical", "choices": ["SymmetricTree", "Depthwise"]},
+            "grow_policy": {
+                "type": "categorical",
+                "choices": ["SymmetricTree", "Depthwise"],
+            },
         },
     )
     assert MulticlassTaskConfig.from_yaml(yaml_path) == expected

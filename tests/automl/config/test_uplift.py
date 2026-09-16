@@ -47,7 +47,9 @@ def test_uplift_named_metrics(metric: str) -> None:
 
 @pytest.mark.parametrize("metric", ["roc_auc", "unknown", "uplift_at_10"])
 def test_uplift_rejects_invalid_optimization_metric(metric: str) -> None:
-    with pytest.raises(ConfigError, match="Unknown metric|incompatible|only for evaluation"):
+    with pytest.raises(
+        ConfigError, match="Unknown metric|incompatible|only for evaluation"
+    ):
         UpliftTaskConfig(**_values(optimization_metric=metric))
 
 

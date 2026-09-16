@@ -22,7 +22,10 @@ def _schema():
 
 @pytest.mark.parametrize(
     ("engine", "params"),
-    [("catboost", {"iterations": 12, "depth": 2}), ("xgboost", {"n_estimators": 12, "max_depth": 2})],
+    [
+        ("catboost", {"iterations": 12, "depth": 2}),
+        ("xgboost", {"n_estimators": 12, "max_depth": 2}),
+    ],
 )
 def test_regression_backend_fit_predict_and_native_round_trip(tmp_path, engine, params):
     pytest.importorskip(engine)

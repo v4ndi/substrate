@@ -13,7 +13,11 @@ import pytest
 
 from avatar.automl import BinaryTask, BinaryTaskConfig
 from avatar.automl.data import FeatureSchema, ParquetSource
-from avatar.automl.exceptions import ArtifactIntegrityError, RemoteExecutionError, SchemaError
+from avatar.automl.exceptions import (
+    ArtifactIntegrityError,
+    RemoteExecutionError,
+    SchemaError,
+)
 from avatar.automl.execution import ExecutionContext
 from avatar.automl.lifecycle import AutoMLStore, write_json
 from avatar.automl.tasks.artifacts import ArtifactRepository, ArtifactState
@@ -63,26 +67,45 @@ class NativeStub:
 
 
 def model(layout="global", group=None):
-    schema = FeatureSchema((), ("x",), ("x",), {"x": "Float64"}, "target", "epk_id", None, "group")
+    schema = FeatureSchema(
+        (), ("x",), ("x",), {"x": "Float64"}, "target", "epk_id", None, "group"
+    )
     return ModelEntry(NativeStub(), schema, {}, {}, 0.75, layout, group)
 
 
 def test_preparation_keeps_hive_aliases_and_source_identity(context, tmp_path):
     path = tmp_path / "channel=a" / "split=train" / "part.parquet"
     path.parent.mkdir(parents=True)
-    pl.DataFrame({"client": [2, 1], "month": ["2026-01", "2026-02"], "x": [1.0, 2.0]}).write_parquet(path)
+    pl.DataFrame({
+        "client": [2, 1],
+        "month": ["2026-01", "2026-02"],
+        "x": [1.0, 2.0],
+    }).write_parquet(path)
     preparation = DataPreparation(context)
     frame = preparation.read(path.parent)
     assert frame["epk_id"].to_list() == [2, 1]
     assert frame["group"].to_list() == ["a", "a"]
     assert frame["date"].dtype == pl.Date
     manifest = preparation.source_manifest(ParquetSource.resolve(path.parent))
-    assert manifest == ({"path": str(path), "size": path.stat().st_size, "modified_ns": path.stat().st_mtime_ns},)
+    assert manifest == (
+        {
+            "path": str(path),
+            "size": path.stat().st_size,
+            "modified_ns": path.stat().st_mtime_ns,
+        },
+    )
 
 
-def test_preparation_projects_features_but_still_rejects_alias_collisions(context, tmp_path):
+def test_preparation_projects_features_but_still_rejects_alias_collisions(
+    context, tmp_path
+):
     path = tmp_path / "data.parquet"
-    frame = pl.DataFrame({"client": [1], "month": ["2026-01"], "x": [None], "unused": ["payload"]})
+    frame = pl.DataFrame({
+        "client": [1],
+        "month": ["2026-01"],
+        "x": [None],
+        "unused": ["payload"],
+    })
     frame.write_parquet(path)
     prepared = DataPreparation(context).read(path)
     assert set(prepared.columns) == {"epk_id", "date", "x"}
@@ -93,17 +116,17 @@ def test_preparation_projects_features_but_still_rejects_alias_collisions(contex
 
 
 @pytest.mark.parametrize("layout", ["global", "per_group", "global_and_per_group"])
-def test_training_partitions_once_and_preserves_slice_order(context, tmp_path, monkeypatch, layout):
+def test_training_partitions_once_and_preserves_slice_order(
+    context, tmp_path, monkeypatch, layout
+):
     context = context.derive(model_layout=layout)
     path = tmp_path / "data.parquet"
-    pl.DataFrame(
-        {
-            "client": [3, 1, 2],
-            "month": ["2026-01"] * 3,
-            "channel": ["b", "a", "b"],
-            "x": [3, 1, 2],
-        }
-    ).write_parquet(path)
+    pl.DataFrame({
+        "client": [3, 1, 2],
+        "month": ["2026-01"] * 3,
+        "channel": ["b", "a", "b"],
+        "x": [3, 1, 2],
+    }).write_parquet(path)
     calls = []
     partitions = []
     original = pl.DataFrame.partition_by
@@ -119,24 +142,40 @@ def test_training_partitions_once_and_preserves_slice_order(context, tmp_path, m
 
     monkeypatch.setattr(pl.DataFrame, "partition_by", partition)
     TrainingCoordinator(context, "binary", lambda *_: None, fit).execute(path, path)
-    expected = [("global", None, [3, 1, 2])] if layout in {"global", "global_and_per_group"} else []
+    expected = (
+        [("global", None, [3, 1, 2])]
+        if layout in {"global", "global_and_per_group"}
+        else []
+    )
     if layout in {"per_group", "global_and_per_group"}:
         expected += [("per_group", "a", [1]), ("per_group", "b", [3, 2])]
     assert calls == expected
     assert partitions == ([] if layout == "global" else [3, 3])
 
 
-def test_training_logs_single_group_combined_layout_resolution(context, tmp_path, caplog):
+def test_training_logs_single_group_combined_layout_resolution(
+    context, tmp_path, caplog
+):
     path = tmp_path / "data.parquet"
-    pl.DataFrame({"client": [1, 2], "month": ["2026-01"] * 2, "channel": ["only", "only"], "x": [1, 2]}).write_parquet(path)
+    pl.DataFrame({
+        "client": [1, 2],
+        "month": ["2026-01"] * 2,
+        "channel": ["only", "only"],
+        "x": [1, 2],
+    }).write_parquet(path)
 
     with caplog.at_level("INFO", logger="avatar.automl.progress"):
-        outcome = TrainingCoordinator(context, "binary", lambda *_: None, lambda *_args, **_kwargs: model()).execute(path, path)
+        outcome = TrainingCoordinator(
+            context, "binary", lambda *_: None, lambda *_args, **_kwargs: model()
+        ).execute(path, path)
 
     assert outcome.models[0].single_group_global is True
     assert "Requested model_layout='global_and_per_group'" in caplog.text
     assert "single group value 'only'" in caplog.text
-    assert "effective model_layout='global'; per-group branch is not created" in caplog.text
+    assert (
+        "effective model_layout='global'; per-group branch is not created"
+        in caplog.text
+    )
 
 
 def test_remote_training_plan_reads_only_group_column(context, tmp_path, monkeypatch):
@@ -148,17 +187,25 @@ def test_remote_training_plan_reads_only_group_column(context, tmp_path, monkeyp
         pytest.fail("Planning must not load feature frames")
 
     monkeypatch.setattr(ParquetSource, "read", no_full_read)
-    assert task._remote_training_parts(path) == [("global", None), ("per_group", "a"), ("per_group", "b")]
+    assert task._remote_training_parts(path) == [
+        ("global", None),
+        ("per_group", "a"),
+        ("per_group", "b"),
+    ]
 
 
 @pytest.mark.parametrize("layout", ["global", "per_group", "global_and_per_group"])
-def test_one_training_group_resolves_both_to_global_in_local_and_remote_plans(context, layout):
+def test_one_training_group_resolves_both_to_global_in_local_and_remote_plans(
+    context, layout
+):
     context = context.derive(model_layout=layout)
     train = pl.DataFrame({"group": ["a", "a"]})
     valid = pl.DataFrame({"group": ["a"]})
     plan = ModelPlan.training(context, train, valid)
     assert plan == ModelPlan.remote_training(context, train)
-    assert plan.parts == ((("per_group", "a"),) if layout == "per_group" else (("global", None),))
+    assert plan.parts == (
+        (("per_group", "a"),) if layout == "per_group" else (("global", None),)
+    )
     assert plan.layout == ("per_group" if layout == "per_group" else "global")
 
 
@@ -169,7 +216,11 @@ def test_model_plan_preserves_local_remote_order_and_validates_slices(context, l
     valid = pl.DataFrame({"group": ["a", "b"]})
     plan = ModelPlan.training(context, train, valid)
     assert plan == ModelPlan.remote_training(context, train)
-    expected = (("global", None),) if layout == "global" else (("per_group", "a"), ("per_group", "b"))
+    expected = (
+        (("global", None),)
+        if layout == "global"
+        else (("per_group", "a"), ("per_group", "b"))
+    )
     if layout == "global_and_per_group":
         expected = (("global", None), *expected)
     assert plan.parts == expected
@@ -180,15 +231,25 @@ def test_model_plan_preserves_local_remote_order_and_validates_slices(context, l
             ModelPlan.training(context, train, valid.head(1))
         with pytest.raises(SchemaError, match="channel"):
             ModelPlan.training(context, train, valid.drop("group"))
-        part = ModelPlan.training(context, train, valid, remote_layout="per_group", remote_group_value="b")
+        part = ModelPlan.training(
+            context, train, valid, remote_layout="per_group", remote_group_value="b"
+        )
         assert part.parts == (("per_group", "b"),)
         with pytest.raises(SchemaError, match="Training data has no rows"):
-            ModelPlan.training(context, train, valid, remote_layout="per_group", remote_group_value="absent")
+            ModelPlan.training(
+                context,
+                train,
+                valid,
+                remote_layout="per_group",
+                remote_group_value="absent",
+            )
 
 
 def test_router_preserves_independent_branches_and_rejects_unknown_groups(context):
     models = (model(), model("per_group", "a"), model("per_group", "b"))
-    frame = pl.DataFrame({"group": ["b", "a", "b"], "x": [1, 3, 4]}).with_row_index("__row_id")
+    frame = pl.DataFrame({"group": ["b", "a", "b"], "x": [1, 3, 4]}).with_row_index(
+        "__row_id"
+    )
     router = PredictionRouter(context, models)
     branches = dict(router.layout_frames(frame))
     assert branches["global"] is frame
@@ -196,7 +257,8 @@ def test_router_preserves_independent_branches_and_rejects_unknown_groups(contex
     grouped = PredictionRouter(context.derive(model_layout="per_group"), models)
     raw = grouped.score(
         branches["per_group"],
-        lambda part, item: part["x"].to_numpy() + (10 if item.group_value == "a" else 20),
+        lambda part, item: part["x"].to_numpy()
+        + (10 if item.group_value == "a" else 20),
     )
     np.testing.assert_array_equal(raw, [21, 13, 24])
     unknown = pl.DataFrame({"group": ["b", "unknown", "unknown"], "x": [1, 2, 3]})
@@ -204,24 +266,30 @@ def test_router_preserves_independent_branches_and_rejects_unknown_groups(contex
         router.layout_frames(unknown)
     with pytest.raises(SchemaError, match=r"Unknown group values.*'unknown'.*2 rows"):
         grouped.layout_frames(unknown)
-    combined = router.combine(
-        [
-            ("global", PredictionResult(pl.DataFrame({"score": [0.1, 0.2]}))),
-            (
-                "per_group",
-                PredictionResult(pl.DataFrame({"score": [0.3]})),
-            ),
-        ]
-    )
-    assert combined.scores["model_layout"].to_list() == ["global", "global", "per_group"]
+    combined = router.combine([
+        ("global", PredictionResult(pl.DataFrame({"score": [0.1, 0.2]}))),
+        (
+            "per_group",
+            PredictionResult(pl.DataFrame({"score": [0.3]})),
+        ),
+    ])
+    assert combined.scores["model_layout"].to_list() == [
+        "global",
+        "global",
+        "per_group",
+    ]
     assert frame["group"].to_list() == ["b", "a", "b"]
 
 
 @pytest.mark.parametrize("failure", ["native_save", "atomic_replace"])
-def test_artifact_repository_round_trip_and_failed_overwrite(context, tmp_path, monkeypatch, failure):
+def test_artifact_repository_round_trip_and_failed_overwrite(
+    context, tmp_path, monkeypatch, failure
+):
     repository = ArtifactRepository("binary", "binary", NativeStub)
     metadata = {"labels": ["a", "b"]}
-    state = ArtifactState(context.config, (model(),), {"train": ({"path": "train"},)}, metadata)
+    state = ArtifactState(
+        context.config, (model(),), {"train": ({"path": "train"},)}, metadata
+    )
     metadata["labels"].append("c")
     assert state.task_manifest["labels"] == ("a", "b")
     path = repository.save(state, tmp_path / "snapshot")
@@ -259,19 +327,37 @@ def test_artifact_repository_round_trip_and_failed_overwrite(context, tmp_path, 
     ("mutate", "message"),
     [
         (lambda manifest: manifest.update(task="regression"), "task mismatch"),
-        (lambda manifest: manifest.update(backend_family="tabnn"), "backend_family mismatch"),
-        (lambda manifest: manifest.update(engine="xgboost"), "engine mismatch"),
-        (lambda manifest: manifest["models"][0].update(scope="product"), "legacy model scope metadata"),
         (
-            lambda manifest: manifest["models"][0].update(model_layout="per_group", group_value=None),
+            lambda manifest: manifest.update(backend_family="tabnn"),
+            "backend_family mismatch",
+        ),
+        (lambda manifest: manifest.update(engine="xgboost"), "engine mismatch"),
+        (
+            lambda manifest: manifest["models"][0].update(scope="product"),
+            "legacy model scope metadata",
+        ),
+        (
+            lambda manifest: manifest["models"][0].update(
+                model_layout="per_group", group_value=None
+            ),
             "inconsistent model_layout",
         ),
-        (lambda manifest: manifest["models"][0]["schema"].update(feature_order=["missing"]), "schema is inconsistent"),
+        (
+            lambda manifest: manifest["models"][0]["schema"].update(
+                feature_order=["missing"]
+            ),
+            "schema is inconsistent",
+        ),
     ],
 )
-def test_artifact_repository_prevalidates_complete_manifest(context, tmp_path, monkeypatch, mutate, message):
+def test_artifact_repository_prevalidates_complete_manifest(
+    context, tmp_path, monkeypatch, mutate, message
+):
     repository = ArtifactRepository("binary", "binary", NativeStub)
-    path = repository.save(ArtifactState(context.config, (model(), model("per_group", "a")), {}, {}), tmp_path / "snapshot")
+    path = repository.save(
+        ArtifactState(context.config, (model(), model("per_group", "a")), {}, {}),
+        tmp_path / "snapshot",
+    )
     manifest_path = path / "manifest.json"
     manifest = json.loads(manifest_path.read_text())
     mutate(manifest)
@@ -288,9 +374,14 @@ def test_artifact_repository_prevalidates_complete_manifest(context, tmp_path, m
     assert not loaded
 
 
-def test_artifact_repository_rejects_backend_engine_before_native_restore(context, tmp_path, monkeypatch):
+def test_artifact_repository_rejects_backend_engine_before_native_restore(
+    context, tmp_path, monkeypatch
+):
     repository = ArtifactRepository("binary", "binary", NativeStub)
-    path = repository.save(ArtifactState(context.config, (model(), model("per_group", "a")), {}, {}), tmp_path / "snapshot")
+    path = repository.save(
+        ArtifactState(context.config, (model(), model("per_group", "a")), {}, {}),
+        tmp_path / "snapshot",
+    )
     backend_path = path / "model" / "1" / "backend.json"
     backend_path.write_text(json.dumps({"engine": "xgboost"}))
     loaded = False
@@ -343,7 +434,9 @@ def test_standalone_load_reads_its_config_once(context, tmp_path, monkeypatch):
     assert calls == 1
 
 
-def test_entity_load_compares_entity_and_artifact_configs(context, tmp_path, monkeypatch):
+def test_entity_load_compares_entity_and_artifact_configs(
+    context, tmp_path, monkeypatch
+):
     monkeypatch.setattr(BinaryTask, "_backend_class", NativeStub)
     task = BinaryTask(context.config)
     task._models = [model(), model("per_group", "a")]
@@ -361,14 +454,20 @@ def test_entity_load_compares_entity_and_artifact_configs(context, tmp_path, mon
 @pytest.mark.parametrize(
     "updates",
     [
-        {"env_type": "osiris", "device": "gpu", "environment": {"venv_path": "/different/venv"}},
+        {
+            "env_type": "osiris",
+            "device": "gpu",
+            "environment": {"venv_path": "/different/venv"},
+        },
         {"output_dir": "different-output"},
         {"verbose": True},
         {"model_params": {"iterations": 17}},
         {"random_state": 7},
     ],
 )
-def test_entity_load_allows_non_model_artifact_config_to_differ(context, tmp_path, monkeypatch, updates):
+def test_entity_load_allows_non_model_artifact_config_to_differ(
+    context, tmp_path, monkeypatch, updates
+):
     monkeypatch.setattr(BinaryTask, "_backend_class", NativeStub)
     task = BinaryTask(context.config)
     task._models = [model(), model("per_group", "a")]
@@ -387,7 +486,9 @@ def test_entity_load_allows_non_model_artifact_config_to_differ(context, tmp_pat
     assert restored._models[0].backend is not None
 
 
-def test_internal_artifact_restore_separates_runtime_device_and_scope(context, tmp_path, monkeypatch):
+def test_internal_artifact_restore_separates_runtime_device_and_scope(
+    context, tmp_path, monkeypatch
+):
     loaded_devices = []
 
     class DeviceStub(NativeStub):
@@ -401,7 +502,9 @@ def test_internal_artifact_restore_separates_runtime_device_and_scope(context, t
     source = BinaryTask(context.config)
     source._models = [model(), model("per_group", "a")]
     artifact = source.save(tmp_path / "standalone")
-    runtime_config = replace(context.config, env_type="osiris", device="gpu", model_layout="global")
+    runtime_config = replace(
+        context.config, env_type="osiris", device="gpu", model_layout="global"
+    )
     worker = BinaryTask(runtime_config, _entity_path=tmp_path / "worker")
 
     worker._restore_artifact(artifact)
@@ -410,7 +513,9 @@ def test_internal_artifact_restore_separates_runtime_device_and_scope(context, t
     assert loaded_devices == ["gpu", "gpu"]
 
 
-def test_entity_load_uses_same_artifact_prevalidation_and_preserves_identity(context, tmp_path, monkeypatch):
+def test_entity_load_uses_same_artifact_prevalidation_and_preserves_identity(
+    context, tmp_path, monkeypatch
+):
     monkeypatch.setattr(BinaryTask, "_backend_class", NativeStub)
     task = BinaryTask(context.config)
     task._models = [model(), model("per_group", "a")]
@@ -431,7 +536,9 @@ def test_entity_load_uses_same_artifact_prevalidation_and_preserves_identity(con
 
 
 @pytest.mark.parametrize("failure", ["execute", "save", "persist"])
-def test_operation_failure_rolls_back_and_stops_heartbeat(context, tmp_path, monkeypatch, failure):
+def test_operation_failure_rolls_back_and_stops_heartbeat(
+    context, tmp_path, monkeypatch, failure
+):
     store = AutoMLStore.create(tmp_path, "binary", {})
     heartbeat = Event()
     events = []
@@ -448,11 +555,15 @@ def test_operation_failure_rolls_back_and_stops_heartbeat(context, tmp_path, mon
         step("execute")
         return result
 
-    monkeypatch.setattr("avatar.automl.tasks.operations._LOCAL_HEARTBEAT_INTERVAL_SECONDS", 0.001)
+    monkeypatch.setattr(
+        "avatar.automl.tasks.operations._LOCAL_HEARTBEAT_INTERVAL_SECONDS", 0.001
+    )
     monkeypatch.setattr(store, "heartbeat_operation", lambda _: heartbeat.set())
     monkeypatch.setattr(store, "persist_training", lambda _: step("persist"))
     environment = SimpleNamespace(run_local=lambda **kwargs: kwargs["callback"]())
-    execution = SimpleNamespace(config=context.config, _runner=lambda: environment, _execute_train=execute)
+    execution = SimpleNamespace(
+        config=context.config, _runner=lambda: environment, _execute_train=execute
+    )
     hooks = OperationHooks(
         resolve_config=lambda **kwargs: context.config,
         execution_view=lambda *args, **kwargs: execution,
@@ -470,26 +581,44 @@ def test_operation_failure_rolls_back_and_stops_heartbeat(context, tmp_path, mon
     operation = store.latest("train")
     assert operation["state"] == "failed"
     assert events[-1] == "rollback" and "artifact" not in events
-    assert not any(thread.name == f"automl-heartbeat-{operation['run_id'][:8]}" for thread in enumerate_threads())
+    assert not any(
+        thread.name == f"automl-heartbeat-{operation['run_id'][:8]}"
+        for thread in enumerate_threads()
+    )
 
 
 @pytest.mark.parametrize("fail_assembly", [False, True])
-def test_remote_training_finalization_commits_only_complete_artifacts(context, tmp_path, monkeypatch, fail_assembly):
+def test_remote_training_finalization_commits_only_complete_artifacts(
+    context, tmp_path, monkeypatch, fail_assembly
+):
     monkeypatch.setattr(BinaryTask, "_backend_class", NativeStub)
     task = BinaryTask(context.config)
     identity = task.id
     repository = task._artifact_repository()
     jobs = []
     for index, entry in enumerate((model(), model("per_group", "a"))):
-        root = repository.save(ArtifactState(context.config, (entry,), {}, {}), tmp_path / f"part-{index}")
+        root = repository.save(
+            ArtifactState(context.config, (entry,), {}, {}), tmp_path / f"part-{index}"
+        )
         spec, result = root / "spec.json", root / "result.json"
         write_json(spec, {"payload": {"artifact_path": str(root)}})
         name = "global" if index == 0 else "per_group:a"
-        write_json(result, {"best_params": {name: {}}, "validation_metrics": {name: 0.75}})
-        jobs.append({"spec_path": str(spec), "result_path": str(result), "state": "succeeded", "job_id": str(index)})
-    operation = task._store.start_operation("train", runtime={"env_type": "osiris", "device": "gpu"})
+        write_json(
+            result, {"best_params": {name: {}}, "validation_metrics": {name: 0.75}}
+        )
+        jobs.append({
+            "spec_path": str(spec),
+            "result_path": str(result),
+            "state": "succeeded",
+            "job_id": str(index),
+        })
+    operation = task._store.start_operation(
+        "train", runtime={"env_type": "osiris", "device": "gpu"}
+    )
     artifact = task.path / "artifact"
-    task._store.update_operation(operation, state="queued", jobs=jobs, artifact_path=str(artifact))
+    task._store.update_operation(
+        operation, state="queued", jobs=jobs, artifact_path=str(artifact)
+    )
     task._environment_runner = SimpleNamespace(
         poll_jobs=lambda jobs: ("succeeded", jobs),
         failure_logs=lambda jobs: "injected finalization failure",
@@ -516,6 +645,9 @@ def test_remote_training_finalization_commits_only_complete_artifacts(context, t
             ("global", None),
             ("per_group", "a"),
         ]
-        assert task.training_result().validation_metrics == {"global": 0.75, "per_group:a": 0.75}
+        assert task.training_result().validation_metrics == {
+            "global": 0.75,
+            "per_group:a": 0.75,
+        }
         assert BinaryTask.load(task.path).id == identity
     assert list((tmp_path / "automl").iterdir()) == [task.path]

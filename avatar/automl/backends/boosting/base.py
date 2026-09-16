@@ -5,10 +5,11 @@ from __future__ import annotations
 import json
 import tempfile
 from abc import abstractmethod
+from collections.abc import Mapping
 from copy import copy, deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, ClassVar, Mapping
+from typing import Any, ClassVar
 
 import numpy as np
 import polars as pl
@@ -16,7 +17,11 @@ import polars as pl
 from avatar.automl.backends.boosting.interface import BoostingBackend
 from avatar.automl.config.boosting import default_model_params
 from avatar.automl.data.schema import FeatureSchema
-from avatar.automl.exceptions import ArtifactIntegrityError, MissingDependencyError, UnsupportedBackendError
+from avatar.automl.exceptions import (
+    ArtifactIntegrityError,
+    MissingDependencyError,
+    UnsupportedBackendError,
+)
 
 _CATBOOST_QUANTIZATION_PARAMETERS = {
     "border_count",
@@ -79,15 +84,27 @@ class BaseBoostingBackend(BoostingBackend):
         Returns:
             ``True`` when reusable CatBoost pools can be quantized before trials.
         """
-        return self.engine == "catboost" and not (search_space and _CATBOOST_QUANTIZATION_PARAMETERS.intersection(search_space))
+        return self.engine == "catboost" and not (
+            search_space
+            and _CATBOOST_QUANTIZATION_PARAMETERS.intersection(search_space)
+        )
 
-    def _model_params_with_defaults(self, *, excluded: tuple[str, ...] = ()) -> dict[str, Any]:
+    def _model_params_with_defaults(
+        self, *, excluded: tuple[str, ...] = ()
+    ) -> dict[str, Any]:
         """Merge packaged engine defaults with explicit native parameters."""
-        defaults = default_model_params(self.engine, task=self.task_name, train_rows=self.train_rows)
+        defaults = default_model_params(
+            self.engine, task=self.task_name, train_rows=self.train_rows
+        )
         for name in excluded:
             defaults.pop(name, None)
         if self.engine == "catboost":
-            if {"iterations", "num_trees", "num_boost_round", "n_estimators"}.intersection(self.params):
+            if {
+                "iterations",
+                "num_trees",
+                "num_boost_round",
+                "n_estimators",
+            }.intersection(self.params):
                 defaults.pop("num_trees", None)
             if {"depth", "max_depth"}.intersection(self.params):
                 defaults.pop("max_depth", None)
@@ -109,7 +126,9 @@ class BaseBoostingBackend(BoostingBackend):
         """Capture optional estimator state after fitting."""
         return None
 
-    def _prepare_features(self, frame: pl.DataFrame, schema: FeatureSchema, *, fit: bool) -> Any:
+    def _prepare_features(
+        self, frame: pl.DataFrame, schema: FeatureSchema, *, fit: bool
+    ) -> Any:
         """Select ordered features and build the engine-native tabular input."""
         result = frame.select(schema.feature_order)
         for column in schema.categorical:
@@ -122,9 +141,15 @@ class BaseBoostingBackend(BoostingBackend):
                 categories = tuple(sorted(values.unique().to_list()))
                 self.category_values[column] = categories
             categories = self.category_values[column]
-            normalized = pl.when(values.is_in(categories)).then(values).otherwise(pl.lit(_XGBOOST_UNKNOWN_CATEGORY))
+            normalized = (
+                pl.when(values.is_in(categories))
+                .then(values)
+                .otherwise(pl.lit(_XGBOOST_UNKNOWN_CATEGORY))
+            )
             vocabulary = tuple(dict.fromkeys((*categories, _XGBOOST_UNKNOWN_CATEGORY)))
-            result = result.with_columns(normalized.cast(pl.Enum(vocabulary)).alias(column))
+            result = result.with_columns(
+                normalized.cast(pl.Enum(vocabulary)).alias(column)
+            )
         return result
 
     def prepare_fit_data(
@@ -162,7 +187,9 @@ class BaseBoostingBackend(BoostingBackend):
             except ImportError as exc:
                 msg = "CatBoost engine requires the 'catboost' package"
                 raise MissingDependencyError(msg) from exc
-            train_features = Pool(train_features, target, cat_features=list(schema.categorical))
+            train_features = Pool(
+                train_features, target, cat_features=list(schema.categorical)
+            )
             if prequantize:
                 quantization_params = {
                     name: value
@@ -171,13 +198,23 @@ class BaseBoostingBackend(BoostingBackend):
                 }
                 task_type = "GPU" if self.device == "gpu" else "CPU"
                 train_features.quantize(task_type=task_type, **quantization_params)
-            valid_prediction_features = self._prepare_features(valid_frame, schema, fit=False)
-            valid_features = Pool(valid_prediction_features, valid_target, cat_features=list(schema.categorical))
+            valid_prediction_features = self._prepare_features(
+                valid_frame, schema, fit=False
+            )
+            valid_features = Pool(
+                valid_prediction_features,
+                valid_target,
+                cat_features=list(schema.categorical),
+            )
             if prequantize:
-                with tempfile.TemporaryDirectory(prefix="fmlib-catboost-borders-") as directory:
+                with tempfile.TemporaryDirectory(
+                    prefix="fmlib-catboost-borders-"
+                ) as directory:
                     borders_path = Path(directory) / "borders.tsv"
                     train_features.save_quantization_borders(str(borders_path))
-                    valid_features.quantize(input_borders=str(borders_path), task_type=task_type)
+                    valid_features.quantize(
+                        input_borders=str(borders_path), task_type=task_type
+                    )
         else:
             valid_features = self._prepare_features(valid_frame, schema, fit=False)
             valid_prediction_features = valid_features
@@ -283,7 +320,10 @@ class BaseBoostingBackend(BoostingBackend):
         values = self._native_feature_importances(len(schema.feature_order))
         if values is None:
             return None
-        return pl.DataFrame({"feature": schema.feature_order, "importance": values}).sort("importance", descending=True)
+        return pl.DataFrame({
+            "feature": schema.feature_order,
+            "importance": values,
+        }).sort("importance", descending=True)
 
     def _native_feature_importances(self, expected_count: int) -> np.ndarray | None:
         """Return a validated one-dimensional native importance vector."""
@@ -334,13 +374,17 @@ class BaseBoostingBackend(BoostingBackend):
             "params": dict(self.params),
             "random_state": self.random_state,
             "verbose": self.verbose,
-            "category_values": {name: list(values) for name, values in self.category_values.items()},
+            "category_values": {
+                name: list(values) for name, values in self.category_values.items()
+            },
             "task_state": dict(self._artifact_state()),
         }
-        (path / "backend.json").write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
+        (path / "backend.json").write_text(
+            json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
 
     @classmethod
-    def load(cls, path: Path, *, device: str = "cpu") -> "BaseBoostingBackend":
+    def load(cls, path: Path, *, device: str = "cpu") -> BaseBoostingBackend:
         """Restore a fitted backend using the caller's runtime device.
 
         Args:
@@ -364,7 +408,10 @@ class BaseBoostingBackend(BoostingBackend):
             random_state=metadata["random_state"],
             device=device,
             verbose=metadata.get("verbose", False),
-            category_values={name: tuple(values) for name, values in metadata["category_values"].items()},
+            category_values={
+                name: tuple(values)
+                for name, values in metadata["category_values"].items()
+            },
         )
         backend._restore_artifact_state(metadata.get("task_state", {}))
         suffix = "cbm" if backend.engine == "catboost" else "json"
@@ -382,7 +429,7 @@ class BaseBoostingBackend(BoostingBackend):
         if self.model is not None and self.engine == "xgboost":
             self.model.set_params(device="cuda" if device == "gpu" else "cpu")
 
-    def for_execution(self, device: str) -> "BaseBoostingBackend":
+    def for_execution(self, device: str) -> BaseBoostingBackend:
         """Isolate native device changes only when the requested device differs."""
         if device == self.device:
             return self

@@ -1,8 +1,9 @@
 """Single-estimator training and feature semantics for supervised tasks."""
 
 from abc import abstractmethod
+from collections.abc import Mapping
 from time import perf_counter
-from typing import Any, Mapping, TypeVar
+from typing import Any, TypeVar
 
 import numpy as np
 import polars as pl
@@ -43,7 +44,9 @@ class SupervisedBoostingTask(BaseBoostingTask[_SingleBackendT]):
 
     def _metric(self, target: np.ndarray, scores: np.ndarray) -> float:
         """Calculate the registered task-specific objective metric."""
-        metric = resolve_metric(self.config.optimization_metric, self._task_name, "optimization")
+        metric = resolve_metric(
+            self.config.optimization_metric, self._task_name, "optimization"
+        )
         value = metric.compute(
             MetricInput(
                 target=target,
@@ -77,7 +80,10 @@ class SupervisedBoostingTask(BaseBoostingTask[_SingleBackendT]):
         """
         preparation_started = perf_counter()
         model_name = self._model_name(layout, group_value)
-        log_progress("[model data 1/1] model=%s preparing and validating feature matrices", model_name)
+        log_progress(
+            "[model data 1/1] model=%s preparing and validating feature matrices",
+            model_name,
+        )
         train_frame = self._normalize_model_frame(train_frame)
         valid_frame = self._normalize_model_frame(valid_frame)
         config = self._internal_config
@@ -85,7 +91,11 @@ class SupervisedBoostingTask(BaseBoostingTask[_SingleBackendT]):
             config.group_column if layout == "global" else None,
             getattr(config, "treatment_column", None),
         )
-        excluded = (config.group_column,) if layout == "per_group" and config.group_column else ()
+        excluded = (
+            (config.group_column,)
+            if layout == "per_group" and config.group_column
+            else ()
+        )
         train, dimensions = prepare_data(
             train_frame,
             config,
@@ -115,7 +125,9 @@ class SupervisedBoostingTask(BaseBoostingTask[_SingleBackendT]):
             len(train.schema.feature_order),
         )
 
-        metric = resolve_metric(self.config.optimization_metric, self._task_name, "optimization")
+        metric = resolve_metric(
+            self.config.optimization_metric, self._task_name, "optimization"
+        )
         fit_result = fit_boosting_model(
             backend_class=self._backend_class,
             engine=self.config.engine,
@@ -147,14 +159,20 @@ class SupervisedBoostingTask(BaseBoostingTask[_SingleBackendT]):
             group_value=group_value,
         )
 
-    def _predict_entry(self, frame: pl.DataFrame, item: _ModelEntry[_SingleBackendT]) -> np.ndarray:
+    def _predict_entry(
+        self, frame: pl.DataFrame, item: _ModelEntry[_SingleBackendT]
+    ) -> np.ndarray:
         """Prepare one frame partition and score it with its routed model."""
         config = self._internal_config
         categorical_roles = (
             config.group_column if item.layout == "global" else None,
             getattr(config, "treatment_column", None),
         )
-        excluded = (config.group_column,) if item.layout == "per_group" and config.group_column else ()
+        excluded = (
+            (config.group_column,)
+            if item.layout == "per_group" and config.group_column
+            else ()
+        )
         prepared, _ = prepare_data(
             frame,
             config,
@@ -179,5 +197,7 @@ class SupervisedBoostingTask(BaseBoostingTask[_SingleBackendT]):
         return self._predict_frame(frame)
 
     @abstractmethod
-    def _prediction_result(self, frame: pl.DataFrame, raw: np.ndarray) -> PredictionResult:
+    def _prediction_result(
+        self, frame: pl.DataFrame, raw: np.ndarray
+    ) -> PredictionResult:
         """Construct scalar or multiclass raw-score outputs."""

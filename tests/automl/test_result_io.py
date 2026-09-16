@@ -13,16 +13,14 @@ from avatar.automl.types import EvaluationResult
 
 @pytest.mark.parametrize("empty", [False, True])
 def test_metric_json_round_trip_preserves_types_nulls_and_large_labels(tmp_path, empty):
-    table = pl.DataFrame(
-        {
-            "month": pl.Series([date(2026, 3, 1), None], dtype=pl.Date),
-            "class_label": pl.Series([2**64 - 1, 2**64 - 2], dtype=pl.UInt64),
-            "metric": pl.Series([float("nan"), None], dtype=pl.Float32),
-            "count": pl.Series([1, 2], dtype=pl.UInt32),
-            "all_null": pl.Series([None, None], dtype=pl.Null),
-            "group": ["a", "b"],
-        }
-    )
+    table = pl.DataFrame({
+        "month": pl.Series([date(2026, 3, 1), None], dtype=pl.Date),
+        "class_label": pl.Series([2**64 - 1, 2**64 - 2], dtype=pl.UInt64),
+        "metric": pl.Series([float("nan"), None], dtype=pl.Float32),
+        "count": pl.Series([1, 2], dtype=pl.UInt32),
+        "all_null": pl.Series([None, None], dtype=pl.Null),
+        "group": ["a", "b"],
+    })
     if empty:
         table = table.clear()
     result = EvaluationResult(

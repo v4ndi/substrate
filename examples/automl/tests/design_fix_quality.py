@@ -143,17 +143,15 @@ def _base_frame(seed: int) -> tuple[pl.DataFrame, np.random.Generator]:
     group = np.asarray(["group_a", "group_b", "group_c", "group_d"])[row % 4]
     cat = np.asarray(["cat_0", "cat_1", "cat_2", "cat_3", "cat_4"])[(row // 3) % 5]
     segment = np.asarray(["s0", "s1", "s2"])[(row // 7) % 3]
-    frame = pl.DataFrame(
-        {
-            "epk_id": (row // 2).astype(str),
-            "group": group,
-            "category": cat,
-            "segment": segment,
-            "n1": n1,
-            "n2": n2,
-            "n3": n3,
-        }
-    )
+    frame = pl.DataFrame({
+        "epk_id": (row // 2).astype(str),
+        "group": group,
+        "category": cat,
+        "segment": segment,
+        "n1": n1,
+        "n2": n2,
+        "n3": n3,
+    })
     return frame, rng
 
 
@@ -162,31 +160,49 @@ def _task_frame(task: str, seed: int) -> pl.DataFrame:
     n1 = frame["n1"].to_numpy()
     n2 = frame["n2"].to_numpy()
     group_effect = np.asarray([0.5, -0.25, 0.15, -0.4])[np.arange(ROWS_PER_TASK) % 4]
-    category_effect = np.asarray([0.4, -0.3, 0.2, -0.1, 0.0])[(np.arange(ROWS_PER_TASK) // 3) % 5]
+    category_effect = np.asarray([0.4, -0.3, 0.2, -0.1, 0.0])[
+        (np.arange(ROWS_PER_TASK) // 3) % 5
+    ]
     noise = rng.normal(scale=0.7, size=ROWS_PER_TASK)
     if task == "regression":
         target = 2.0 * n1 - 1.3 * n2 + group_effect + category_effect + noise
         return frame.with_columns(pl.Series("target", target))
     if task == "multiclass":
-        logits = np.column_stack(
-            (
-                1.2 * n1 + category_effect,
-                -0.9 * n1 + 0.8 * n2 + group_effect,
-                -0.6 * n2 - category_effect,
-            )
-        )
+        logits = np.column_stack((
+            1.2 * n1 + category_effect,
+            -0.9 * n1 + 0.8 * n2 + group_effect,
+            -0.6 * n2 - category_effect,
+        ))
         logits += rng.normal(scale=0.5, size=logits.shape)
-        labels = np.asarray(["class_a", "class_b", "class_c"])[np.argmax(logits, axis=1)]
+        labels = np.asarray(["class_a", "class_b", "class_c"])[
+            np.argmax(logits, axis=1)
+        ]
         return frame.with_columns(pl.Series("target", labels))
     treatment = rng.binomial(1, 0.5, size=ROWS_PER_TASK)
     if task == "binary":
         logit = 1.1 * n1 - 0.8 * n2 + group_effect + category_effect + noise
     elif task == "response":
-        logit = 1.0 * n1 - 0.7 * n2 + 0.55 * treatment + group_effect + category_effect + noise
+        logit = (
+            1.0 * n1
+            - 0.7 * n2
+            + 0.55 * treatment
+            + group_effect
+            + category_effect
+            + noise
+        )
         frame = frame.with_columns(pl.Series("treatment", treatment))
     elif task == "uplift":
-        heterogeneous_effect = 0.9 * (n1 > 0).astype(float) - 0.35 * (n2 > 0).astype(float)
-        logit = -0.2 + 0.7 * n1 - 0.5 * n2 + group_effect + treatment * heterogeneous_effect + noise
+        heterogeneous_effect = 0.9 * (n1 > 0).astype(float) - 0.35 * (n2 > 0).astype(
+            float
+        )
+        logit = (
+            -0.2
+            + 0.7 * n1
+            - 0.5 * n2
+            + group_effect
+            + treatment * heterogeneous_effect
+            + noise
+        )
         frame = frame.with_columns(pl.Series("treatment", treatment))
     else:
         raise ValueError(task)
@@ -204,7 +220,9 @@ def generate(root: Path) -> dict[str, str]:
             for split, (start, stop, date) in SPLITS.items():
                 split_root = task_root / split
                 split_root.mkdir(parents=True, exist_ok=True)
-                part = frame.slice(start, stop - start).with_columns(pl.lit(date).alias("date"))
+                part = frame.slice(start, stop - start).with_columns(
+                    pl.lit(date).alias("date")
+                )
                 midpoint = part.height // 2
                 part.slice(0, midpoint).write_parquet(split_root / "part-000.parquet")
                 part.slice(midpoint).write_parquet(split_root / "part-001.parquet")
@@ -247,7 +265,11 @@ def _current_config(task: str, root: Path, checkpoint: str):
     if task == "response":
         values.update(treatment_column="treatment", inverse_treatment=False)
     if task == "uplift":
-        values.update(treatment_column="treatment", inverse_treatment=False, estimate_propensity=False)
+        values.update(
+            treatment_column="treatment",
+            inverse_treatment=False,
+            estimate_propensity=False,
+        )
     return classes[task](**values)
 
 
@@ -260,10 +282,16 @@ def _canonical_scores(frame: pl.DataFrame) -> pl.DataFrame:
         result = result.with_columns(
             pl.col("model_layout").replace({"product": "global", "group": "per_group"})
         )
-    keys = [name for name in ("epk_id", "date", "model_layout", "group") if name in result.columns]
+    keys = [
+        name
+        for name in ("epk_id", "date", "model_layout", "group")
+        if name in result.columns
+    ]
     occurrence = "__occurrence"
     if keys:
-        result = result.with_columns(pl.int_range(pl.len()).over(keys).alias(occurrence)).sort([*keys, occurrence])
+        result = result.with_columns(
+            pl.int_range(pl.len()).over(keys).alias(occurrence)
+        ).sort([*keys, occurrence])
     return result
 
 
@@ -302,11 +330,11 @@ def _config_fingerprint(config: dict[str, Any]) -> str:
 
 def _git_state() -> dict[str, Any]:
     repository = Path(__file__).resolve().parents[4]
-    commit = subprocess.check_output(  # noqa: S603
+    commit = subprocess.check_output(
         ["/usr/bin/git", "rev-parse", "HEAD"], cwd=repository, text=True
     ).strip()
     dirty = bool(
-        subprocess.check_output(  # noqa: S603
+        subprocess.check_output(
             ["/usr/bin/git", "status", "--short", "--untracked-files=no"],
             cwd=repository,
             text=True,
@@ -315,11 +343,15 @@ def _git_state() -> dict[str, Any]:
     return {"commit": commit, "tracked_worktree_dirty": dirty}
 
 
-def _numeric_deltas(current: dict[str, Any], reference: dict[str, Any], label: str) -> dict[str, float]:
+def _numeric_deltas(
+    current: dict[str, Any], reference: dict[str, Any], label: str
+) -> dict[str, float]:
     if set(current) != set(reference):
         msg = f"{label} keys changed: {sorted(current)} != {sorted(reference)}"
         raise AssertionError(msg)
-    return {name: abs(float(current[name]) - float(reference[name])) for name in current}
+    return {
+        name: abs(float(current[name]) - float(reference[name])) for name in current
+    }
 
 
 def _comparison(
@@ -331,7 +363,10 @@ def _comparison(
     task: str,
 ) -> dict[str, Any]:
     reference_scores = pl.read_parquet(reference_root / f"{task}_scores.parquet")
-    if scores.columns != reference_scores.columns or scores.height != reference_scores.height:
+    if (
+        scores.columns != reference_scores.columns
+        or scores.height != reference_scores.height
+    ):
         msg = (
             f"{task}: score schema/rows changed: {scores.columns}/{scores.height} != "
             f"{reference_scores.columns}/{reference_scores.height}"
@@ -339,14 +374,25 @@ def _comparison(
         raise AssertionError(msg)
     score_columns = [name for name in scores.columns if name.startswith("score")]
     key_columns = [name for name in scores.columns if name not in score_columns]
-    if key_columns and not scores.select(key_columns).equals(reference_scores.select(key_columns)):
+    if key_columns and not scores.select(key_columns).equals(
+        reference_scores.select(key_columns)
+    ):
         msg = f"{task}: ordered identity/model-branch keys changed"
         raise AssertionError(msg)
     score_delta = float(
-        np.max(np.abs(scores.select(score_columns).to_numpy() - reference_scores.select(score_columns).to_numpy()))
+        np.max(
+            np.abs(
+                scores.select(score_columns).to_numpy()
+                - reference_scores.select(score_columns).to_numpy()
+            )
+        )
     )
-    reference_payload = json.loads((reference_root / f"{task}.json").read_text(encoding="utf-8"))
-    metric_deltas = _numeric_deltas(metrics, reference_payload["metrics"], f"{task} metrics")
+    reference_payload = json.loads(
+        (reference_root / f"{task}.json").read_text(encoding="utf-8")
+    )
+    metric_deltas = _numeric_deltas(
+        metrics, reference_payload["metrics"], f"{task} metrics"
+    )
     validation_deltas = _numeric_deltas(
         training["validation_metrics"],
         reference_payload["training"]["validation_metrics"],
@@ -380,7 +426,13 @@ def _comparison(
 
 
 def run_checkpoint(root: Path, checkpoint: str) -> None:
-    from avatar.automl import BinaryTask, MulticlassTask, RegressionTask, ResponseTask, UpliftTask
+    from avatar.automl import (
+        BinaryTask,
+        MulticlassTask,
+        RegressionTask,
+        ResponseTask,
+        UpliftTask,
+    )
 
     classes = {
         "binary": BinaryTask,
@@ -391,11 +443,18 @@ def run_checkpoint(root: Path, checkpoint: str) -> None:
     }
     checkpoint_root = root / "checkpoints" / checkpoint
     checkpoint_root.mkdir(parents=True, exist_ok=False)
-    fingerprint_payload = json.loads((root / "dataset_fingerprints.json").read_text(encoding="utf-8"))
+    fingerprint_payload = json.loads(
+        (root / "dataset_fingerprints.json").read_text(encoding="utf-8")
+    )
     fingerprints = {task: _fingerprint_files(root / "data" / task) for task in TASKS}
     reference_root = root / "checkpoints" / "after_point_8"
-    reference_summary = json.loads((reference_root / "summary.json").read_text(encoding="utf-8"))
-    if fingerprints != fingerprint_payload["fingerprints"] or fingerprints != reference_summary["dataset_fingerprints"]:
+    reference_summary = json.loads(
+        (reference_root / "summary.json").read_text(encoding="utf-8")
+    )
+    if (
+        fingerprints != fingerprint_payload["fingerprints"]
+        or fingerprints != reference_summary["dataset_fingerprints"]
+    ):
         msg = "Dataset fingerprints differ from after_point_8 reference"
         raise AssertionError(msg)
     summary: dict[str, Any] = {
@@ -404,7 +463,9 @@ def run_checkpoint(root: Path, checkpoint: str) -> None:
         "artifacts": {
             "checkpoint_root": str(checkpoint_root.resolve()),
             "notebook_source": str(Path(__file__).with_suffix(".ipynb").resolve()),
-            "executed_notebook": str((checkpoint_root / "design_fix_quality.executed.ipynb").resolve()),
+            "executed_notebook": str(
+                (checkpoint_root / "design_fix_quality.executed.ipynb").resolve()
+            ),
             "operation_logs_root": str((root / "entities" / checkpoint).resolve()),
         },
         "dataset_fingerprints": fingerprints,
@@ -450,12 +511,14 @@ def run_checkpoint(root: Path, checkpoint: str) -> None:
             "comparison": comparison,
         }
         (checkpoint_root / f"{task_name}.json").write_text(
-            json.dumps(task_payload, default=_json_default, indent=2, sort_keys=True), encoding="utf-8"
+            json.dumps(task_payload, default=_json_default, indent=2, sort_keys=True),
+            encoding="utf-8",
         )
         summary["tasks"][task_name] = task_payload
     summary["duration_seconds"] = perf_counter() - started
     (checkpoint_root / "summary.json").write_text(
-        json.dumps(summary, default=_json_default, indent=2, sort_keys=True), encoding="utf-8"
+        json.dumps(summary, default=_json_default, indent=2, sort_keys=True),
+        encoding="utf-8",
     )
 
 

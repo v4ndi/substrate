@@ -4,18 +4,23 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from threading import Event, Thread
-from typing import TYPE_CHECKING, Any, Callable, Iterator, Literal, Mapping
+from typing import TYPE_CHECKING, Any, Literal
 
 import polars as pl
 
 from avatar.automl.calibrators import CalibrationStrategy
 from avatar.automl.config.base import BaseTaskConfig, EnvironmentConfig
 from avatar.automl.environment import EnvironmentRunner
-from avatar.automl.exceptions import ArtifactIntegrityError, ConfigError, RemoteExecutionError
+from avatar.automl.exceptions import (
+    ArtifactIntegrityError,
+    ConfigError,
+    RemoteExecutionError,
+)
 from avatar.automl.execution import ExecutionContext
 from avatar.automl.lifecycle import AutoMLStore, normalize_dataset_path, read_json
 from avatar.automl.result_io import evaluation_from_payload
@@ -88,9 +93,13 @@ class OperationRunner:
         return self.store.root
 
     @contextmanager
-    def _track_local_operation(self, operation: Mapping[str, Any]) -> Iterator[dict[str, Any]]:
+    def _track_local_operation(
+        self, operation: Mapping[str, Any]
+    ) -> Iterator[dict[str, Any]]:
         """Keep a local operation lease alive until its synchronous work finishes."""
-        current = self.store.update_operation(operation, state="running", heartbeat_at=time.time())
+        current = self.store.update_operation(
+            operation, state="running", heartbeat_at=time.time()
+        )
         stop = Event()
 
         def heartbeat() -> None:
@@ -98,9 +107,16 @@ class OperationRunner:
                 try:
                     self.store.heartbeat_operation(current)
                 except Exception:
-                    logger.exception("Cannot persist heartbeat for local run_id=%s", current["run_id"])
+                    logger.exception(
+                        "Cannot persist heartbeat for local run_id=%s",
+                        current["run_id"],
+                    )
 
-        thread = Thread(target=heartbeat, name=f"automl-heartbeat-{current['run_id'][:8]}", daemon=True)
+        thread = Thread(
+            target=heartbeat,
+            name=f"automl-heartbeat-{current['run_id'][:8]}",
+            daemon=True,
+        )
         thread.start()
         try:
             yield current
@@ -135,13 +151,17 @@ class OperationRunner:
         )
         artifact_path = self.path / "artifact"
         try:
-            execution = self.hooks.execution_view(ExecutionContext.from_config(runtime_config), prepare_backends=False)
+            execution = self.hooks.execution_view(
+                ExecutionContext.from_config(runtime_config), prepare_backends=False
+            )
             if runtime_config.env_type == "local":
                 with self._track_local_operation(operation) as operation:
                     result = execution._runner().run_local(
                         config=execution.config,
                         action="train",
-                        callback=lambda: execution._execute_train(train_path, valid_path),
+                        callback=lambda: execution._execute_train(
+                            train_path, valid_path
+                        ),
                     )
                     self.hooks.adopt(execution)
                     self.hooks.save(artifact_path)
@@ -155,8 +175,15 @@ class OperationRunner:
                 return result
 
             jobs: list[dict[str, Any]] = []
-            for index, (layout, group_value) in enumerate(execution._remote_training_parts(train_path)):
-                part_artifact = self.path / ".remote_parts" / operation["run_id"] / f"part-{index:04d}"
+            for index, (layout, group_value) in enumerate(
+                execution._remote_training_parts(train_path)
+            ):
+                part_artifact = (
+                    self.path
+                    / ".remote_parts"
+                    / operation["run_id"]
+                    / f"part-{index:04d}"
+                )
                 jobs.append(
                     execution._runner().submit(
                         config=execution.config,
@@ -169,7 +196,8 @@ class OperationRunner:
                             "remote_layout": layout,
                             "remote_group_value": group_value,
                         },
-                        run_dir=self.store.operation_dir("train", operation["run_id"]) / f"job-{index:04d}",
+                        run_dir=self.store.operation_dir("train", operation["run_id"])
+                        / f"job-{index:04d}",
                     )
                 )
             self.store.update_operation(
@@ -181,7 +209,9 @@ class OperationRunner:
             return None
         except Exception as exc:
             self.hooks.rollback_training(artifact_path)
-            self.store.update_operation(operation, state="failed", error=f"{type(exc).__name__}: {exc}")
+            self.store.update_operation(
+                operation, state="failed", error=f"{type(exc).__name__}: {exc}"
+            )
             raise
 
     def _finalize_remote_train(self, operation: Mapping[str, Any]) -> None:
@@ -190,9 +220,14 @@ class OperationRunner:
         part_paths = (
             ()
             if artifact_path.exists()
-            else tuple(Path(read_json(Path(job["spec_path"]))["payload"]["artifact_path"]) for job in operation["jobs"])
+            else tuple(
+                Path(read_json(Path(job["spec_path"]))["payload"]["artifact_path"])
+                for job in operation["jobs"]
+            )
         )
-        feature_names = self.hooks.assemble_training(RemoteTrainingParts(artifact_path, part_paths))
+        feature_names = self.hooks.assemble_training(
+            RemoteTrainingParts(artifact_path, part_paths)
+        )
         self.hooks.set_artifact(artifact_path)
         best_params: dict[str, Any] = {}
         validation_metrics: dict[str, float] = {}
@@ -234,19 +269,31 @@ class OperationRunner:
             raise ArtifactIntegrityError(msg)
 
         parent_layout = str((operation.get("runtime") or {}).get("model_layout"))
-        layout_order = [layout for layout in ("global", "per_group") if any(item[0] == layout for item in parts)]
+        layout_order = [
+            layout
+            for layout in ("global", "per_group")
+            if any(item[0] == layout for item in parts)
+        ]
 
         def combine() -> pl.DataFrame:
             frames: list[pl.DataFrame] = []
             for layout in layout_order:
-                layout_frames = [scores for part_layout, scores in parts if part_layout == layout]
+                layout_frames = [
+                    scores for part_layout, scores in parts if part_layout == layout
+                ]
                 frame = (
-                    layout_frames[0] if len(layout_frames) == 1 else pl.concat(layout_frames, how="diagonal_relaxed")
+                    layout_frames[0]
+                    if len(layout_frames) == 1
+                    else pl.concat(layout_frames, how="diagonal_relaxed")
                 ).sort(_REMOTE_ROW_ID)
                 if parent_layout == "global_and_per_group":
                     frame = frame.with_columns(pl.lit(layout).alias("model_layout"))
                 frames.append(frame.drop(_REMOTE_ROW_ID))
-            return frames[0] if len(frames) == 1 else pl.concat(frames, how="diagonal_relaxed")
+            return (
+                frames[0]
+                if len(frames) == 1
+                else pl.concat(frames, how="diagonal_relaxed")
+            )
 
         scores = combine()
         class_order = next(iter(class_orders))
@@ -298,8 +345,16 @@ class OperationRunner:
                 raise ArtifactIntegrityError(msg)
             strategy = job_strategy
             states.update(payload["state"]["branches"])
-        scores = pl.concat(frames, how="diagonal_relaxed").sort(_CALIBRATION_ROW_ID).drop(_CALIBRATION_ROW_ID)
-        state = {"task": self.config.task_name, "calibration_strategy": strategy, "branches": states}
+        scores = (
+            pl.concat(frames, how="diagonal_relaxed")
+            .sort(_CALIBRATION_ROW_ID)
+            .drop(_CALIBRATION_ROW_ID)
+        )
+        state = {
+            "task": self.config.task_name,
+            "calibration_strategy": strategy,
+            "branches": states,
+        }
         self.store.persist_calibration(
             str(operation["dataset_path"]),
             str(operation["runtime"]["calibration_path"]),
@@ -315,10 +370,16 @@ class OperationRunner:
             active = False
             failure_messages: list[str] = []
             for operation in self.store.operations():
-                if not operation.get("jobs") or operation.get("state") in {"succeeded", "failed", "partial_failed"}:
+                if not operation.get("jobs") or operation.get("state") in {
+                    "succeeded",
+                    "failed",
+                    "partial_failed",
+                }:
                     continue
                 aggregate, jobs = self.environment.poll_jobs(operation["jobs"])
-                operation = self.store.update_operation(operation, state=aggregate, jobs=jobs)
+                operation = self.store.update_operation(
+                    operation, state=aggregate, jobs=jobs
+                )
                 if aggregate == "succeeded":
                     try:
                         if operation["action"] == "train":
@@ -326,17 +387,32 @@ class OperationRunner:
                             result_path = self.path / "training_result.json"
                         elif operation["action"] == "predict":
                             self._finalize_remote_prediction(operation)
-                            result_path = self.store.prediction_dir(str(operation["dataset_key"])) / "scores.parquet"
+                            result_path = (
+                                self.store.prediction_dir(str(operation["dataset_key"]))
+                                / "scores.parquet"
+                            )
                         elif operation["action"] == "evaluate":
                             self._finalize_remote_evaluation(operation)
-                            result_path = self.store.evaluation_dir(str(operation["dataset_key"])) / "evaluation_result.json"
+                            result_path = (
+                                self.store.evaluation_dir(str(operation["dataset_key"]))
+                                / "evaluation_result.json"
+                            )
                         else:
                             self._finalize_remote_calibration(operation)
-                            result_path = self.store.calibration_dir(str(operation["dataset_key"])) / "scores.parquet"
-                        self.store.update_operation(operation, state="succeeded", result_path=str(result_path))
-                    except Exception as exc:  # noqa: BLE001 - finalizer must persist every failure
+                            result_path = (
+                                self.store.calibration_dir(
+                                    str(operation["dataset_key"])
+                                )
+                                / "scores.parquet"
+                            )
+                        self.store.update_operation(
+                            operation, state="succeeded", result_path=str(result_path)
+                        )
+                    except Exception as exc:
                         if operation["action"] == "train":
-                            self.hooks.rollback_training(Path(str(operation["artifact_path"])))
+                            self.hooks.rollback_training(
+                                Path(str(operation["artifact_path"]))
+                            )
                         self.store.update_operation(
                             operation,
                             state="failed",
@@ -352,7 +428,7 @@ class OperationRunner:
             table = self._status_table()
             snapshot = repr(table.to_dicts())
             if snapshot != last_snapshot:
-                print(table)  # noqa: T201 - status() is explicitly notebook-facing
+                print(table)
                 last_snapshot = snapshot
             if failure_messages:
                 diagnostics = "\n".join(failure_messages)
@@ -368,20 +444,33 @@ class OperationRunner:
         for operation in self.store.operations():
             jobs = operation.get("jobs") or [None]
             for job in jobs:
-                rows.append(
-                    {
-                        "action": operation["action"],
-                        "test_path": operation.get("dataset_path"),
-                        "state": operation["state"] if job is None else job.get("state", operation["state"]),
-                        "run_id": operation["run_id"],
-                        "job_id": None if job is None else job.get("job_id"),
-                        "job_name": None if job is None else job.get("job_name"),
-                        "result_path": operation.get("result_path"),
-                        "error": operation.get("error"),
-                    }
-                )
-        columns = ("action", "test_path", "state", "run_id", "job_id", "job_name", "result_path", "error")
-        return pl.DataFrame(rows) if rows else pl.DataFrame(schema=dict.fromkeys(columns, pl.String))
+                rows.append({
+                    "action": operation["action"],
+                    "test_path": operation.get("dataset_path"),
+                    "state": operation["state"]
+                    if job is None
+                    else job.get("state", operation["state"]),
+                    "run_id": operation["run_id"],
+                    "job_id": None if job is None else job.get("job_id"),
+                    "job_name": None if job is None else job.get("job_name"),
+                    "result_path": operation.get("result_path"),
+                    "error": operation.get("error"),
+                })
+        columns = (
+            "action",
+            "test_path",
+            "state",
+            "run_id",
+            "job_id",
+            "job_name",
+            "result_path",
+            "error",
+        )
+        return (
+            pl.DataFrame(rows)
+            if rows
+            else pl.DataFrame(schema=dict.fromkeys(columns, pl.String))
+        )
 
     def predict(
         self,
@@ -390,7 +479,8 @@ class OperationRunner:
         env_type: Literal["local", "osiris"] | None = None,
         device: Literal["cpu", "gpu"] | None = None,
         environment: EnvironmentConfig | Mapping[str, Any] | None = None,
-        model_layout: Literal["global", "per_group", "global_and_per_group"] | None = None,
+        model_layout: Literal["global", "per_group", "global_and_per_group"]
+        | None = None,
     ) -> PredictionResult | None:
         """Return model scores for every row under ``test_path``."""
         self.hooks.require_fitted()
@@ -404,7 +494,9 @@ class OperationRunner:
         operation = self.store.start_operation(
             "predict",
             dataset_path=test_path,
-            runtime=_runtime_metadata(runtime_config, model_layout=runtime_config.resolved_model_layout),
+            runtime=_runtime_metadata(
+                runtime_config, model_layout=runtime_config.resolved_model_layout
+            ),
         )
         try:
             artifact_path = (
@@ -413,7 +505,8 @@ class OperationRunner:
                 else None
             )
             execution = self.hooks.execution_view(
-                ExecutionContext.from_config(runtime_config), prepare_backends=runtime_config.env_type == "local"
+                ExecutionContext.from_config(runtime_config),
+                prepare_backends=runtime_config.env_type == "local",
             )
             execution._validate_prediction_layout()
             if runtime_config.env_type == "local":
@@ -424,11 +517,18 @@ class OperationRunner:
                         callback=lambda: execution._execute_predict(test_path),
                     )
                     scores_path = self.store.persist_prediction(test_path, prediction)
-                self.store.update_operation(operation, state="succeeded", result_path=str(scores_path))
+                self.store.update_operation(
+                    operation, state="succeeded", result_path=str(scores_path)
+                )
                 return prediction
             jobs: list[dict[str, Any]] = []
-            for index, (layout, group_value) in enumerate(execution._remote_prediction_parts(test_path)):
-                run_dir = self.store.operation_dir("predict", operation["run_id"]) / f"job-{index:04d}"
+            for index, (layout, group_value) in enumerate(
+                execution._remote_prediction_parts(test_path)
+            ):
+                run_dir = (
+                    self.store.operation_dir("predict", operation["run_id"])
+                    / f"job-{index:04d}"
+                )
                 output_path = run_dir / "scores.parquet"
                 jobs.append(
                     execution._runner().submit(
@@ -447,7 +547,9 @@ class OperationRunner:
             self.store.update_operation(operation, state="queued", jobs=jobs)
             return None
         except Exception as exc:
-            self.store.update_operation(operation, state="failed", error=f"{type(exc).__name__}: {exc}")
+            self.store.update_operation(
+                operation, state="failed", error=f"{type(exc).__name__}: {exc}"
+            )
             raise
 
     def evaluate(
@@ -462,7 +564,10 @@ class OperationRunner:
     ) -> EvaluationResult | None:
         """Evaluate scores against the target stored in the test dataset."""
         self.hooks.require_fitted()
-        if isinstance(scores, CalibrationResult) and self.config.task_name not in {"response", "uplift"}:
+        if isinstance(scores, CalibrationResult) and self.config.task_name not in {
+            "response",
+            "uplift",
+        }:
             msg = f"{type(self.config).__name__} does not accept CalibrationResult"
             raise ConfigError(msg)
         evaluation_kind = self._evaluation_kind(scores)
@@ -471,11 +576,15 @@ class OperationRunner:
             device=device,
             environment=environment,
         )
-        canonical, dataset_key = self.store.dataset(test_path, create=scores is not None)
+        canonical, dataset_key = self.store.dataset(
+            test_path, create=scores is not None
+        )
         operation = self.store.start_operation(
             "evaluate",
             dataset_path=canonical,
-            runtime=_runtime_metadata(runtime_config, evaluation_kind=evaluation_kind, metrics=metric_names),
+            runtime=_runtime_metadata(
+                runtime_config, evaluation_kind=evaluation_kind, metrics=metric_names
+            ),
         )
         evaluation_dir = self.store.evaluation_dir(dataset_key)
         runtime_config = replace(runtime_config, output_dir=evaluation_dir)
@@ -490,19 +599,29 @@ class OperationRunner:
                 if runtime_config.env_type != "local"
                 else None
             )
-            execution = self.hooks.execution_view(ExecutionContext.from_config(runtime_config), prepare_backends=False)
+            execution = self.hooks.execution_view(
+                ExecutionContext.from_config(runtime_config), prepare_backends=False
+            )
             if runtime_config.env_type == "local":
                 with self._track_local_operation(operation) as operation:
                     result = execution._runner().run_local(
                         config=execution.config,
                         action="evaluate",
-                        callback=lambda: execution._execute_evaluate(canonical, scores, evaluation_kind, metric_names),
+                        callback=lambda: execution._execute_evaluate(
+                            canonical, scores, evaluation_kind, metric_names
+                        ),
                     )
-                    result_path, merged = self.store.persist_evaluation(canonical, result)
-                self.store.update_operation(operation, state="succeeded", result_path=str(result_path))
+                    result_path, merged = self.store.persist_evaluation(
+                        canonical, result
+                    )
+                self.store.update_operation(
+                    operation, state="succeeded", result_path=str(result_path)
+                )
                 return merged
-            run_dir = self.store.operation_dir("evaluate", operation["run_id"]) / "job-0000"
-            if isinstance(scores, (PredictionResult, CalibrationResult)):
+            run_dir = (
+                self.store.operation_dir("evaluate", operation["run_id"]) / "job-0000"
+            )
+            if isinstance(scores, PredictionResult | CalibrationResult):
                 scores_path = run_dir / f"scores_{evaluation_kind}.parquet"
                 scores_path.parent.mkdir(parents=True, exist_ok=True)
                 scores.scores.write_parquet(scores_path)
@@ -523,7 +642,9 @@ class OperationRunner:
             self.store.update_operation(operation, state="queued", jobs=[job])
             return None
         except Exception as exc:
-            self.store.update_operation(operation, state="failed", error=f"{type(exc).__name__}: {exc}")
+            self.store.update_operation(
+                operation, state="failed", error=f"{type(exc).__name__}: {exc}"
+            )
             raise
 
     def calibrate(
@@ -542,7 +663,9 @@ class OperationRunner:
             msg = "test_path and calibration_path must identify different datasets"
             raise ConfigError(msg)
 
-        def required_prediction(path: ParquetPath, role: str) -> tuple[Path, dict[str, Any]]:
+        def required_prediction(
+            path: ParquetPath, role: str
+        ) -> tuple[Path, dict[str, Any]]:
             try:
                 return self.store.prediction_path(path)
             except (ArtifactIntegrityError, RemoteExecutionError) as exc:
@@ -553,16 +676,24 @@ class OperationRunner:
                 raise type(exc)(msg) from exc
 
         test_scores_path, _ = required_prediction(test_path, "test_path")
-        calibration_scores_path, calibration_metadata = required_prediction(calibration_path, "calibration_path")
+        calibration_scores_path, calibration_metadata = required_prediction(
+            calibration_path, "calibration_path"
+        )
         canonical_calibration_path = str(calibration_metadata["test_path"])
-        runtime_config = self.hooks.resolve_config(env_type=env_type, environment=environment)
+        runtime_config = self.hooks.resolve_config(
+            env_type=env_type, environment=environment
+        )
         operation = self.store.start_operation(
             "calibrate",
             dataset_path=test_path,
-            runtime=_runtime_metadata(runtime_config, calibration_path=canonical_calibration_path),
+            runtime=_runtime_metadata(
+                runtime_config, calibration_path=canonical_calibration_path
+            ),
         )
         try:
-            execution = self.hooks.execution_view(ExecutionContext.from_config(runtime_config), prepare_backends=False)
+            execution = self.hooks.execution_view(
+                ExecutionContext.from_config(runtime_config), prepare_backends=False
+            )
             if runtime_config.env_type == "local":
                 with self._track_local_operation(operation) as operation:
                     output = execution._runner().run_local(
@@ -581,12 +712,19 @@ class OperationRunner:
                         output.result,
                         output.state,
                     )
-                self.store.update_operation(operation, state="succeeded", result_path=str(result_path))
+                self.store.update_operation(
+                    operation, state="succeeded", result_path=str(result_path)
+                )
                 return output.result
 
             jobs: list[dict[str, Any]] = []
-            for index, layout in enumerate(execution._remote_calibration_parts(test_scores_path)):
-                run_dir = self.store.operation_dir("calibrate", operation["run_id"]) / f"job-{index:04d}"
+            for index, layout in enumerate(
+                execution._remote_calibration_parts(test_scores_path)
+            ):
+                run_dir = (
+                    self.store.operation_dir("calibrate", operation["run_id"])
+                    / f"job-{index:04d}"
+                )
                 output_path = run_dir / "scores.parquet"
                 jobs.append(
                     execution._runner().submit(
@@ -606,5 +744,7 @@ class OperationRunner:
             self.store.update_operation(operation, state="queued", jobs=jobs)
             return None
         except Exception as exc:
-            self.store.update_operation(operation, state="failed", error=f"{type(exc).__name__}: {exc}")
+            self.store.update_operation(
+                operation, state="failed", error=f"{type(exc).__name__}: {exc}"
+            )
             raise

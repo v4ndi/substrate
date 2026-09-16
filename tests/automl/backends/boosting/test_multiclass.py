@@ -31,12 +31,17 @@ def _data():
 
 @pytest.mark.parametrize(
     ("engine", "params"),
-    [("catboost", {"iterations": 10, "depth": 2}), ("xgboost", {"n_estimators": 10, "max_depth": 2})],
+    [
+        ("catboost", {"iterations": 10, "depth": 2}),
+        ("xgboost", {"n_estimators": 10, "max_depth": 2}),
+    ],
 )
 def test_multiclass_backend_fit_predict_and_native_round_trip(tmp_path, engine, params):
     pytest.importorskip(engine)
     frame, target = _data()
-    backend = MulticlassBoostingBackend(engine, params, 42, "cpu", verbose=False, num_classes=3)
+    backend = MulticlassBoostingBackend(
+        engine, params, 42, "cpu", verbose=False, num_classes=3
+    )
     backend.fit(frame, target, _schema(), valid_frame=frame, valid_target=target)
     direct = backend.predict_score(frame, _schema())
     artifact = tmp_path / engine
@@ -50,7 +55,10 @@ def test_multiclass_backend_fit_predict_and_native_round_trip(tmp_path, engine, 
     assert np.allclose(direct.sum(axis=1), 1.0)
     assert np.allclose(direct, restored.predict_score(frame, _schema()))
     assert metadata["task_state"]["num_classes"] == 3
-    assert tuple(metadata["task_state"]["estimator_class_order"]) == backend.estimator_class_order
+    assert (
+        tuple(metadata["task_state"]["estimator_class_order"])
+        == backend.estimator_class_order
+    )
 
 
 def test_estimator_probability_columns_are_aligned_to_global_encoded_order():
@@ -69,8 +77,12 @@ def test_estimator_probability_columns_are_aligned_to_global_encoded_order():
 
 
 def test_multiclass_backend_device_mapping_and_explicit_engine_errors():
-    cat = MulticlassBoostingBackend("catboost", {}, 42, "gpu", num_classes=3)._make_model()
-    xgb = MulticlassBoostingBackend("xgboost", {}, 42, "cpu", num_classes=4)._make_model()
+    cat = MulticlassBoostingBackend(
+        "catboost", {}, 42, "gpu", num_classes=3
+    )._make_model()
+    xgb = MulticlassBoostingBackend(
+        "xgboost", {}, 42, "cpu", num_classes=4
+    )._make_model()
     assert cat.get_params()["task_type"] == "GPU"
     assert cat.get_params()["loss_function"] == "MultiClass"
     assert "boost_from_average" not in cat.get_params()
@@ -106,10 +118,18 @@ def test_multiclass_custom_search_space_supports_all_range_types_and_float_step(
         search_space={
             "depth": {"type": "int", "low": 3, "high": 7, "step": 2},
             "learning_rate": {"type": "float", "low": 0.1, "high": 0.3, "step": 0.1},
-            "grow_policy": {"type": "categorical", "choices": ["SymmetricTree", "Depthwise"]},
+            "grow_policy": {
+                "type": "categorical",
+                "choices": ["SymmetricTree", "Depthwise"],
+            },
         },
     )
-    assert params == {"iterations": 5, "depth": 3, "learning_rate": 0.1, "grow_policy": "SymmetricTree"}
+    assert params == {
+        "iterations": 5,
+        "depth": 3,
+        "learning_rate": 0.1,
+        "grow_policy": "SymmetricTree",
+    }
     assert trial.int_kwargs == {"step": 2, "log": False}
     assert trial.float_kwargs == {"step": 0.1, "log": False}
 
@@ -121,8 +141,12 @@ def test_multiclass_custom_search_space_supports_all_range_types_and_float_step(
         ("xgboost", 31, ("min_child_weight",)),
     ],
 )
-def test_default_search_space_suggests_integer_parameters_as_integers(engine, n_trials, integer_parameters):
-    params = suggest_params(_Trial(), engine=engine, model_params={}, search_space=None, n_trials=n_trials)
+def test_default_search_space_suggests_integer_parameters_as_integers(
+    engine, n_trials, integer_parameters
+):
+    params = suggest_params(
+        _Trial(), engine=engine, model_params={}, search_space=None, n_trials=n_trials
+    )
 
     assert all(isinstance(params[name], int) for name in integer_parameters)
 
@@ -133,5 +157,13 @@ def test_multiclass_log_and_step_validation_is_diagnostic():
             _Trial(),
             engine="catboost",
             model_params={},
-            search_space={"learning_rate": {"type": "float", "low": 0.1, "high": 0.3, "step": 0.1, "log": True}},
+            search_space={
+                "learning_rate": {
+                    "type": "float",
+                    "low": 0.1,
+                    "high": 0.3,
+                    "step": 0.1,
+                    "log": True,
+                }
+            },
         )

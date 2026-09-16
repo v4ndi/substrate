@@ -47,7 +47,9 @@ def test_response_rejects_invalid_optimization_metric(metric):
         "treatment_column": "treatment",
         "inverse_treatment": False,
     }
-    with pytest.raises(ConfigError, match="Unknown metric|incompatible|only for evaluation"):
+    with pytest.raises(
+        ConfigError, match="Unknown metric|incompatible|only for evaluation"
+    ):
         ResponseTaskConfig(**values)
 
 
@@ -59,26 +61,24 @@ def test_python_and_mapping_configs_are_equal():
         hyperopt=True,
         n_trials=3,
     )
-    actual = BinaryTaskConfig.from_mapping(
-        {
-            "env_type": "local",
-            "backend": "boosting",
-            "engine": "catboost",
-            "device": "gpu",
-            "data": {
-                "target_column": "target",
-                "client_id_column": "epk_id",
-                "group_column": "group",
-                "date_column": "report_month",
-                "categorical_columns": ["segment"],
-                "numerical_columns": ["balance"],
-                "hidden_state_columns": [],
-            },
-            "train": {"model_layout": "global", "hyperopt": True, "n_trials": 3},
-            "output_dir": "outputs",
-            "environment": {},
-        }
-    )
+    actual = BinaryTaskConfig.from_mapping({
+        "env_type": "local",
+        "backend": "boosting",
+        "engine": "catboost",
+        "device": "gpu",
+        "data": {
+            "target_column": "target",
+            "client_id_column": "epk_id",
+            "group_column": "group",
+            "date_column": "report_month",
+            "categorical_columns": ["segment"],
+            "numerical_columns": ["balance"],
+            "hidden_state_columns": [],
+        },
+        "train": {"model_layout": "global", "hyperopt": True, "n_trials": 3},
+        "output_dir": "outputs",
+        "environment": {},
+    })
 
     assert actual == expected
 
@@ -87,7 +87,9 @@ def test_python_and_yaml_configs_are_equal(tmp_path):
     categorical_columns_path = tmp_path / "categorical_columns.yaml"
     numerical_columns_path = tmp_path / "numerical_columns.yaml"
     categorical_columns_path.write_text("- segment\n- city\n", encoding="utf-8")
-    numerical_columns_path.write_text("numerical_columns:\n  - balance\n  - age\n", encoding="utf-8")
+    numerical_columns_path.write_text(
+        "numerical_columns:\n  - balance\n  - age\n", encoding="utf-8"
+    )
     yaml_path = tmp_path / "binary.yaml"
     yaml_path.write_text(
         f"""
@@ -180,22 +182,24 @@ environment:
 
 
 def test_legacy_generated_window_fields_are_rejected():
-    with pytest.raises(ConfigError, match="Unknown BinaryTaskConfig configuration fields"):
-        BinaryTaskConfig.from_mapping(
-            {
-                "env_type": "local",
-                "backend": "boosting",
-                "engine": "catboost",
-                "device": "cpu",
-                "evaluate": {"calib_months": ["2025-10-01"], "oot_months": ["2025-11-01"]},
-            }
-        )
+    with pytest.raises(
+        ConfigError, match="Unknown BinaryTaskConfig configuration fields"
+    ):
+        BinaryTaskConfig.from_mapping({
+            "env_type": "local",
+            "backend": "boosting",
+            "engine": "catboost",
+            "device": "cpu",
+            "evaluate": {"calib_months": ["2025-10-01"], "oot_months": ["2025-11-01"]},
+        })
 
 
 def test_python_config_accepts_absolute_feature_yaml_paths(tmp_path):
     categorical_columns_path = tmp_path / "categorical_columns.yaml"
     numerical_columns_path = tmp_path / "numerical_columns.yaml"
-    categorical_columns_path.write_text("categorical_columns: [segment, city]\n", encoding="utf-8")
+    categorical_columns_path.write_text(
+        "categorical_columns: [segment, city]\n", encoding="utf-8"
+    )
     numerical_columns_path.write_text("- balance\n- age\n", encoding="utf-8")
 
     config = _config(
@@ -244,9 +248,20 @@ def test_missing_or_non_mapping_main_yaml_is_rejected(tmp_path):
 @pytest.mark.parametrize(
     "payload",
     [
-        {"env_type": "local", "backend": "boosting", "engine": "catboost", "device": "cpu", "typo": 1},
         {
-            "task": {"env_type": "local", "backend": "boosting", "engine": "catboost", "device": "cpu"},
+            "env_type": "local",
+            "backend": "boosting",
+            "engine": "catboost",
+            "device": "cpu",
+            "typo": 1,
+        },
+        {
+            "task": {
+                "env_type": "local",
+                "backend": "boosting",
+                "engine": "catboost",
+                "device": "cpu",
+            },
             "train": {"early_stoping_rounds": 10},
         },
         {
@@ -277,7 +292,9 @@ def test_launcher_managed_environment_variables_are_rejected(name):
 
 @pytest.mark.parametrize("pool", ["", "   ", 123, False, []])
 def test_environment_pool_requires_none_or_a_non_empty_string(pool):
-    with pytest.raises(ConfigError, match=r"environment\.pool=.*None or a non-empty string"):
+    with pytest.raises(
+        ConfigError, match=r"environment\.pool=.*None or a non-empty string"
+    ):
         EnvironmentConfig(pool=pool)
 
 
@@ -308,7 +325,9 @@ def test_environment_resources_are_positive_integers(field, value):
 def test_legacy_per_action_resources_are_rejected_without_alias():
     values = asdict(_config())
     values["environment"] = {"resources": {"train": {"num_gpus": 1}}}
-    with pytest.raises(ConfigError, match="Unknown EnvironmentConfig fields.*resources"):
+    with pytest.raises(
+        ConfigError, match="Unknown EnvironmentConfig fields.*resources"
+    ):
         BinaryTaskConfig.from_mapping(values)
 
 
@@ -324,17 +343,32 @@ def test_invalid_backend_engine_pair_is_rejected(backend, engine):
 @pytest.mark.parametrize(
     ("overrides", "message"),
     [
-        ({"categorical_columns": ["feature"], "numerical_columns": ["feature"]}, "overlap"),
-        ({"categorical_columns": ["feature"], "hidden_state_columns": ["feature"]}, "must be unique"),
+        (
+            {"categorical_columns": ["feature"], "numerical_columns": ["feature"]},
+            "overlap",
+        ),
+        (
+            {"categorical_columns": ["feature"], "hidden_state_columns": ["feature"]},
+            "must be unique",
+        ),
         ({"client_id_column": ""}, "client_id_column=''"),
         ({"hyperopt": True, "n_trials": 0}, "n_trials must be an integer"),
         ({"hyperopt": True, "n_trials": 1.5}, "n_trials must be an integer"),
         ({"verbose": -1}, "verbose must be"),
         ({"verbose": "yes"}, "verbose must be"),
         ({"model_layout": "product"}, "model_layout='product'"),
-        ({"target_column": "feature", "numerical_columns": ["feature"]}, "cannot be model features"),
-        ({"client_id_column": "feature", "categorical_columns": ["feature"]}, "cannot be model features"),
-        ({"date_column": "feature", "numerical_columns": ["feature"]}, "cannot be model features"),
+        (
+            {"target_column": "feature", "numerical_columns": ["feature"]},
+            "cannot be model features",
+        ),
+        (
+            {"client_id_column": "feature", "categorical_columns": ["feature"]},
+            "cannot be model features",
+        ),
+        (
+            {"date_column": "feature", "numerical_columns": ["feature"]},
+            "cannot be model features",
+        ),
         ({"group_column": "feature", "numerical_columns": ["feature"]}, "categorical"),
         ({"target_column": "label", "group_column": "label"}, "multiple roles"),
     ],
@@ -371,7 +405,9 @@ def test_date_column_may_be_explicitly_disabled():
 
 @pytest.mark.parametrize("legacy_field", ["model_scope", "report_month_column"])
 def test_legacy_role_and_layout_fields_are_rejected_explicitly(legacy_field):
-    with pytest.raises(ConfigError, match=rf"Incompatible legacy configuration fields.*{legacy_field}"):
+    with pytest.raises(
+        ConfigError, match=rf"Incompatible legacy configuration fields.*{legacy_field}"
+    ):
         BinaryTaskConfig.from_mapping(asdict(_config()) | {legacy_field: "legacy"})
 
 
@@ -393,7 +429,9 @@ def test_legacy_model_scope_is_not_accepted():
     values.pop("model_layout")
     with pytest.raises(TypeError, match="model_scope"):
         BinaryTaskConfig(**(values | {"model_scope": "product"}))
-    with pytest.raises(ConfigError, match="Incompatible legacy configuration fields.*model_scope"):
+    with pytest.raises(
+        ConfigError, match="Incompatible legacy configuration fields.*model_scope"
+    ):
         BinaryTaskConfig.from_mapping(values | {"model_scope": "product"})
 
 
@@ -413,7 +451,9 @@ def test_early_stopping_is_native_instead_of_top_level():
     assert _config(model_params={"od_wait": 25}).model_params == {"od_wait": 25}
     xgboost = _config(engine="xgboost", model_params={"early_stopping_rounds": 25})
     assert xgboost.model_params == {"early_stopping_rounds": 25}
-    tuned = _config(engine="xgboost", hyperopt=True, search_space={"early_stopping_rounds": [25]})
+    tuned = _config(
+        engine="xgboost", hyperopt=True, search_space={"early_stopping_rounds": [25]}
+    )
     assert tuned.search_space == {"early_stopping_rounds": [25]}
 
 
@@ -450,7 +490,9 @@ def test_task_owned_native_parameters_cannot_be_hidden(field):
 def test_n_trials_defaults_only_with_hyperopt():
     assert _config(hyperopt=True).n_trials == 50
 
-    with pytest.raises(ConfigError, match="n_trials can be configured only when hyperopt=True"):
+    with pytest.raises(
+        ConfigError, match="n_trials can be configured only when hyperopt=True"
+    ):
         _config(n_trials=50)
 
 
@@ -460,15 +502,23 @@ def test_device_is_explicit_and_remote_rejects_cpu():
     assert boosting.device == "gpu"
     assert boosting.resolved_device == "gpu"
     with pytest.raises(ConfigError, match="supports only device='gpu'"):
-        _config(env_type="osiris", device="cpu", environment={"venv_path": "/shared/fmlib/env"})
-    remote = _config(env_type="osiris", device="gpu", environment={"venv_path": "/shared/fmlib/env"})
+        _config(
+            env_type="osiris",
+            device="cpu",
+            environment={"venv_path": "/shared/fmlib/env"},
+        )
+    remote = _config(
+        env_type="osiris", device="gpu", environment={"venv_path": "/shared/fmlib/env"}
+    )
     assert remote.device == "gpu"
     assert remote.resolved_device == "gpu"
 
 
 @pytest.mark.parametrize("env_type", ["batch", "supercomp"])
 def test_legacy_remote_environment_values_are_rejected_explicitly(env_type):
-    with pytest.raises(ConfigError, match=rf"Incompatible legacy env_type={env_type!r}"):
+    with pytest.raises(
+        ConfigError, match=rf"Incompatible legacy env_type={env_type!r}"
+    ):
         _config(env_type=env_type, device="gpu")
     with pytest.raises(ConfigError, match="does not support"):
         _config(backend="tabnn", engine="ste", device="cpu")
@@ -511,8 +561,18 @@ def test_environment_is_optional_and_defaults_to_the_shared_fmlib_venv():
     expected = "/home/datalab/nfs/sber-amazme-fmlib/env"
     assert BinaryTaskConfig(**values).environment.venv_path == expected
     assert BinaryTaskConfig.from_mapping(values).environment.venv_path == expected
-    assert BinaryTaskConfig(**(values | {"env_type": "osiris", "device": "gpu"})).environment.venv_path == expected
-    assert BinaryTaskConfig.from_mapping(values | {"env_type": "osiris", "device": "gpu"}).environment.venv_path == expected
+    assert (
+        BinaryTaskConfig(
+            **(values | {"env_type": "osiris", "device": "gpu"})
+        ).environment.venv_path
+        == expected
+    )
+    assert (
+        BinaryTaskConfig.from_mapping(
+            values | {"env_type": "osiris", "device": "gpu"}
+        ).environment.venv_path
+        == expected
+    )
 
     with pytest.raises(ConfigError, match="cannot be None"):
         EnvironmentConfig(venv_path=None)
@@ -521,7 +581,11 @@ def test_environment_is_optional_and_defaults_to_the_shared_fmlib_venv():
 def test_static_validation_rejects_arguments_without_effect():
     with pytest.raises(ConfigError, match="search_space.*hyperopt=True"):
         _config(search_space={"depth": [2]})
-    with pytest.raises(ConfigError, match="n_trials can be configured only when hyperopt=True"):
+    with pytest.raises(
+        ConfigError, match="n_trials can be configured only when hyperopt=True"
+    ):
         _config(n_trials=2)
-    with pytest.raises(ConfigError, match="model_params cannot be configured when hyperopt=True"):
+    with pytest.raises(
+        ConfigError, match="model_params cannot be configured when hyperopt=True"
+    ):
         _config(hyperopt=True, model_params={"depth": 2})

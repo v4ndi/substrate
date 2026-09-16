@@ -55,8 +55,8 @@ def test_task_hierarchy_keeps_response_as_the_binary_specialization():
     assert issubclass(ResponseTask, BinaryTask)
     assert not issubclass(RegressionTask, BinaryTask)
     assert not issubclass(BinaryTask, RegressionTask)
-    assert not issubclass(MulticlassTask, (BinaryTask, RegressionTask))
-    assert not issubclass(UpliftTask, (BinaryTask, RegressionTask, MulticlassTask))
+    assert not issubclass(MulticlassTask, BinaryTask | RegressionTask)
+    assert not issubclass(UpliftTask, BinaryTask | RegressionTask | MulticlassTask)
 
 
 def test_common_lifecycle_does_not_require_supervised_metrics():
@@ -96,7 +96,10 @@ def test_common_task_base_has_no_task_specific_treatment_contract():
 def test_task_rejects_another_tasks_config(task_class, config_class, tmp_path):
     config = _config(config_class, tmp_path)
 
-    with pytest.raises(ConfigError, match=rf"{task_class.__name__} requires .*Config; got {config_class.__name__}"):
+    with pytest.raises(
+        ConfigError,
+        match=rf"{task_class.__name__} requires .*Config; got {config_class.__name__}",
+    ):
         task_class(config)
 
 
@@ -117,9 +120,23 @@ def test_task_accepts_its_own_config(task_class, config_class, tmp_path):
 
 
 def test_evaluate_api_reads_target_only_from_the_dataset():
-    for task_class in (BinaryTask, RegressionTask, MulticlassTask, ResponseTask, UpliftTask):
+    for task_class in (
+        BinaryTask,
+        RegressionTask,
+        MulticlassTask,
+        ResponseTask,
+        UpliftTask,
+    ):
         parameters = inspect.signature(task_class.evaluate).parameters
-        assert list(parameters) == ["self", "test_path", "scores", "metrics", "env_type", "device", "environment"]
+        assert list(parameters) == [
+            "self",
+            "test_path",
+            "scores",
+            "metrics",
+            "env_type",
+            "device",
+            "environment",
+        ]
         assert parameters["env_type"].kind is inspect.Parameter.KEYWORD_ONLY
         assert parameters["env_type"].default is None
         assert parameters["device"].kind is inspect.Parameter.KEYWORD_ONLY

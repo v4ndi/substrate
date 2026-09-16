@@ -1,8 +1,9 @@
 """Training sequence returning fitted model parts for explicit adoption."""
 
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from time import perf_counter
-from typing import Any, Callable, Mapping
+from typing import Any
 
 import polars as pl
 
@@ -48,7 +49,10 @@ class TrainingCoordinator:
         """Execute global/per-group training synchronously in the current process."""
         total_started = perf_counter()
 
-        if self.context.config.engine == "catboost" and self.context.config.resolved_device == "gpu":
+        if (
+            self.context.config.engine == "catboost"
+            and self.context.config.resolved_device == "gpu"
+        ):
             log_progress(
                 "CatBoost device policy: training uses GPU; prediction always uses CPU because "
                 "CatBoost GPU evaluation is not implemented for models with categorical features"
@@ -83,11 +87,17 @@ class TrainingCoordinator:
         )
 
         stage_started = perf_counter()
-        log_progress("[train 3/5] normalizing roles, validating routing, and building model plan")
+        log_progress(
+            "[train 3/5] normalizing roles, validating routing, and building model plan"
+        )
         self.prepare_state(train_frame, valid_frame)
         models = []
         plan = ModelPlan.training(
-            self.context, train_frame, valid_frame, remote_layout=remote_layout, remote_group_value=remote_group_value
+            self.context,
+            train_frame,
+            valid_frame,
+            remote_layout=remote_layout,
+            remote_group_value=remote_group_value,
         )
         model_parts = plan.parts
         effective_layout = plan.layout
@@ -117,12 +127,21 @@ class TrainingCoordinator:
         for model_index, (layout, group_value) in enumerate(model_parts, start=1):
             model_started = perf_counter()
             model_name = part_name(layout, group_value)
-            log_progress("[train 4/5][model %d/%d] model=%s started", model_index, len(model_parts), model_name)
+            log_progress(
+                "[train 4/5][model %d/%d] model=%s started",
+                model_index,
+                len(model_parts),
+                model_name,
+            )
             if layout == "per_group":
                 if train_parts is None:
-                    train_parts = train_frame.partition_by(group_column, as_dict=True, maintain_order=True)
+                    train_parts = train_frame.partition_by(
+                        group_column, as_dict=True, maintain_order=True
+                    )
                     del train_frame
-                    valid_parts = valid_frame.partition_by(group_column, as_dict=True, maintain_order=True)
+                    valid_parts = valid_frame.partition_by(
+                        group_column, as_dict=True, maintain_order=True
+                    )
                     del valid_frame
                 model_train = train_parts.pop((group_value,))
                 model_valid = valid_parts.pop((group_value,))
@@ -137,8 +156,12 @@ class TrainingCoordinator:
                 )
             )
             if layout == "global" and single_group_global:
-                group_value = model_train[group_column].unique(maintain_order=True).item()
-                models[-1] = replace(models[-1], single_group_global=True, single_group_value=group_value)
+                group_value = (
+                    model_train[group_column].unique(maintain_order=True).item()
+                )
+                models[-1] = replace(
+                    models[-1], single_group_global=True, single_group_value=group_value
+                )
             del model_train, model_valid
             log_progress(
                 "[train 4/5][model %d/%d] model=%s completed duration_seconds=%.3f",
@@ -147,15 +170,30 @@ class TrainingCoordinator:
                 model_name,
                 perf_counter() - model_started,
             )
-        log_progress("[train 4/5] completed duration_seconds=%.3f", perf_counter() - stage_started)
+        log_progress(
+            "[train 4/5] completed duration_seconds=%.3f",
+            perf_counter() - stage_started,
+        )
 
         stage_started = perf_counter()
         log_progress("[train 5/5] assembling training result")
-        canonical_features = tuple(dict.fromkeys(name for item in models for name in item.schema.feature_order))
-        external_names = CanonicalColumnMapper.from_config(self.context.config).to_external
-        feature_names = tuple(external_names.get(name, name) for name in canonical_features)
-        best_params = {part_name(item.layout, item.group_value): item.best_params for item in models}
-        validation_metrics = {part_name(item.layout, item.group_value): item.validation_metric for item in models}
+        canonical_features = tuple(
+            dict.fromkeys(name for item in models for name in item.schema.feature_order)
+        )
+        external_names = CanonicalColumnMapper.from_config(
+            self.context.config
+        ).to_external
+        feature_names = tuple(
+            external_names.get(name, name) for name in canonical_features
+        )
+        best_params = {
+            part_name(item.layout, item.group_value): item.best_params
+            for item in models
+        }
+        validation_metrics = {
+            part_name(item.layout, item.group_value): item.validation_metric
+            for item in models
+        }
         result = TrainingResult(
             best_params=best_params,
             validation_metrics=validation_metrics,

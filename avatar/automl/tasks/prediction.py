@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
 
 def execute_prediction(
-    task: "BaseBoostingTask",
+    task: BaseBoostingTask,
     test_path: ParquetPath,
     *,
     remote_group_value: Any | None = None,
@@ -37,7 +37,9 @@ def execute_prediction(
 
     stage_started = perf_counter()
     log_progress("[predict 2/4] validating routing and building prediction branches")
-    return_combined = task._internal_config.resolved_model_layout == "global_and_per_group"
+    return_combined = (
+        task._internal_config.resolved_model_layout == "global_and_per_group"
+    )
     branches: list[tuple[str, PredictionResult]] = []
     layout_frames = task._prediction_layout_frames(frame)
     log_progress(
@@ -86,7 +88,9 @@ def execute_prediction(
             layout,
             perf_counter() - branch_started,
         )
-    log_progress("[predict 3/4] completed duration_seconds=%.3f", perf_counter() - stage_started)
+    log_progress(
+        "[predict 3/4] completed duration_seconds=%.3f", perf_counter() - stage_started
+    )
 
     stage_started = perf_counter()
     log_progress("[predict 4/4] assembling prediction result")

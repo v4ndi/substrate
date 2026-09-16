@@ -54,17 +54,26 @@ def _frame(**overrides):
     ],
 )
 def test_report_month_is_normalized_from_supported_types(values):
-    prepared, _ = prepare_data(_frame(report_month=values), _config(), require_target=True)
+    prepared, _ = prepare_data(
+        _frame(report_month=values), _config(), require_target=True
+    )
 
     assert prepared.frame.schema["report_month"] == pl.Date
-    assert prepared.frame["report_month"].to_list() == [date(2026, 1, 1), date(2026, 2, 1)]
+    assert prepared.frame["report_month"].to_list() == [
+        date(2026, 1, 1),
+        date(2026, 2, 1),
+    ]
 
 
 def test_custom_report_month_alias_from_hive_partition_is_normalized_to_date(tmp_path):
     split_root = tmp_path / "global_name=pr" / "split_type=train"
     month = split_root / "month_part=2025-10-31"
     month.mkdir(parents=True)
-    pl.DataFrame({"epk_id": [1, 2], "target": [0, 1], "feature": [0.1, 0.2]}).write_parquet(month / "part-00000.parquet")
+    pl.DataFrame({
+        "epk_id": [1, 2],
+        "target": [0, 1],
+        "feature": [0.1, 0.2],
+    }).write_parquet(month / "part-00000.parquet")
     frame = ParquetSource.resolve(split_root).read()
     config = _config(date_column="month_part")
 
@@ -76,7 +85,11 @@ def test_custom_report_month_alias_from_hive_partition_is_normalized_to_date(tmp
 
 def test_invalid_report_month_has_diagnostic_error():
     with pytest.raises(SchemaError, match="not-a-date"):
-        prepare_data(_frame(report_month=["not-a-date", "2026-02-01"]), _config(), require_target=True)
+        prepare_data(
+            _frame(report_month=["not-a-date", "2026-02-01"]),
+            _config(),
+            require_target=True,
+        )
 
 
 @pytest.mark.parametrize(
@@ -107,17 +120,42 @@ def test_hidden_states_are_normalized_and_expanded_in_stable_order(dtype):
     assert "hidden" not in prepared.frame.columns
     assert prepared.frame.schema["hidden__0"] == pl.Float32
     assert prepared.frame.schema["hidden__1"] == pl.Float32
-    assert np.allclose(prepared.frame.select("hidden__0", "hidden__1").to_numpy(), [[0.1, 0.2], [0.3, 0.4]])
+    assert np.allclose(
+        prepared.frame.select("hidden__0", "hidden__1").to_numpy(),
+        [[0.1, 0.2], [0.3, 0.4]],
+    )
 
 
 @pytest.mark.parametrize(
     ("hidden", "expected_dimensions", "message"),
     [
-        (pl.Series("hidden", [[0.1, 0.2], [0.3, 0.4]], dtype=pl.Array(pl.Float32, 2)), {"hidden": 3}, "dimension mismatch"),
-        (pl.Series("hidden", [[1, 2], [3, 4]], dtype=pl.List(pl.Int64)), None, "Float32/Float64"),
-        (pl.Series("hidden", [[0.1, 0.2], [0.3]], dtype=pl.List(pl.Float64)), None, "fixed dimension"),
-        (pl.Series("hidden", [[0.1, None], [0.3, 0.4]], dtype=pl.List(pl.Float64)), None, "null elements"),
-        (pl.Series("hidden", [None, [0.3, 0.4]], dtype=pl.Array(pl.Float32, 2)), None, "null embeddings"),
+        (
+            pl.Series(
+                "hidden", [[0.1, 0.2], [0.3, 0.4]], dtype=pl.Array(pl.Float32, 2)
+            ),
+            {"hidden": 3},
+            "dimension mismatch",
+        ),
+        (
+            pl.Series("hidden", [[1, 2], [3, 4]], dtype=pl.List(pl.Int64)),
+            None,
+            "Float32/Float64",
+        ),
+        (
+            pl.Series("hidden", [[0.1, 0.2], [0.3]], dtype=pl.List(pl.Float64)),
+            None,
+            "fixed dimension",
+        ),
+        (
+            pl.Series("hidden", [[0.1, None], [0.3, 0.4]], dtype=pl.List(pl.Float64)),
+            None,
+            "null elements",
+        ),
+        (
+            pl.Series("hidden", [None, [0.3, 0.4]], dtype=pl.Array(pl.Float32, 2)),
+            None,
+            "null embeddings",
+        ),
     ],
 )
 def test_invalid_hidden_states_are_rejected(hidden, expected_dimensions, message):
@@ -138,7 +176,9 @@ def test_fitted_schema_ignores_extra_columns_and_restores_feature_order():
         require_target=True,
     )
     inference, _ = prepare_data(
-        _frame(segment=["b", "a"], extra=[10, 20]).select("extra", "feature", "segment", "epk_id", "report_month"),
+        _frame(segment=["b", "a"], extra=[10, 20]).select(
+            "extra", "feature", "segment", "epk_id", "report_month"
+        ),
         config,
         require_target=False,
         fitted_schema=train.schema,
@@ -169,8 +209,12 @@ def test_missing_report_month_is_rejected_early():
 
 
 def test_null_tabular_values_are_allowed_but_infinite_numbers_are_rejected():
-    prepared, _ = prepare_data(_frame(feature=[None, 0.2]), _config(), require_target=True)
+    prepared, _ = prepare_data(
+        _frame(feature=[None, 0.2]), _config(), require_target=True
+    )
 
     assert prepared.frame["feature"].null_count() == 1
     with pytest.raises(SchemaError, match="Infinite values"):
-        prepare_data(_frame(feature=[float("inf"), 0.2]), _config(), require_target=True)
+        prepare_data(
+            _frame(feature=[float("inf"), 0.2]), _config(), require_target=True
+        )

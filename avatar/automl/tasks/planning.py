@@ -35,7 +35,10 @@ class ModelPlan:
             if group_column not in valid_frame.columns:
                 msg = f"group_column={context.config.group_column!r}: required column is missing from validation data"
                 raise SchemaError(msg)
-            if train_frame[group_column].null_count() or valid_frame[group_column].null_count():
+            if (
+                train_frame[group_column].null_count()
+                or valid_frame[group_column].null_count()
+            ):
                 msg = f"Group column {context.config.group_column!r} cannot contain null values for group routing"
                 raise SchemaError(msg)
 
@@ -44,8 +47,14 @@ class ModelPlan:
             model_parts.append(("global", None))
 
         if effective_layout in {"per_group", "global_and_per_group"}:
-            if remote_layout == "per_group" and remote_group_value not in train_frame[group_column].unique().to_list():
-                msg = f"Training data has no rows for group value: {remote_group_value!r}"
+            if (
+                remote_layout == "per_group"
+                and remote_group_value
+                not in train_frame[group_column].unique().to_list()
+            ):
+                msg = (
+                    f"Training data has no rows for group value: {remote_group_value!r}"
+                )
                 raise SchemaError(msg)
             group_values = (
                 [remote_group_value]
@@ -53,21 +62,36 @@ class ModelPlan:
                 else sorted(train_frame[group_column].unique().to_list(), key=str)
             )
             valid_values = set(valid_frame[group_column].unique().to_list())
-            missing_valid = [value for value in group_values if value not in valid_values]
+            missing_valid = [
+                value for value in group_values if value not in valid_values
+            ]
             if missing_valid:
                 msg = f"Validation data has no rows for trained groups: {missing_valid}"
                 raise SchemaError(msg)
-            model_parts.extend(("per_group", group_value) for group_value in group_values)
-        if effective_layout == "global_and_per_group" and train_frame[group_column].n_unique() == 1:
+            model_parts.extend(
+                ("per_group", group_value) for group_value in group_values
+            )
+        if (
+            effective_layout == "global_and_per_group"
+            and train_frame[group_column].n_unique() == 1
+        ):
             return cls((("global", None),), "global")
         return cls(tuple(model_parts), effective_layout)
 
     @classmethod
-    def remote_training(cls, context: ExecutionContext, frame: pl.DataFrame | None) -> "ModelPlan":
+    def remote_training(
+        cls, context: ExecutionContext, frame: pl.DataFrame | None
+    ) -> "ModelPlan":
         parts: list[tuple[str, Any | None]] = []
-        if context.internal_config.resolved_model_layout in {"global", "global_and_per_group"}:
+        if context.internal_config.resolved_model_layout in {
+            "global",
+            "global_and_per_group",
+        }:
             parts.append(("global", None))
-        if context.internal_config.resolved_model_layout in {"per_group", "global_and_per_group"}:
+        if context.internal_config.resolved_model_layout in {
+            "per_group",
+            "global_and_per_group",
+        }:
             group_column = context.internal_config.group_column
             if group_column is None:
                 msg = (
@@ -81,7 +105,13 @@ class ModelPlan:
             if frame[group_column].null_count():
                 msg = f"Group column {context.config.group_column!r} cannot contain null values for group routing"
                 raise SchemaError(msg)
-            parts.extend(("per_group", value) for value in sorted(frame[group_column].unique().to_list(), key=str))
-        if context.internal_config.resolved_model_layout == "global_and_per_group" and frame[group_column].n_unique() == 1:
+            parts.extend(
+                ("per_group", value)
+                for value in sorted(frame[group_column].unique().to_list(), key=str)
+            )
+        if (
+            context.internal_config.resolved_model_layout == "global_and_per_group"
+            and frame[group_column].n_unique() == 1
+        ):
             return cls((("global", None),), "global")
         return cls(tuple(parts), context.internal_config.resolved_model_layout)

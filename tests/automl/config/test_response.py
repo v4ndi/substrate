@@ -52,7 +52,9 @@ def test_response_without_treatment_omits_inverse_semantics() -> None:
 
 @pytest.mark.parametrize("inverse", [False, True])
 def test_response_with_treatment_requires_boolean_inverse(inverse: bool) -> None:
-    config = ResponseTaskConfig(**_values(treatment_column="treatment", inverse_treatment=inverse))
+    config = ResponseTaskConfig(
+        **_values(treatment_column="treatment", inverse_treatment=inverse)
+    )
     assert config.treatment_column == "treatment"
     assert config.inverse_treatment is inverse
 

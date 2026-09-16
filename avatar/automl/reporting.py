@@ -1,9 +1,10 @@
 """Render and export computed evaluation data without accessing tasks or models."""
 
 import os
+from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 import numpy as np
 import polars as pl
@@ -53,7 +54,11 @@ def export_evaluation(data: EvaluationData, output: Path) -> EvaluationResult:
     """Write existing Excel/PNG reports and attach their paths and figures."""
     output.mkdir(parents=True, exist_ok=True)
     result = data.result
-    kinds = [kind for kind in ("raw", "calibrated") if getattr(result, f"metrics_{kind}") is not None]
+    kinds = [
+        kind
+        for kind in ("raw", "calibrated")
+        if getattr(result, f"metrics_{kind}") is not None
+    ]
     if len(kinds) != 1:
         msg = f"One evaluate call must contain exactly one score kind, got {kinds}"
         raise ValueError(msg)
@@ -67,7 +72,10 @@ def export_evaluation(data: EvaluationData, output: Path) -> EvaluationResult:
     if grouped is not None:
         frames.append(grouped)
     tables[f"metrics_{kind}"] = pl.concat(frames, how="diagonal_relaxed")
-    for name, table in ((f"metrics_by_class_{kind}", by_class), (f"feature_importance_{kind}", data.feature_importance)):
+    for name, table in (
+        (f"metrics_by_class_{kind}", by_class),
+        (f"feature_importance_{kind}", data.feature_importance),
+    ):
         if table is not None:
             tables[name] = table
     paths = {}
@@ -84,7 +92,9 @@ def export_evaluation(data: EvaluationData, output: Path) -> EvaluationResult:
     )
 
 
-def render_evaluation(data: EvaluationData, output: Path, kind: EvaluationKind) -> dict[str, Any]:
+def render_evaluation(
+    data: EvaluationData, output: Path, kind: EvaluationKind
+) -> dict[str, Any]:
     """Render prepared tables, matrices and curves using existing layouts."""
     try:
         import matplotlib
@@ -95,9 +105,17 @@ def render_evaluation(data: EvaluationData, output: Path, kind: EvaluationKind) 
         return {}
     figures = {}
     if data.task_name in {"binary", "response"} and data.grouped is not None:
-        figures.update(_plot_binary(data, data.grouped, getattr(data.result, f"metrics_{kind}"), output, plt))
+        figures.update(
+            _plot_binary(
+                data, data.grouped, getattr(data.result, f"metrics_{kind}"), output, plt
+            )
+        )
     elif data.task_name == "regression" and data.grouped is not None:
-        figures.update(_plot_regression(data, data.grouped, getattr(data.result, f"metrics_{kind}"), output))
+        figures.update(
+            _plot_regression(
+                data, data.grouped, getattr(data.result, f"metrics_{kind}"), output
+            )
+        )
     elif data.task_name == "multiclass" and data.grouped is not None:
         figures.update(_plot_multiclass(data, data.grouped, output))
     if data.grouped is not None and data.group_column is not None:
@@ -108,10 +126,12 @@ def render_evaluation(data: EvaluationData, output: Path, kind: EvaluationKind) 
         size = max(6.0, min(12.0, len(confusion.labels) * 0.8))
         figure, axis = plt.subplots(figsize=(size, size))
         try:
-            ConfusionMatrixDisplay(confusion.matrix, display_labels=list(confusion.labels)).plot(
-                ax=axis, cmap="Blues", values_format=".2f", colorbar=False
+            ConfusionMatrixDisplay(
+                confusion.matrix, display_labels=list(confusion.labels)
+            ).plot(ax=axis, cmap="Blues", values_format=".2f", colorbar=False)
+            axis.set_title(
+                f"Normalized multiclass confusion matrix{confusion.suffix.replace('_', ' ')}"
             )
-            axis.set_title(f"Normalized multiclass confusion matrix{confusion.suffix.replace('_', ' ')}")
             figure.tight_layout()
             figure.savefig(output / f"{key}.png")
             figures[key] = figure
@@ -149,9 +169,15 @@ def _plot_group_metrics(
     table = grouped.filter(pl.col("scope") == "group")
     if table.is_empty() or data.group_column not in table.columns:
         return {}
-    partition_columns = [name for name in ("model_layout", "learner") if name in table.columns]
+    partition_columns = [
+        name for name in ("model_layout", "learner") if name in table.columns
+    ]
     partitions = (
-        list(table.partition_by(partition_columns, as_dict=True, maintain_order=True).items())
+        list(
+            table.partition_by(
+                partition_columns, as_dict=True, maintain_order=True
+            ).items()
+        )
         if partition_columns
         else [("all", table)]
     )
@@ -160,7 +186,13 @@ def _plot_group_metrics(
         "binary": {"roc_auc"},
         "response": {"roc_auc"},
         "regression": {"mse", "mae", "mape"},
-        "multiclass": {"roc_auc_ovr_macro", "log_loss", "accuracy", "f1_macro", "f1_weighted"},
+        "multiclass": {
+            "roc_auc_ovr_macro",
+            "log_loss",
+            "accuracy",
+            "f1_macro",
+            "f1_weighted",
+        },
         "uplift": {"qini_auc", "uplift_auc", "uplift_at_20"},
     }[data.task_name]
     metric_columns = [
@@ -170,14 +202,22 @@ def _plot_group_metrics(
     ]
     if not metric_columns:
         return {}
-    figure, axes = plt.subplots(len(partitions), 1, figsize=(10, 4.5 * len(partitions)), squeeze=False)
+    figure, axes = plt.subplots(
+        len(partitions), 1, figsize=(10, 4.5 * len(partitions)), squeeze=False
+    )
     for axis, (key, values) in zip(axes.ravel(), partitions, strict=True):
         key_values = key if isinstance(key, tuple) else (key,)
-        labels = dict(zip(partition_columns, key_values, strict=True)) if partition_columns else {}
+        labels = (
+            dict(zip(partition_columns, key_values, strict=True))
+            if partition_columns
+            else {}
+        )
         x = values[data.group_column].cast(pl.String).to_list()
         for metric in metric_columns:
             axis.plot(x, values[metric].to_list(), marker="o", label=metric)
-        axis.set_title(f"{data.task_name.capitalize()} metrics by group — {labels or 'all'}")
+        axis.set_title(
+            f"{data.task_name.capitalize()} metrics by group — {labels or 'all'}"
+        )
         axis.set_xlabel(data.group_column)
         axis.set_ylabel("Metric value")
         axis.tick_params(axis="x", rotation=45)
@@ -193,7 +233,11 @@ def _plot_group_metrics(
 
 
 def _plot_binary(
-    data: EvaluationData, table: pl.DataFrame, baselines: Mapping[str, float], output_dir: Path, plt: Any
+    data: EvaluationData,
+    table: pl.DataFrame,
+    baselines: Mapping[str, float],
+    output_dir: Path,
+    plt: Any,
 ) -> dict[str, Any]:
     """Render the selected task metric by date and group."""
     config = data
@@ -203,9 +247,17 @@ def _plot_binary(
         return {}
     table = table.filter(pl.col("scope").is_in(["date", "date_group"]))
     group_column = config.group_column
-    partition_columns = [name for name in ("model_layout", group_column) if name and name in table.columns]
+    partition_columns = [
+        name
+        for name in ("model_layout", group_column)
+        if name and name in table.columns
+    ]
     partitions = (
-        list(table.partition_by(partition_columns, as_dict=True, maintain_order=True).items())
+        list(
+            table.partition_by(
+                partition_columns, as_dict=True, maintain_order=True
+            ).items()
+        )
         if partition_columns
         else [("all", table)]
     )
@@ -220,8 +272,16 @@ def _plot_binary(
     flat_axes = axes.ravel()
     for axis, (group_key, group_metrics) in zip(flat_axes, partitions, strict=False):
         key_values = group_key if isinstance(group_key, tuple) else (group_key,)
-        labels = dict(zip(partition_columns, key_values, strict=True)) if partition_columns else {}
-        metric_name = f"{labels['model_layout']}_roc_auc" if "model_layout" in labels else "roc_auc"
+        labels = (
+            dict(zip(partition_columns, key_values, strict=True))
+            if partition_columns
+            else {}
+        )
+        metric_name = (
+            f"{labels['model_layout']}_roc_auc"
+            if "model_layout" in labels
+            else "roc_auc"
+        )
         baseline = baselines[metric_name]
         axis.plot(
             group_metrics[config.date_column].to_list(),
@@ -229,7 +289,9 @@ def _plot_binary(
             marker="o",
             label="score",
         )
-        axis.axhline(baseline, color="gray", linestyle="--", label=f"overall={baseline:.4f}")
+        axis.axhline(
+            baseline, color="gray", linestyle="--", label=f"overall={baseline:.4f}"
+        )
         axis.set_title(f"ROC AUC by date — {labels or 'all'}")
         axis.set_xlabel(data.date_label)
         axis.set_ylabel("ROC AUC")
@@ -266,17 +328,33 @@ def _plot_regression(
         return {}
     table = table.filter(pl.col("scope").is_in(["date", "date_group"]))
     group_column = config.group_column
-    partition_columns = [name for name in ("model_layout", group_column) if name and name in table.columns]
+    partition_columns = [
+        name
+        for name in ("model_layout", group_column)
+        if name and name in table.columns
+    ]
     partitions = (
-        list(table.partition_by(partition_columns, as_dict=True, maintain_order=True).items())
+        list(
+            table.partition_by(
+                partition_columns, as_dict=True, maintain_order=True
+            ).items()
+        )
         if partition_columns
         else [("all", table)]
     )
-    figure, axes = plt.subplots(len(partitions), 1, figsize=(9, 4 * len(partitions)), squeeze=False)
+    figure, axes = plt.subplots(
+        len(partitions), 1, figsize=(9, 4 * len(partitions)), squeeze=False
+    )
     for axis, (key, values) in zip(axes.ravel(), partitions, strict=True):
         key_values = key if isinstance(key, tuple) else (key,)
-        labels = dict(zip(partition_columns, key_values, strict=True)) if partition_columns else {}
-        metric_names = [name for name in ("mse", "mae", "mape") if name in values.columns]
+        labels = (
+            dict(zip(partition_columns, key_values, strict=True))
+            if partition_columns
+            else {}
+        )
+        metric_names = [
+            name for name in ("mse", "mae", "mape") if name in values.columns
+        ]
         for metric in metric_names:
             axis.plot(
                 values[config.date_column].to_list(),
@@ -292,7 +370,8 @@ def _plot_regression(
         scope_prefix = f"{labels['model_layout']}_" if "model_layout" in labels else ""
         axis.legend(
             title=", ".join(
-                f"{name.upper()}={overall[f'{scope_prefix}{name}']:.4g}" for name in metric_names
+                f"{name.upper()}={overall[f'{scope_prefix}{name}']:.4g}"
+                for name in metric_names
             )
         )
     figure.tight_layout()
@@ -322,23 +401,48 @@ def _plot_multiclass(
     grouped = grouped.filter(pl.col("scope").is_in(["date", "date_group"]))
     metric_names = [
         name
-        for name in ("roc_auc_ovr_macro", "log_loss", "accuracy", "f1_macro", "f1_weighted")
+        for name in (
+            "roc_auc_ovr_macro",
+            "log_loss",
+            "accuracy",
+            "f1_macro",
+            "f1_weighted",
+        )
         if name in grouped.columns
     ]
     if not metric_names:
         return {}
-    partition_columns = [name for name in ("model_layout", config.group_column) if name and name in grouped.columns]
+    partition_columns = [
+        name
+        for name in ("model_layout", config.group_column)
+        if name and name in grouped.columns
+    ]
     partitions = (
-        list(grouped.partition_by(partition_columns, as_dict=True, maintain_order=True).items())
+        list(
+            grouped.partition_by(
+                partition_columns, as_dict=True, maintain_order=True
+            ).items()
+        )
         if partition_columns
         else [("all", grouped)]
     )
-    figure, axes = plt.subplots(len(partitions), 1, figsize=(10, 4.5 * len(partitions)), squeeze=False)
+    figure, axes = plt.subplots(
+        len(partitions), 1, figsize=(10, 4.5 * len(partitions)), squeeze=False
+    )
     for axis, (key, table) in zip(axes.ravel(), partitions, strict=True):
         key_values = key if isinstance(key, tuple) else (key,)
-        labels = dict(zip(partition_columns, key_values, strict=True)) if partition_columns else {}
+        labels = (
+            dict(zip(partition_columns, key_values, strict=True))
+            if partition_columns
+            else {}
+        )
         for metric in metric_names:
-            axis.plot(table[config.date_column].to_list(), table[metric].to_list(), marker="o", label=metric)
+            axis.plot(
+                table[config.date_column].to_list(),
+                table[metric].to_list(),
+                marker="o",
+                label=metric,
+            )
         axis.set_title(f"Multiclass metrics by date — {labels or 'all'}")
         axis.set_xlabel(data.date_label)
         axis.set_ylabel("Metric value")

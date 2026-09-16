@@ -1,10 +1,11 @@
 """Operations shared by fitted native models and uplift composites."""
 
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from copy import copy
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, Self
+from typing import Any, Self
 
 import numpy as np
 import polars as pl

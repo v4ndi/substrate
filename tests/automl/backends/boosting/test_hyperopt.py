@@ -58,7 +58,13 @@ def _data(*, has_nan: bool, has_categorical: bool):
             51,
             True,
             True,
-            {"max_depth", "nan_mode", "l2_leaf_reg", "min_data_in_leaf", "one_hot_max_size"},
+            {
+                "max_depth",
+                "nan_mode",
+                "l2_leaf_reg",
+                "min_data_in_leaf",
+                "one_hot_max_size",
+            },
         ),
     ],
 )
@@ -75,11 +81,26 @@ def test_catboost_dynamic_default_space(n_trials, has_nan, has_categorical, expe
     if "nan_mode" in expected:
         assert trial.calls["nan_mode"] == ("categorical", ("Max", "Min"))
     if "l2_leaf_reg" in expected:
-        assert trial.calls["l2_leaf_reg"] == ("float", 1e-8, 10.0, {"step": None, "log": True})
+        assert trial.calls["l2_leaf_reg"] == (
+            "float",
+            1e-8,
+            10.0,
+            {"step": None, "log": True},
+        )
     if "min_data_in_leaf" in expected:
-        assert trial.calls["min_data_in_leaf"] == ("int", 1, 20, {"step": 1, "log": False})
+        assert trial.calls["min_data_in_leaf"] == (
+            "int",
+            1,
+            20,
+            {"step": 1, "log": False},
+        )
     if "one_hot_max_size" in expected:
-        assert trial.calls["one_hot_max_size"] == ("int", 3, 10, {"step": 1, "log": False})
+        assert trial.calls["one_hot_max_size"] == (
+            "int",
+            3,
+            10,
+            {"step": 1, "log": False},
+        )
 
 
 @pytest.mark.parametrize(
@@ -108,9 +129,19 @@ def test_xgboost_dynamic_default_space(n_trials, conditional):
         (0.008, 0.01, 0.012, 0.014, 0.016, 0.018, 0.02),
     )
     if conditional:
-        assert trial.calls["min_child_weight"] == ("int", 1, 300, {"step": 1, "log": False})
+        assert trial.calls["min_child_weight"] == (
+            "int",
+            1,
+            300,
+            {"step": 1, "log": False},
+        )
         for name in ("reg_alpha", "reg_lambda"):
-            assert trial.calls[name] == ("float", 1e-3, 10.0, {"step": None, "log": True})
+            assert trial.calls[name] == (
+                "float",
+                1e-3,
+                10.0,
+                {"step": None, "log": True},
+            )
 
 
 def test_resolver_uses_only_actual_model_feature_columns():
@@ -126,7 +157,9 @@ def test_resolver_uses_only_actual_model_feature_columns():
 
 def test_catboost_treats_numerical_null_as_missing_but_not_categorical_null():
     frame, schema = _data(has_nan=False, has_categorical=True)
-    categorical_null = frame.with_columns(pl.lit(None, dtype=pl.String).alias("category"))
+    categorical_null = frame.with_columns(
+        pl.lit(None, dtype=pl.String).alias("category")
+    )
     numerical_null = frame.with_columns(pl.lit(None, dtype=pl.Float64).alias("number"))
 
     categorical_space = resolve_default_search_space(

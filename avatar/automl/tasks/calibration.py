@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, Mapping
+from typing import TYPE_CHECKING, Any, Literal
 
 import polars as pl
 
@@ -34,7 +35,9 @@ def _required(frame: pl.DataFrame, columns: set[str], source: str) -> None:
         raise SchemaError(msg)
 
 
-def _branches(frame: pl.DataFrame, source: str, default_layout: str) -> dict[str, pl.DataFrame]:
+def _branches(
+    frame: pl.DataFrame, source: str, default_layout: str
+) -> dict[str, pl.DataFrame]:
     if "model_layout" not in frame.columns:
         if default_layout == "global_and_per_group":
             msg = f"{source} must contain model_layout for global_and_per_group calibration"
@@ -50,7 +53,9 @@ def _branches(frame: pl.DataFrame, source: str, default_layout: str) -> dict[str
         raise SchemaError(msg)
     return {
         str(key[0] if isinstance(key, tuple) else key): branch
-        for key, branch in frame.partition_by("model_layout", as_dict=True, maintain_order=True).items()
+        for key, branch in frame.partition_by(
+            "model_layout", as_dict=True, maintain_order=True
+        ).items()
     }
 
 
@@ -61,7 +66,7 @@ class CalibrationOutput:
 
 
 def execute_calibration(
-    task: "BaseBoostingTask",
+    task: BaseBoostingTask,
     test_scores_path: ParquetPath,
     calibration_scores_path: ParquetPath,
     calibration_path: ParquetPath,
@@ -100,9 +105,14 @@ def execute_calibration(
             operation_name="Calibration",
         )
     score_branches = _branches(scores, "test prediction", default_layout)
-    calibration_branches = _branches(calibration, "calibration prediction", default_layout)
+    calibration_branches = _branches(
+        calibration, "calibration prediction", default_layout
+    )
     if remote_layout is not None:
-        if remote_layout not in score_branches or remote_layout not in calibration_branches:
+        if (
+            remote_layout not in score_branches
+            or remote_layout not in calibration_branches
+        ):
             msg = f"Calibration branch {remote_layout!r} is missing from one of the input paths"
             raise SchemaError(msg)
         score_branches = {remote_layout: score_branches[remote_layout]}
@@ -120,26 +130,49 @@ def execute_calibration(
         if task._task_name == "response":
             _required(score_frame, {"score"}, "test prediction")
             _required(reference, {"score", target_column}, "calibration prediction")
-            state = calibrator.fit(reference["score"].to_numpy(), reference[target_column].to_numpy())
-            result_parts.append(score_frame.with_columns(pl.Series("score", state.predict(score_frame["score"].to_numpy()))))
+            state = calibrator.fit(
+                reference["score"].to_numpy(), reference[target_column].to_numpy()
+            )
+            result_parts.append(
+                score_frame.with_columns(
+                    pl.Series("score", state.predict(score_frame["score"].to_numpy()))
+                )
+            )
             states[layout] = {"score": state.to_dict()}
         else:
             treatment_column = task._internal_config.treatment_column
             _required(score_frame, set(UPLIFT_SCORE_COLUMNS), "test prediction")
-            _required(reference, {*UPLIFT_SCORE_COLUMNS, target_column, treatment_column}, "calibration prediction")
-            treatment = task._binary_values(reference[treatment_column], treatment_column)
+            _required(
+                reference,
+                {*UPLIFT_SCORE_COLUMNS, target_column, treatment_column},
+                "calibration prediction",
+            )
+            treatment = task._binary_values(
+                reference[treatment_column], treatment_column
+            )
             target = task._binary_values(reference[target_column], target_column)
             output = score_frame.clone()
             branch_state: dict[str, Any] = {}
             for learner, (effect, control, treated) in _UPLIFT_LEARNERS.items():
                 branch_state[learner] = {}
-                for arm, arm_name, column in ((0, "control", control), (1, "treatment", treated)):
+                for arm, arm_name, column in (
+                    (0, "control", control),
+                    (1, "treatment", treated),
+                ):
                     mask = treatment == arm
-                    mapping = calibrator.fit(reference[column].to_numpy()[mask], target[mask])
-                    output = output.with_columns(pl.Series(column, mapping.predict(output[column].to_numpy())))
+                    mapping = calibrator.fit(
+                        reference[column].to_numpy()[mask], target[mask]
+                    )
+                    output = output.with_columns(
+                        pl.Series(column, mapping.predict(output[column].to_numpy()))
+                    )
                     branch_state[learner][arm_name] = mapping.to_dict()
-                output = output.with_columns((pl.col(treated) - pl.col(control)).alias(effect))
-            task._validate_score_matrix(output.select(UPLIFT_SCORE_COLUMNS).to_numpy(), require_x_effect=True)
+                output = output.with_columns(
+                    (pl.col(treated) - pl.col(control)).alias(effect)
+                )
+            task._validate_score_matrix(
+                output.select(UPLIFT_SCORE_COLUMNS).to_numpy(), require_x_effect=True
+            )
             result_parts.append(output)
             states[layout] = branch_state
     result = pl.concat(result_parts, how="diagonal_relaxed").sort(_ROW_ID)
@@ -168,8 +201,11 @@ class CalibratableTask:
         Both dataset paths must already have a succeeded :meth:`predict`
         operation. Calibration never invokes prediction itself.
         """
-        for name, value in (("test_path", test_path), ("calibration_path", calibration_path)):
-            if not isinstance(value, (str, Path)):
+        for name, value in (
+            ("test_path", test_path),
+            ("calibration_path", calibration_path),
+        ):
+            if not isinstance(value, str | Path):
                 msg = f"{name} must be a parquet path, not {type(value).__name__}"
                 raise ConfigError(msg)
         calibrator_class(calibration_strategy)
@@ -205,7 +241,9 @@ class CalibratableTask:
             include_row_id=include_row_id,
         )
 
-    def _remote_calibration_parts(self, test_scores_path: ParquetPath) -> tuple[str, ...]:
+    def _remote_calibration_parts(
+        self, test_scores_path: ParquetPath
+    ) -> tuple[str, ...]:
         return tuple(
             _branches(
                 ParquetSource.resolve(test_scores_path).read(),

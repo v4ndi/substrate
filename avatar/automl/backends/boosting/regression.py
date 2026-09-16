@@ -66,4 +66,6 @@ class RegressionBoostingBackend(BaseBoostingBackend):
     def predict_prepared_score(self, features: Any) -> np.ndarray:
         """Return one continuous prediction per input row."""
         kwargs = {"task_type": "CPU"} if self.engine == "catboost" else {}
-        return np.asarray(self.model.predict(features, **kwargs), dtype=float).reshape(-1)
+        return np.asarray(self.model.predict(features, **kwargs), dtype=float).reshape(
+            -1
+        )

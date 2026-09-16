@@ -3,14 +3,18 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from pathlib import Path
 from time import perf_counter
-from typing import Any, Mapping
+from typing import Any
 
 import numpy as np
 import polars as pl
 
-from avatar.automl.backends.boosting.uplift import UPLIFT_SCORE_COLUMNS, UpliftBoostingBackend
+from avatar.automl.backends.boosting.uplift import (
+    UPLIFT_SCORE_COLUMNS,
+    UpliftBoostingBackend,
+)
 from avatar.automl.config import UpliftTaskConfig
 from avatar.automl.data import ParquetSource, normalize_date, prepare_data
 from avatar.automl.exceptions import SchemaError
@@ -95,25 +99,33 @@ class UpliftTask(CalibratableTask, BaseBoostingTask[UpliftBoostingBackend]):
             raise SchemaError(msg)
         return self._binary_values(frame[column], self.config.target_column)
 
-    def _treatment(self, frame: pl.DataFrame, *, require_both: bool = False) -> np.ndarray:
+    def _treatment(
+        self, frame: pl.DataFrame, *, require_both: bool = False
+    ) -> np.ndarray:
         column = self._internal_config.treatment_column
         if column is None or column not in frame.columns:
             msg = f"Missing treatment column: {self.config.treatment_column!r}"
             raise SchemaError(msg)
-        values = self._binary_values(frame[column], self.config.treatment_column or "treatment")
+        values = self._binary_values(
+            frame[column], self.config.treatment_column or "treatment"
+        )
         if require_both and set(np.unique(values).tolist()) != {0, 1}:
             msg = "Uplift training/evaluation requires both treatment arms 0 and 1"
             raise SchemaError(msg)
         return values
 
-    def _normalize_treatment(self, frame: pl.DataFrame, *, required: bool) -> pl.DataFrame:
+    def _normalize_treatment(
+        self, frame: pl.DataFrame, *, required: bool
+    ) -> pl.DataFrame:
         column = self._internal_config.treatment_column
         if column is None or column not in frame.columns:
             if required:
                 msg = f"Missing treatment column: {self.config.treatment_column!r}"
                 raise SchemaError(msg)
             return frame
-        values = self._binary_values(frame[column], self.config.treatment_column or "treatment")
+        values = self._binary_values(
+            frame[column], self.config.treatment_column or "treatment"
+        )
         if self.config.inverse_treatment:
             values = 1 - values
         return frame.with_columns(pl.Series(column, values, dtype=pl.Int8))
@@ -128,7 +140,10 @@ class UpliftTask(CalibratableTask, BaseBoostingTask[UpliftBoostingBackend]):
     ) -> _ModelEntry[UpliftBoostingBackend]:
         preparation_started = perf_counter()
         part_name = self._model_name(layout, group_value)
-        log_progress("[model data 1/1] model=%s preparing and validating uplift matrices", part_name)
+        log_progress(
+            "[model data 1/1] model=%s preparing and validating uplift matrices",
+            part_name,
+        )
         train_frame = self._normalize_treatment(train_frame, required=True)
         valid_frame = self._normalize_treatment(valid_frame, required=True)
         config = self._internal_config
@@ -155,7 +170,10 @@ class UpliftTask(CalibratableTask, BaseBoostingTask[UpliftBoostingBackend]):
             excluded_feature_columns=tuple(value for value in excluded if value),
         )
         y_train, y_valid = self._target(train.frame), self._target(valid.frame)
-        t_train, t_valid = self._treatment(train.frame, require_both=True), self._treatment(valid.frame, require_both=True)
+        t_train, t_valid = (
+            self._treatment(train.frame, require_both=True),
+            self._treatment(valid.frame, require_both=True),
+        )
         log_progress(
             "[model data 1/1] model=%s completed duration_seconds=%.3f train_rows=%d valid_rows=%d features=%d",
             part_name,
@@ -185,14 +203,18 @@ class UpliftTask(CalibratableTask, BaseBoostingTask[UpliftBoostingBackend]):
             n_trials=self.config.n_trials,
             model_params=self.config.model_params,
             search_space=self.config.search_space,
-            metric=resolve_metric(self.config.optimization_metric, self._task_name, "optimization"),
+            metric=resolve_metric(
+                self.config.optimization_metric, self._task_name, "optimization"
+            ),
             part_name=part_name,
         )
         return _ModelEntry(
             backend=backend,
             schema=train.schema,
             hidden_dimensions=dimensions,
-            best_params={name: dict(value) for name, value in backend.learner_params.items()},
+            best_params={
+                name: dict(value) for name, value in backend.learner_params.items()
+            },
             validation_metric=float(np.mean(list(backend.learner_metrics.values()))),
             layout=layout,
             group_value=group_value,
@@ -231,10 +253,14 @@ class UpliftTask(CalibratableTask, BaseBoostingTask[UpliftBoostingBackend]):
         )
         return self._training_summary(result)
 
-    def _remote_training_parts(self, train_path: ParquetPath) -> list[tuple[str, Any | None]]:
+    def _remote_training_parts(
+        self, train_path: ParquetPath
+    ) -> list[tuple[str, Any | None]]:
         return super()._remote_training_parts(train_path)
 
-    def _predict_entry(self, frame: pl.DataFrame, item: _ModelEntry[UpliftBoostingBackend]) -> np.ndarray:
+    def _predict_entry(
+        self, frame: pl.DataFrame, item: _ModelEntry[UpliftBoostingBackend]
+    ) -> np.ndarray:
         config = self._internal_config
         excluded = [config.treatment_column]
         if item.layout == "per_group" and config.group_column:
@@ -245,7 +271,9 @@ class UpliftTask(CalibratableTask, BaseBoostingTask[UpliftBoostingBackend]):
             require_target=False,
             fitted_schema=item.schema,
             hidden_dimensions=item.hidden_dimensions,
-            categorical_role_columns=(config.group_column if item.layout == "global" else None,),
+            categorical_role_columns=(
+                config.group_column if item.layout == "global" else None,
+            ),
             public_column_names=self._column_mapper.to_external,
             excluded_feature_columns=tuple(value for value in excluded if value),
         )
@@ -262,7 +290,9 @@ class UpliftTask(CalibratableTask, BaseBoostingTask[UpliftBoostingBackend]):
         return frame.select(columns)
 
     @staticmethod
-    def _validate_score_matrix(values: np.ndarray, *, require_x_effect: bool = False) -> None:
+    def _validate_score_matrix(
+        values: np.ndarray, *, require_x_effect: bool = False
+    ) -> None:
         if values.ndim != 2 or values.shape[1] != len(UPLIFT_SCORE_COLUMNS):
             msg = f"Uplift score matrix must have shape (N, {len(UPLIFT_SCORE_COLUMNS)}); got {values.shape}"
             raise SchemaError(msg)
@@ -270,14 +300,18 @@ class UpliftTask(CalibratableTask, BaseBoostingTask[UpliftBoostingBackend]):
             msg = "Uplift scores contain NaN or infinite values"
             raise SchemaError(msg)
         probability_indices = (1, 2, 4, 5, 7, 8, 9)
-        if np.any(values[:, probability_indices] < 0) or np.any(values[:, probability_indices] > 1):
+        if np.any(values[:, probability_indices] < 0) or np.any(
+            values[:, probability_indices] > 1
+        ):
             msg = "Uplift outcome/propensity probabilities must lie in [0, 1]"
             raise SchemaError(msg)
         consistent_learners = [(0, 1, 2), (3, 4, 5)]
         if require_x_effect:
             consistent_learners.append((6, 7, 8))
         for effect, control, treated in consistent_learners:
-            if not np.allclose(values[:, effect], values[:, treated] - values[:, control], atol=1e-10):
+            if not np.allclose(
+                values[:, effect], values[:, treated] - values[:, control], atol=1e-10
+            ):
                 msg = "Uplift effects are inconsistent with treatment-control score differences"
                 raise SchemaError(msg)
 
@@ -294,11 +328,15 @@ class UpliftTask(CalibratableTask, BaseBoostingTask[UpliftBoostingBackend]):
         self._validate_score_matrix(raw)
         return raw
 
-    def _prediction_result(self, frame: pl.DataFrame, raw: np.ndarray) -> PredictionResult:
+    def _prediction_result(
+        self, frame: pl.DataFrame, raw: np.ndarray
+    ) -> PredictionResult:
         """Assemble the raw composite result shape."""
         public_frame = frame.drop("__row_id") if "__row_id" in frame.columns else frame
         base = self._score_base(public_frame)
-        scores = base.with_columns([pl.Series(name, raw[:, i]) for i, name in enumerate(UPLIFT_SCORE_COLUMNS)])
+        scores = base.with_columns([
+            pl.Series(name, raw[:, i]) for i, name in enumerate(UPLIFT_SCORE_COLUMNS)
+        ])
         treatment = self._internal_config.treatment_column
         if treatment and treatment in scores.columns and self.config.inverse_treatment:
             scores = scores.with_columns((1 - pl.col(treatment)).alias(treatment))
@@ -338,12 +376,16 @@ class UpliftTask(CalibratableTask, BaseBoostingTask[UpliftBoostingBackend]):
                 probabilities = treated if arm == 1 else control
                 mask = treatment == arm
                 value = (
-                    self._safe_metric(metric.compute, MetricInput(target[mask], probabilities[mask]))
+                    self._safe_metric(
+                        metric.compute, MetricInput(target[mask], probabilities[mask])
+                    )
                     if mask.any() and np.unique(target[mask]).size == 2
                     else float("nan")
                 )
             else:
-                value = self._safe_metric(metric.compute, MetricInput(target, effect, treatment=treatment))
+                value = self._safe_metric(
+                    metric.compute, MetricInput(target, effect, treatment=treatment)
+                )
             if strict and not np.isfinite(value):
                 msg = f"Overall uplift metric {metric.name!r} is undefined for the evaluation split"
                 raise SchemaError(msg)
@@ -360,21 +402,38 @@ class UpliftTask(CalibratableTask, BaseBoostingTask[UpliftBoostingBackend]):
             overall: dict[str, float | int] = {}
             grouped: list[pl.DataFrame] = []
             group_column = self._internal_config.group_column
-            for key, branch in score_frame.partition_by("model_layout", as_dict=True, maintain_order=True).items():
+            for key, branch in score_frame.partition_by(
+                "model_layout", as_dict=True, maintain_order=True
+            ).items():
                 scope = key[0] if isinstance(key, tuple) else key
                 branch_truth = truth
-                if scope == "per_group" and group_column and group_column in branch.columns:
-                    branch_truth = truth.filter(pl.col(group_column).is_in(branch[group_column].unique().to_list()))
+                if (
+                    scope == "per_group"
+                    and group_column
+                    and group_column in branch.columns
+                ):
+                    branch_truth = truth.filter(
+                        pl.col(group_column).is_in(
+                            branch[group_column].unique().to_list()
+                        )
+                    )
                 branch_metrics, branch_grouped = self._evaluate_table(
                     branch_truth,
                     branch.drop("model_layout"),
                     metric_names,
                 )
-                overall.update({f"{scope}_{name}": value for name, value in branch_metrics.items()})
+                overall.update({
+                    f"{scope}_{name}": value for name, value in branch_metrics.items()
+                })
                 if branch_grouped is not None:
-                    grouped.append(branch_grouped.with_columns(pl.lit(scope).alias("model_layout")))
+                    grouped.append(
+                        branch_grouped.with_columns(pl.lit(scope).alias("model_layout"))
+                    )
             return overall, combine_metric_slices(grouped, self._internal_config)
-        target, treatment = self._target(truth), self._treatment(truth, require_both=True)
+        target, treatment = (
+            self._target(truth),
+            self._treatment(truth, require_both=True),
+        )
         overall: dict[str, float | int] = {}
         for learner, (effect, control, treated) in _LEARNER_COLUMNS.items():
             values = self._learner_metrics(
@@ -386,8 +445,12 @@ class UpliftTask(CalibratableTask, BaseBoostingTask[UpliftBoostingBackend]):
                 strict=True,
                 metric_names=metric_names,
             )
-            overall.update({f"{learner}_{name}": value for name, value in values.items()})
-        combined = truth.with_columns([score_frame[name] for name in UPLIFT_SCORE_COLUMNS])
+            overall.update({
+                f"{learner}_{name}": value for name, value in values.items()
+            })
+        combined = truth.with_columns([
+            score_frame[name] for name in UPLIFT_SCORE_COLUMNS
+        ])
         config = self._internal_config
         tables: list[pl.DataFrame] = []
         for slice_name, group_columns in metric_slices(config):
@@ -405,32 +468,52 @@ class UpliftTask(CalibratableTask, BaseBoostingTask[UpliftBoostingBackend]):
                         strict=False,
                         metric_names=metric_names,
                     )
-                    if any(isinstance(value, float) and np.isnan(value) for value in metrics.values()):
+                    if any(
+                        isinstance(value, float) and np.isnan(value)
+                        for value in metrics.values()
+                    ):
                         logger.warning(
                             "Some uplift metrics are undefined for slice %s, learner=%s; null is returned",
                             dict(zip(group_columns, key_values, strict=True)),
                             learner,
                         )
                     rows.append(
-                        {"scope": slice_name, **dict(zip(group_columns, key_values, strict=True))}
+                        {
+                            "scope": slice_name,
+                            **dict(zip(group_columns, key_values, strict=True)),
+                        }
                         | {"learner": learner}
                         | metrics
                     )
             table = pl.DataFrame(rows)
-            floating_columns = [name for name, dtype in table.schema.items() if dtype in {pl.Float32, pl.Float64}]
+            floating_columns = [
+                name
+                for name, dtype in table.schema.items()
+                if dtype in {pl.Float32, pl.Float64}
+            ]
             expressions = [pl.col(floating_columns).fill_nan(None)]
             if config.date_column in group_columns:
                 expressions.append(pl.col(config.date_column).dt.strftime("%Y-%m-%d"))
-            tables.append(table.with_columns(*expressions).sort([*group_columns, "learner"]))
+            tables.append(
+                table.with_columns(*expressions).sort([*group_columns, "learner"])
+            )
         return overall, combine_metric_slices(tables, config)
 
-    def _score_input(self, scores: PredictionResult | CalibrationResult | ParquetPath) -> pl.DataFrame:
+    def _score_input(
+        self, scores: PredictionResult | CalibrationResult | ParquetPath
+    ) -> pl.DataFrame:
         selected = (
-            scores.scores if isinstance(scores, (PredictionResult, CalibrationResult)) else ParquetSource.resolve(scores).read()
+            scores.scores
+            if isinstance(scores, PredictionResult | CalibrationResult)
+            else ParquetSource.resolve(scores).read()
         )
         normalized = self._column_mapper.normalize_frame(selected)
         date_column = self._internal_config.date_column
-        return normalized if date_column is None else normalize_date(normalized, date_column)
+        return (
+            normalized
+            if date_column is None
+            else normalize_date(normalized, date_column)
+        )
 
     def _curve_data(
         self,
@@ -440,7 +523,11 @@ class UpliftTask(CalibratableTask, BaseBoostingTask[UpliftBoostingBackend]):
         """Compute learner curve coordinates before rendering."""
         curves = {}
         layout_tables = (
-            list(raw_frame.partition_by("model_layout", as_dict=True, maintain_order=True).items())
+            list(
+                raw_frame.partition_by(
+                    "model_layout", as_dict=True, maintain_order=True
+                ).items()
+            )
             if "model_layout" in raw_frame.columns
             else [(None, raw_frame)]
         )
@@ -449,15 +536,24 @@ class UpliftTask(CalibratableTask, BaseBoostingTask[UpliftBoostingBackend]):
             layout_truth = truth
             group = self._internal_config.group_column
             if layout == "per_group" and group and group in layout_table.columns:
-                layout_truth = truth.filter(pl.col(group).is_in(layout_table[group].unique().to_list()))
-            target, treatment = self._target(layout_truth), self._treatment(layout_truth)
+                layout_truth = truth.filter(
+                    pl.col(group).is_in(layout_table[group].unique().to_list())
+                )
+            target, treatment = (
+                self._target(layout_truth),
+                self._treatment(layout_truth),
+            )
             layout_suffix = f"_{layout}" if layout is not None else ""
             for name, function in (("qini", qini_curve), ("uplift", uplift_curve)):
                 learners = {
-                    learner: function(target, layout_table[effect].to_numpy(), treatment)
+                    learner: function(
+                        target, layout_table[effect].to_numpy(), treatment
+                    )
                     for learner, (effect, _, _) in _LEARNER_COLUMNS.items()
                 }
-                curves[f"{name}_curves{layout_suffix}"] = CurveData(name, layout_suffix, learners)
+                curves[f"{name}_curves{layout_suffix}"] = CurveData(
+                    name, layout_suffix, learners
+                )
         return curves
 
     def _evaluate_data(
@@ -471,7 +567,9 @@ class UpliftTask(CalibratableTask, BaseBoostingTask[UpliftBoostingBackend]):
         self._target(truth)
         config = self._internal_config
 
-        def aligned_score_frame(frame: pl.DataFrame, *, warn_duplicates: bool = True) -> pl.DataFrame:
+        def aligned_score_frame(
+            frame: pl.DataFrame, *, warn_duplicates: bool = True
+        ) -> pl.DataFrame:
             return align_prediction_scores(
                 frame,
                 truth,
@@ -492,10 +590,22 @@ class UpliftTask(CalibratableTask, BaseBoostingTask[UpliftBoostingBackend]):
                 importance.append(
                     table.with_columns(
                         pl.lit(item.layout).alias("model_layout"),
-                        pl.lit(None if item.group_value is None else str(item.group_value), dtype=pl.String).alias("group"),
+                        pl.lit(
+                            None if item.group_value is None else str(item.group_value),
+                            dtype=pl.String,
+                        ).alias("group"),
                         pl.col("component").str.slice(0, 1).alias("learner"),
-                        pl.col("feature").replace(self._column_mapper.to_external).alias("feature"),
-                    ).select("model_layout", "group", "learner", "component", "feature", "importance")
+                        pl.col("feature")
+                        .replace(self._column_mapper.to_external)
+                        .alias("feature"),
+                    ).select(
+                        "model_layout",
+                        "group",
+                        "learner",
+                        "component",
+                        "feature",
+                        "importance",
+                    )
                 )
         importance_table = (
             pl.concat(importance).sort(
@@ -508,7 +618,9 @@ class UpliftTask(CalibratableTask, BaseBoostingTask[UpliftBoostingBackend]):
         result = EvaluationResult.for_kind(
             evaluation_kind,
             metrics=metrics,
-            metrics_by_group=None if grouped is None else self._column_mapper.restore_frame(grouped),
+            metrics_by_group=None
+            if grouped is None
+            else self._column_mapper.restore_frame(grouped),
         )
 
         return EvaluationData(
@@ -525,7 +637,10 @@ class UpliftTask(CalibratableTask, BaseBoostingTask[UpliftBoostingBackend]):
 
     def _task_manifest(self) -> dict[str, Any]:
         return {
-            "learner_metadata": {"learners": ["s", "t", "x"], "estimate_propensity": self.config.estimate_propensity},
+            "learner_metadata": {
+                "learners": ["s", "t", "x"],
+                "estimate_propensity": self.config.estimate_propensity,
+            },
         }
 
     def _restore_task_manifest(self, manifest: Mapping[str, Any]) -> None:

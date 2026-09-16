@@ -8,7 +8,9 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 
 _fallback_logger = logging.getLogger(__name__)
-_active_logger: ContextVar[logging.Logger | None] = ContextVar("avatar_automl_progress_logger", default=None)
+_active_logger: ContextVar[logging.Logger | None] = ContextVar(
+    "avatar_automl_progress_logger", default=None
+)
 
 
 def log_progress(message: str, *args: object) -> None:

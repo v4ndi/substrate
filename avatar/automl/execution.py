@@ -1,8 +1,9 @@
 """Immutable operation settings, separate from persistent task configuration."""
 
+from collections.abc import Mapping
 from copy import copy
 from dataclasses import dataclass, fields, is_dataclass, replace
-from typing import Any, Mapping
+from typing import Any
 
 from avatar.automl.config.base import BaseTaskConfig
 from avatar.automl.data import CanonicalColumnMapper
@@ -15,7 +16,9 @@ class _FrozenDict(dict):
         msg = "Execution settings are immutable"
         raise TypeError(msg)
 
-    __setitem__ = __delitem__ = clear = pop = popitem = setdefault = update = __ior__ = _immutable
+    __setitem__ = __delitem__ = clear = pop = popitem = setdefault = update = (
+        __ior__
+    ) = _immutable
 
     def __deepcopy__(self, memo):
         return self
@@ -29,7 +32,7 @@ def _freeze(value: Any) -> Any:
         return result
     if isinstance(value, Mapping):
         return _FrozenDict((key, _freeze(item)) for key, item in value.items())
-    if isinstance(value, (list, tuple)):
+    if isinstance(value, list | tuple):
         return tuple(_freeze(item) for item in value)
     return value
 

@@ -24,19 +24,34 @@ def test_boosting_backends_are_independent_siblings():
     assert inspect.isabstract(BaseBoostingBackend)
     assert not issubclass(RegressionBoostingBackend, BinaryBoostingBackend)
     assert not issubclass(BinaryBoostingBackend, RegressionBoostingBackend)
-    assert not issubclass(MulticlassBoostingBackend, (BinaryBoostingBackend, RegressionBoostingBackend))
-    assert not issubclass(UpliftBoostingBackend, (BinaryBoostingBackend, RegressionBoostingBackend))
+    assert not issubclass(
+        MulticlassBoostingBackend, BinaryBoostingBackend | RegressionBoostingBackend
+    )
+    assert not issubclass(
+        UpliftBoostingBackend, BinaryBoostingBackend | RegressionBoostingBackend
+    )
 
 
 def test_composite_exposes_only_supported_operations():
-    backend = UpliftBoostingBackend(engine="xgboost", params={}, random_state=42, device="cpu")
-    for name in ("fit", "fit_prepared", "prepare_fit_data", "predict_prepared_score", "_make_model"):
+    backend = UpliftBoostingBackend(
+        engine="xgboost", params={}, random_state=42, device="cpu"
+    )
+    for name in (
+        "fit",
+        "fit_prepared",
+        "prepare_fit_data",
+        "predict_prepared_score",
+        "_make_model",
+    ):
         assert not hasattr(backend, name)
     assert callable(backend.fit_composite)
     assert not inspect.isabstract(UpliftBoostingBackend)
 
 
-@pytest.mark.parametrize("backend_class", [BinaryBoostingBackend, RegressionBoostingBackend, UpliftBoostingBackend])
+@pytest.mark.parametrize(
+    "backend_class",
+    [BinaryBoostingBackend, RegressionBoostingBackend, UpliftBoostingBackend],
+)
 def test_common_runtime_device_validation_preserves_state(backend_class):
     backend = backend_class(engine="xgboost", params={}, random_state=42, device="cpu")
     with pytest.raises(ConfigError, match="Unsupported boosting runtime device"):
@@ -49,9 +64,15 @@ def test_composite_runtime_device_reaches_native_components():
         def set_params(self, **params):
             self.params = params
 
-    component = BinaryBoostingBackend(engine="xgboost", params={}, random_state=42, device="cpu", model=NativeModel())
+    component = BinaryBoostingBackend(
+        engine="xgboost", params={}, random_state=42, device="cpu", model=NativeModel()
+    )
     backend = UpliftBoostingBackend(
-        engine="xgboost", params={}, random_state=42, device="cpu", components={"s_outcome": component}
+        engine="xgboost",
+        params={},
+        random_state=42,
+        device="cpu",
+        components={"s_outcome": component},
     )
     backend.set_runtime_device("gpu")
     assert backend.device == component.device == "gpu"

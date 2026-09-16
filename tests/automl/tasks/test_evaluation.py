@@ -40,7 +40,10 @@ def _config(*, date_column="date", group_column="group") -> BinaryTaskConfig:
     ],
 )
 def test_metric_slice_matrix(date_column, group_column, expected):
-    assert metric_slices(_config(date_column=date_column, group_column=group_column)) == expected
+    assert (
+        metric_slices(_config(date_column=date_column, group_column=group_column))
+        == expected
+    )
 
 
 def test_alignment_without_date_uses_client_and_occurrence_only(caplog):
@@ -70,14 +73,12 @@ def test_alignment_without_date_uses_client_and_occurrence_only(caplog):
 )
 def test_shared_alignment_rejects_equal_length_mismatched_keys(score_columns):
     config = _config()
-    truth = pl.DataFrame(
-        {
-            "epk_id": [1, 2],
-            "date": ["2026-01-01", "2026-01-01"],
-            "group": ["a", "b"],
-            "target": [0, 1],
-        }
-    ).with_columns(pl.col("date").str.to_date())
+    truth = pl.DataFrame({
+        "epk_id": [1, 2],
+        "date": ["2026-01-01", "2026-01-01"],
+        "group": ["a", "b"],
+        "target": [0, 1],
+    }).with_columns(pl.col("date").str.to_date())
     values = {
         "epk_id": [1, 3],
         "date": ["2026-01-01", "2026-01-01"],
@@ -94,17 +95,21 @@ def test_shared_alignment_rejects_equal_length_mismatched_keys(score_columns):
         )
 
 
-def test_shared_alignment_warns_for_duplicate_score_keys_before_rejecting_mismatch(caplog):
+def test_shared_alignment_warns_for_duplicate_score_keys_before_rejecting_mismatch(
+    caplog,
+):
     config = _config()
-    truth = pl.DataFrame(
-        {
-            "epk_id": [1, 2],
-            "date": ["2026-01-01", "2026-01-01"],
-            "group": ["a", "b"],
-            "target": [0, 1],
-        }
-    ).with_columns(pl.col("date").str.to_date())
-    scores = pl.DataFrame({"epk_id": [1, 1], "date": ["2026-01-01", "2026-01-01"], "score": [0.1, 0.9]})
+    truth = pl.DataFrame({
+        "epk_id": [1, 2],
+        "date": ["2026-01-01", "2026-01-01"],
+        "group": ["a", "b"],
+        "target": [0, 1],
+    }).with_columns(pl.col("date").str.to_date())
+    scores = pl.DataFrame({
+        "epk_id": [1, 1],
+        "date": ["2026-01-01", "2026-01-01"],
+        "score": [0.1, 0.9],
+    })
 
     with pytest.raises(SchemaError, match="must match evaluation rows one-to-one"):
         align_prediction_scores(
@@ -120,22 +125,18 @@ def test_shared_alignment_warns_for_duplicate_score_keys_before_rejecting_mismat
 
 def test_shared_alignment_rejects_legacy_model_scope_metadata():
     config = _config()
-    truth = pl.DataFrame(
-        {
-            "epk_id": [1],
-            "date": ["2026-01-01"],
-            "group": ["a"],
-            "target": [1],
-        }
-    ).with_columns(pl.col("date").str.to_date())
-    scores = pl.DataFrame(
-        {
-            "epk_id": [1],
-            "date": ["2026-01-01"],
-            "model_scope": ["product"],
-            "score": [0.8],
-        }
-    )
+    truth = pl.DataFrame({
+        "epk_id": [1],
+        "date": ["2026-01-01"],
+        "group": ["a"],
+        "target": [1],
+    }).with_columns(pl.col("date").str.to_date())
+    scores = pl.DataFrame({
+        "epk_id": [1],
+        "date": ["2026-01-01"],
+        "model_scope": ["product"],
+        "score": [0.8],
+    })
 
     with pytest.raises(SchemaError, match="incompatible legacy model_scope metadata"):
         align_prediction_scores(
@@ -149,21 +150,17 @@ def test_shared_alignment_rejects_legacy_model_scope_metadata():
 
 def test_shared_alignment_warns_and_pairs_matching_duplicate_keys_by_occurrence(caplog):
     config = _config()
-    truth = pl.DataFrame(
-        {
-            "epk_id": [1, 1, 2],
-            "date": ["2026-01-01"] * 3,
-            "group": ["a", "b", "a"],
-            "target": [0, 1, 1],
-        }
-    ).with_columns(pl.col("date").str.to_date())
-    scores = pl.DataFrame(
-        {
-            "epk_id": [1, 1, 2],
-            "date": ["2026-01-01"] * 3,
-            "score": [0.1, 0.8, 0.7],
-        }
-    )
+    truth = pl.DataFrame({
+        "epk_id": [1, 1, 2],
+        "date": ["2026-01-01"] * 3,
+        "group": ["a", "b", "a"],
+        "target": [0, 1, 1],
+    }).with_columns(pl.col("date").str.to_date())
+    scores = pl.DataFrame({
+        "epk_id": [1, 1, 2],
+        "date": ["2026-01-01"] * 3,
+        "score": [0.1, 0.8, 0.7],
+    })
 
     result = align_prediction_scores(
         scores,
@@ -178,25 +175,23 @@ def test_shared_alignment_warns_and_pairs_matching_duplicate_keys_by_occurrence(
     assert len(caplog.records) == 1
 
 
-def test_long_form_alignment_checks_keys_once_for_truth_and_once_for_all_scores(monkeypatch):
+def test_long_form_alignment_checks_keys_once_for_truth_and_once_for_all_scores(
+    monkeypatch,
+):
     config = _config()
-    truth = pl.DataFrame(
-        {
-            "epk_id": [1, 2],
-            "date": ["2026-01-01", "2026-01-01"],
-            "group": ["a", "b"],
-            "target": [0, 1],
-        }
-    ).with_columns(pl.col("date").str.to_date())
-    scores = pl.DataFrame(
-        {
-            "epk_id": [1, 2, 1, 2],
-            "date": ["2026-01-01"] * 4,
-            "group": ["a", "b", "a", "b"],
-            "model_layout": ["global", "global", "per_group", "per_group"],
-            "score": [0.1, 0.9, 0.2, 0.8],
-        }
-    )
+    truth = pl.DataFrame({
+        "epk_id": [1, 2],
+        "date": ["2026-01-01", "2026-01-01"],
+        "group": ["a", "b"],
+        "target": [0, 1],
+    }).with_columns(pl.col("date").str.to_date())
+    scores = pl.DataFrame({
+        "epk_id": [1, 2, 1, 2],
+        "date": ["2026-01-01"] * 4,
+        "group": ["a", "b", "a", "b"],
+        "model_layout": ["global", "global", "per_group", "per_group"],
+        "score": [0.1, 0.9, 0.2, 0.8],
+    })
     calls = []
     original = evaluation_module._check_global_keys
 

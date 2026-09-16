@@ -8,7 +8,13 @@ import numpy as np
 import polars as pl
 import pytest
 
-from avatar.automl import BinaryTask, MulticlassTask, RegressionTask, UpliftTask, UpliftTaskConfig
+from avatar.automl import (
+    BinaryTask,
+    MulticlassTask,
+    RegressionTask,
+    UpliftTask,
+    UpliftTaskConfig,
+)
 from avatar.automl.backends.boosting.binary import BinaryBoostingBackend
 from avatar.automl.backends.boosting.regression import RegressionBoostingBackend
 from avatar.automl.backends.boosting.uplift import UpliftBoostingBackend
@@ -17,8 +23,10 @@ from avatar.automl.metrics import qini_auc_score, uplift_at_k, uplift_auc_score
 
 
 def test_uplift_task_and_backend_are_independent_siblings() -> None:
-    assert not issubclass(UpliftTask, (BinaryTask, RegressionTask, MulticlassTask))
-    assert not issubclass(UpliftBoostingBackend, (BinaryBoostingBackend, RegressionBoostingBackend))
+    assert not issubclass(UpliftTask, BinaryTask | RegressionTask | MulticlassTask)
+    assert not issubclass(
+        UpliftBoostingBackend, BinaryBoostingBackend | RegressionBoostingBackend
+    )
 
 
 def test_uplift_metrics_are_finite_and_stable_for_ties() -> None:
@@ -63,13 +71,24 @@ def task() -> UpliftTask:
 @pytest.mark.parametrize("value", [None, float("nan"), float("inf"), 2])
 def test_binary_role_validation(task: UpliftTask, column: str, value) -> None:
     frame = pl.DataFrame({"target": [0.0, 1.0], "treatment": [0.0, 1.0]}).with_columns(
-        pl.when(pl.int_range(pl.len()) == 0).then(pl.lit(value)).otherwise(pl.col(column)).alias(column)
+        pl.when(pl.int_range(pl.len()) == 0)
+        .then(pl.lit(value))
+        .otherwise(pl.col(column))
+        .alias(column)
     )
     with pytest.raises(SchemaError):
         (task._target if column == "target" else task._treatment)(frame)
 
 
-@pytest.mark.parametrize("model_layout", ["per_group", "global", "global_and_per_group"])
-def test_model_layout_is_forbidden_without_group_column(task: UpliftTask, tmp_path, model_layout: str) -> None:
-    with pytest.raises(ConfigError, match=rf"model_layout={model_layout!r}.*group_column=None"):
-        replace(task.config, model_layout=model_layout, output_dir=tmp_path / model_layout)
+@pytest.mark.parametrize(
+    "model_layout", ["per_group", "global", "global_and_per_group"]
+)
+def test_model_layout_is_forbidden_without_group_column(
+    task: UpliftTask, tmp_path, model_layout: str
+) -> None:
+    with pytest.raises(
+        ConfigError, match=rf"model_layout={model_layout!r}.*group_column=None"
+    ):
+        replace(
+            task.config, model_layout=model_layout, output_dir=tmp_path / model_layout
+        )

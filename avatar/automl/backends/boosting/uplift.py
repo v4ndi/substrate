@@ -3,22 +3,30 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from copy import copy
 from dataclasses import dataclass, field
 from pathlib import Path
 from time import perf_counter
-from typing import Any, Mapping
+from typing import Any
 
 import numpy as np
 import polars as pl
 
 from avatar.automl.backends.boosting.base import BaseBoostingBackend
 from avatar.automl.backends.boosting.binary import BinaryBoostingBackend
-from avatar.automl.backends.boosting.hyperopt import resolve_default_search_space, suggest_params
+from avatar.automl.backends.boosting.hyperopt import (
+    resolve_default_search_space,
+    suggest_params,
+)
 from avatar.automl.backends.boosting.interface import BoostingBackend
 from avatar.automl.backends.boosting.regression import RegressionBoostingBackend
 from avatar.automl.data import FeatureSchema
-from avatar.automl.exceptions import ArtifactIntegrityError, MissingDependencyError, SchemaError
+from avatar.automl.exceptions import (
+    ArtifactIntegrityError,
+    MissingDependencyError,
+    SchemaError,
+)
 from avatar.automl.metrics.base import Metric, MetricInput
 from avatar.automl.progress import log_progress
 
@@ -69,7 +77,9 @@ class UpliftBoostingBackend(BoostingBackend):
     _reuse_prepared: bool = field(default=False, repr=False)
 
     def _component(self, kind: str, params: Mapping[str, Any]) -> BaseBoostingBackend:
-        backend_class = BinaryBoostingBackend if kind == "classifier" else RegressionBoostingBackend
+        backend_class = (
+            BinaryBoostingBackend if kind == "classifier" else RegressionBoostingBackend
+        )
         return backend_class(
             engine=self.engine,
             params=dict(params),
@@ -85,7 +95,8 @@ class UpliftBoostingBackend(BoostingBackend):
             categorical=(*schema.categorical, self.treatment_column),
             numerical=schema.numerical,
             feature_order=(*schema.feature_order, self.treatment_column),
-            dtypes=dict(schema.dtypes) | {self.treatment_column: str(frame.schema[self.treatment_column])},
+            dtypes=dict(schema.dtypes)
+            | {self.treatment_column: str(frame.schema[self.treatment_column])},
             target_column=schema.target_column,
             client_id_column=schema.client_id_column,
             treatment_column=schema.treatment_column,
@@ -93,7 +104,9 @@ class UpliftBoostingBackend(BoostingBackend):
         )
 
     @staticmethod
-    def _validate_part(target: np.ndarray, treatment: np.ndarray, part_name: str) -> None:
+    def _validate_part(
+        target: np.ndarray, treatment: np.ndarray, part_name: str
+    ) -> None:
         for arm in (0, 1):
             arm_target = np.unique(target[treatment == arm])
             if not len(arm_target):
@@ -134,11 +147,17 @@ class UpliftBoostingBackend(BoostingBackend):
                 self._prepared_cache[cache_key] = prepared
             component.fit_prepared(prepared)
         else:
-            component.fit(train, target, schema, valid_frame=valid, valid_target=valid_target)
+            component.fit(
+                train, target, schema, valid_frame=valid, valid_target=valid_target
+            )
         return component
 
-    def _predict_component(self, component: BaseBoostingBackend, frame: pl.DataFrame, schema: FeatureSchema) -> np.ndarray:
-        values = np.asarray(component.predict_score(frame, schema), dtype=float).reshape(-1)
+    def _predict_component(
+        self, component: BaseBoostingBackend, frame: pl.DataFrame, schema: FeatureSchema
+    ) -> np.ndarray:
+        values = np.asarray(
+            component.predict_score(frame, schema), dtype=float
+        ).reshape(-1)
         if not np.isfinite(values).all():
             msg = "A constituent uplift model returned NaN or infinite scores"
             raise SchemaError(msg)
@@ -154,7 +173,16 @@ class UpliftBoostingBackend(BoostingBackend):
         schema: FeatureSchema,
     ) -> dict[str, BaseBoostingBackend]:
         s_schema = self._s_schema(schema, train)
-        model = self._fit_component("classifier", params, train, y_train, valid, y_valid, s_schema, cache_key="s_outcome")
+        model = self._fit_component(
+            "classifier",
+            params,
+            train,
+            y_train,
+            valid,
+            y_valid,
+            s_schema,
+            cache_key="s_outcome",
+        )
         return {"s_outcome": model}
 
     def _fit_t(
@@ -209,9 +237,13 @@ class UpliftBoostingBackend(BoostingBackend):
             prefix="x",
         )
         mu0_train = self._predict_component(result["x_control_outcome"], train, schema)
-        mu1_train = self._predict_component(result["x_treatment_outcome"], train, schema)
+        mu1_train = self._predict_component(
+            result["x_treatment_outcome"], train, schema
+        )
         mu0_valid = self._predict_component(result["x_control_outcome"], valid, schema)
-        mu1_valid = self._predict_component(result["x_treatment_outcome"], valid, schema)
+        mu1_valid = self._predict_component(
+            result["x_treatment_outcome"], valid, schema
+        )
         pseudo_train = {0: mu1_train - y_train, 1: y_train - mu0_train}
         pseudo_valid = {0: mu1_valid - y_valid, 1: y_valid - mu0_valid}
         for arm, label in ((0, "control"), (1, "treatment")):
@@ -247,20 +279,49 @@ class UpliftBoostingBackend(BoostingBackend):
         schema: FeatureSchema,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray | None]:
         if learner == "s":
-            s_schema = self._s_schema(schema, frame.with_columns(pl.lit(0, dtype=pl.Int8).alias(self.treatment_column)))
-            control_frame = frame.with_columns(pl.lit(0, dtype=pl.Int8).alias(self.treatment_column))
-            treatment_frame = frame.with_columns(pl.lit(1, dtype=pl.Int8).alias(self.treatment_column))
-            control = self._predict_component(components["s_outcome"], control_frame, s_schema)
-            treated = self._predict_component(components["s_outcome"], treatment_frame, s_schema)
+            s_schema = self._s_schema(
+                schema,
+                frame.with_columns(
+                    pl.lit(0, dtype=pl.Int8).alias(self.treatment_column)
+                ),
+            )
+            control_frame = frame.with_columns(
+                pl.lit(0, dtype=pl.Int8).alias(self.treatment_column)
+            )
+            treatment_frame = frame.with_columns(
+                pl.lit(1, dtype=pl.Int8).alias(self.treatment_column)
+            )
+            control = self._predict_component(
+                components["s_outcome"], control_frame, s_schema
+            )
+            treated = self._predict_component(
+                components["s_outcome"], treatment_frame, s_schema
+            )
             return treated - control, control, treated, None
-        control = self._predict_component(components[f"{learner}_control_outcome"], frame, schema)
-        treated = self._predict_component(components[f"{learner}_treatment_outcome"], frame, schema)
+        control = self._predict_component(
+            components[f"{learner}_control_outcome"], frame, schema
+        )
+        treated = self._predict_component(
+            components[f"{learner}_treatment_outcome"], frame, schema
+        )
         if learner == "t":
             return treated - control, control, treated, None
-        tau0 = np.clip(self._predict_component(components["x_control_effect"], frame, schema), -1.0, 1.0)
-        tau1 = np.clip(self._predict_component(components["x_treatment_effect"], frame, schema), -1.0, 1.0)
+        tau0 = np.clip(
+            self._predict_component(components["x_control_effect"], frame, schema),
+            -1.0,
+            1.0,
+        )
+        tau1 = np.clip(
+            self._predict_component(components["x_treatment_effect"], frame, schema),
+            -1.0,
+            1.0,
+        )
         propensity = (
-            np.clip(self._predict_component(components["x_propensity"], frame, schema), 0.0, 1.0)
+            np.clip(
+                self._predict_component(components["x_propensity"], frame, schema),
+                0.0,
+                1.0,
+            )
             if "x_propensity" in components
             else np.full(frame.height, 0.5)
         )
@@ -279,7 +340,9 @@ class UpliftBoostingBackend(BoostingBackend):
     ) -> float:
         effect = self._predict_learner(learner, components, valid, schema)[0]
         try:
-            value = metric.compute(MetricInput(y_valid, effect, treatment=treatment_valid))
+            value = metric.compute(
+                MetricInput(y_valid, effect, treatment=treatment_valid)
+            )
             if value is None:
                 msg = f"Validation {metric.name!r} returned no value for learner {learner!r}"
                 raise SchemaError(msg)
@@ -309,7 +372,9 @@ class UpliftBoostingBackend(BoostingBackend):
         self._validate_part(y_train, treatment_train, part_name)
         self._validate_part(y_valid, treatment_valid, f"{part_name} validation")
         fitters = {
-            "s": lambda params: self._fit_s(params, train, y_train, valid, y_valid, schema),
+            "s": lambda params: self._fit_s(
+                params, train, y_train, valid, y_valid, schema
+            ),
             "t": lambda params: self._fit_t(
                 params,
                 train,
@@ -321,7 +386,16 @@ class UpliftBoostingBackend(BoostingBackend):
                 schema,
                 prefix="t",
             ),
-            "x": lambda params: self._fit_x(params, train, y_train, treatment_train, valid, y_valid, treatment_valid, schema),
+            "x": lambda params: self._fit_x(
+                params,
+                train,
+                y_train,
+                treatment_train,
+                valid,
+                y_valid,
+                treatment_valid,
+                schema,
+            ),
         }
         effective_space = (
             resolve_default_search_space(
@@ -341,10 +415,17 @@ class UpliftBoostingBackend(BoostingBackend):
         self._prepared_cache = {}
         for learner_index, (learner, fitter) in enumerate(fitters.items(), start=1):
             learner_started = perf_counter()
-            log_progress("[uplift learner %d/%d] learner=%s started", learner_index, len(fitters), learner)
+            log_progress(
+                "[uplift learner %d/%d] learner=%s started",
+                learner_index,
+                len(fitters),
+                learner,
+            )
             if not hyperopt:
                 components = fitter(dict(model_params))
-                value = self._objective(learner, components, valid, y_valid, treatment_valid, schema, metric)
+                value = self._objective(
+                    learner, components, valid, y_valid, treatment_valid, schema, metric
+                )
                 self.components.update(components)
                 self.learner_params[learner] = dict(model_params)
                 self.learner_metrics[learner] = value
@@ -382,9 +463,21 @@ class UpliftBoostingBackend(BoostingBackend):
                     search_space=effective_space,
                 )
                 trial_components = current_fitter(params)
-                value = self._objective(current_learner, trial_components, valid, y_valid, treatment_valid, schema, metric)
+                value = self._objective(
+                    current_learner,
+                    trial_components,
+                    valid,
+                    y_valid,
+                    treatment_valid,
+                    schema,
+                    metric,
+                )
                 if best_components is None or value > best_value:
-                    best_components, best_params, best_value = trial_components, params, value
+                    best_components, best_params, best_value = (
+                        trial_components,
+                        params,
+                        value,
+                    )
                 log_progress(
                     "[uplift learner %d/%d][optuna %d/%d] learner=%s completed duration_seconds=%.3f objective_value=%.12g",
                     current_learner_index,
@@ -409,7 +502,9 @@ class UpliftBoostingBackend(BoostingBackend):
                 direction="maximize",
                 sampler=optuna.samplers.TPESampler(seed=self.random_state),
             )
-            study.optimize(objective, n_trials=n_trials, show_progress_bar=bool(self.verbose))
+            study.optimize(
+                objective, n_trials=n_trials, show_progress_bar=bool(self.verbose)
+            )
             if best_components is None:
                 msg = f"Hyperparameter search produced no fitted {learner!r} learner"
                 raise RuntimeError(msg)
@@ -434,7 +529,18 @@ class UpliftBoostingBackend(BoostingBackend):
         s = self._predict_learner("s", self.components, frame, schema)
         t = self._predict_learner("t", self.components, frame, schema)
         x = self._predict_learner("x", self.components, frame, schema)
-        values = np.column_stack((s[0], s[1], s[2], t[0], t[1], t[2], x[0], x[1], x[2], x[3]))
+        values = np.column_stack((
+            s[0],
+            s[1],
+            s[2],
+            t[0],
+            t[1],
+            t[2],
+            x[0],
+            x[1],
+            x[2],
+            x[3],
+        ))
         if not np.isfinite(values).all():
             msg = "Uplift prediction contains NaN or infinite values"
             raise SchemaError(msg)
@@ -452,8 +558,18 @@ class UpliftBoostingBackend(BoostingBackend):
             if values is None:
                 continue
             for feature, importance in zip(feature_names, values, strict=True):
-                rows.append({"component": component_name, "feature": feature, "importance": float(importance)})
-        return pl.DataFrame(rows).sort(["component", "importance"], descending=[False, True]) if rows else None
+                rows.append({
+                    "component": component_name,
+                    "feature": feature,
+                    "importance": float(importance),
+                })
+        return (
+            pl.DataFrame(rows).sort(
+                ["component", "importance"], descending=[False, True]
+            )
+            if rows
+            else None
+        )
 
     def save(self, path: Path) -> None:
         """Persist every constituent estimator through its native format."""
@@ -474,10 +590,12 @@ class UpliftBoostingBackend(BoostingBackend):
             "learner_params": self.learner_params,
             "learner_metrics": self.learner_metrics,
         }
-        (path / "backend.json").write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
+        (path / "backend.json").write_text(
+            json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
 
     @classmethod
-    def load(cls, path: Path, *, device: str = "cpu") -> "UpliftBoostingBackend":
+    def load(cls, path: Path, *, device: str = "cpu") -> UpliftBoostingBackend:
         """Restore the composite and every native constituent model."""
         metadata_path = path / "backend.json"
         if not metadata_path.exists():
@@ -492,12 +610,24 @@ class UpliftBoostingBackend(BoostingBackend):
             verbose=metadata.get("verbose", False),
             estimate_propensity=metadata.get("estimate_propensity", False),
             treatment_column=metadata.get("treatment_column", "treatment"),
-            learner_params={name: dict(value) for name, value in metadata.get("learner_params", {}).items()},
-            learner_metrics={name: float(value) for name, value in metadata.get("learner_metrics", {}).items()},
+            learner_params={
+                name: dict(value)
+                for name, value in metadata.get("learner_params", {}).items()
+            },
+            learner_metrics={
+                name: float(value)
+                for name, value in metadata.get("learner_metrics", {}).items()
+            },
         )
         for name, kind in metadata.get("components", {}).items():
-            component_class = BinaryBoostingBackend if kind == "classifier" else RegressionBoostingBackend
-            backend.components[name] = component_class.load(path / "components" / name, device=device)
+            component_class = (
+                BinaryBoostingBackend
+                if kind == "classifier"
+                else RegressionBoostingBackend
+            )
+            backend.components[name] = component_class.load(
+                path / "components" / name, device=device
+            )
         return backend
 
     def set_runtime_device(self, device: str) -> None:
@@ -506,11 +636,14 @@ class UpliftBoostingBackend(BoostingBackend):
         for component in self.components.values():
             component.set_runtime_device(device)
 
-    def for_execution(self, device: str) -> "UpliftBoostingBackend":
+    def for_execution(self, device: str) -> UpliftBoostingBackend:
         """Isolate device overrides in the constituent models that need them."""
         if device == self.device:
             return self
         backend = copy(self)
         BoostingBackend.set_runtime_device(backend, device)
-        backend.components = {name: component.for_execution(device) for name, component in self.components.items()}
+        backend.components = {
+            name: component.for_execution(device)
+            for name, component in self.components.items()
+        }
         return backend

@@ -6,4 +6,10 @@ from .regression import RegressionTask
 from .response import ResponseTask
 from .uplift import UpliftTask
 
-__all__ = ["BinaryTask", "MulticlassTask", "RegressionTask", "ResponseTask", "UpliftTask"]
+__all__ = [
+    "BinaryTask",
+    "MulticlassTask",
+    "RegressionTask",
+    "ResponseTask",
+    "UpliftTask",
+]

@@ -44,8 +44,12 @@ def uplift_curve(y_true, uplift, treatment) -> tuple[np.ndarray, np.ndarray]:
     treated_y = np.cumsum(target * arm, dtype=np.float64)[distinct]
     control_y = np.cumsum(target * (1 - arm), dtype=np.float64)[distinct]
     values = (
-        np.divide(treated_y, treated_n, out=np.zeros_like(treated_y), where=treated_n != 0)
-        - np.divide(control_y, control_n, out=np.zeros_like(control_y), where=control_n != 0)
+        np.divide(
+            treated_y, treated_n, out=np.zeros_like(treated_y), where=treated_n != 0
+        )
+        - np.divide(
+            control_y, control_n, out=np.zeros_like(control_y), where=control_n != 0
+        )
     ) * n
     return np.r_[0, n], np.r_[0.0, values]
 
@@ -73,7 +77,9 @@ def _normalized_area(actual, perfect) -> float:
 
 def uplift_auc_score(y_true, uplift, treatment) -> float:
     """Return normalized area under the uplift curve."""
-    return _normalized_area(uplift_curve(y_true, uplift, treatment), perfect_uplift_curve(y_true, treatment))
+    return _normalized_area(
+        uplift_curve(y_true, uplift, treatment), perfect_uplift_curve(y_true, treatment)
+    )
 
 
 def qini_curve(y_true, uplift, treatment) -> tuple[np.ndarray, np.ndarray]:
@@ -87,11 +93,15 @@ def qini_curve(y_true, uplift, treatment) -> tuple[np.ndarray, np.ndarray]:
     control_n = n - treated_n
     treated_y = np.cumsum(target * arm, dtype=np.float64)[distinct]
     control_y = np.cumsum(target * (1 - arm), dtype=np.float64)[distinct]
-    values = treated_y - control_y * np.divide(treated_n, control_n, out=np.zeros_like(treated_n), where=control_n != 0)
+    values = treated_y - control_y * np.divide(
+        treated_n, control_n, out=np.zeros_like(treated_n), where=control_n != 0
+    )
     return np.r_[0, n], np.r_[0.0, values]
 
 
-def perfect_qini_curve(y_true, treatment, negative_effect: bool = True) -> tuple[np.ndarray, np.ndarray]:
+def perfect_qini_curve(
+    y_true, treatment, negative_effect: bool = True
+) -> tuple[np.ndarray, np.ndarray]:
     """Return the attainable binary-outcome Qini curve."""
     if not isinstance(negative_effect, bool):
         msg = f"negative_effect must be bool, got {type(negative_effect).__name__}"
@@ -101,22 +111,31 @@ def perfect_qini_curve(y_true, treatment, negative_effect: bool = True) -> tuple
     if negative_effect:
         return qini_curve(target, target * arm - target * (1 - arm), arm)
     random_effect = target[arm == 1].sum() - arm.sum() * target[arm == 0].mean()
-    return np.array([0.0, random_effect, len(target)]), np.array([0.0, random_effect, random_effect])
+    return np.array([0.0, random_effect, len(target)]), np.array([
+        0.0,
+        random_effect,
+        random_effect,
+    ])
 
 
 def qini_auc_score(y_true, uplift, treatment, negative_effect: bool = True) -> float:
     """Return normalized area under the Qini curve."""
-    return _normalized_area(qini_curve(y_true, uplift, treatment), perfect_qini_curve(y_true, treatment, negative_effect))
+    return _normalized_area(
+        qini_curve(y_true, uplift, treatment),
+        perfect_qini_curve(y_true, treatment, negative_effect),
+    )
 
 
-def uplift_at_k(y_true, uplift, treatment, strategy: str = "overall", k: float = 0.3) -> float:
+def uplift_at_k(
+    y_true, uplift, treatment, strategy: str = "overall", k: float = 0.3
+) -> float:
     """Return observed response-rate uplift among the highest-scored rows."""
     target, score, arm = _inputs(y_true, uplift, treatment)
     if strategy not in {"overall", "by_group"}:
         msg = "strategy must be 'overall' or 'by_group'"
         raise ValueError(msg)
     order = np.argsort(-score, kind="stable")
-    if isinstance(k, (float, np.floating)):
+    if isinstance(k, float | np.floating):
         if not 0 < k < 1:
             msg = "float k must lie in (0, 1)"
             raise ValueError(msg)
@@ -125,9 +144,13 @@ def uplift_at_k(y_true, uplift, treatment, strategy: str = "overall", k: float =
             control = target[selected][arm[selected] == 0]
             treated = target[selected][arm[selected] == 1]
         else:
-            control = target[order][arm[order] == 0][: max(1, int((arm == 0).sum() * k))]
-            treated = target[order][arm[order] == 1][: max(1, int((arm == 1).sum() * k))]
-    elif isinstance(k, (int, np.integer)) and 0 < k < len(target):
+            control = target[order][arm[order] == 0][
+                : max(1, int((arm == 0).sum() * k))
+            ]
+            treated = target[order][arm[order] == 1][
+                : max(1, int((arm == 1).sum() * k))
+            ]
+    elif isinstance(k, int | np.integer) and 0 < k < len(target):
         if strategy == "overall":
             selected = order[: int(k)]
             control = target[selected][arm[selected] == 0]
@@ -148,7 +171,9 @@ def uplift_at_k(y_true, uplift, treatment, strategy: str = "overall", k: float =
 class UpliftMetric:
     """One registered treatment-aware uplift metric."""
 
-    name: Literal["qini_auc", "uplift_auc", "uplift_at_10", "uplift_at_20", "uplift_at_50"]
+    name: Literal[
+        "qini_auc", "uplift_auc", "uplift_at_10", "uplift_at_20", "uplift_at_50"
+    ]
     optimization_direction: Literal["maximize"] | None
     supported_tasks: frozenset[str] = frozenset({"uplift"})
 

@@ -24,4 +24,10 @@ def calibrator_class(strategy: str) -> type[Calibrator]:
         raise ConfigError(msg) from exc
 
 
-__all__ = ["BetaCalibrator", "CalibrationStrategy", "Calibrator", "IsotonicCalibrator", "calibrator_class"]
+__all__ = [
+    "BetaCalibrator",
+    "CalibrationStrategy",
+    "Calibrator",
+    "IsotonicCalibrator",
+    "calibrator_class",
+]

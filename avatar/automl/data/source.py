@@ -26,7 +26,7 @@ class ParquetSource:
     files: tuple[Path, ...]
 
     @classmethod
-    def resolve(cls, path: ParquetPath) -> "ParquetSource":
+    def resolve(cls, path: ParquetPath) -> ParquetSource:
         """Resolve a parquet file or recursively discover a directory.
 
         Args:
@@ -42,7 +42,9 @@ class ParquetSource:
         if resolved.is_file() and resolved.suffix.lower() == ".parquet":
             files = (resolved,)
         elif resolved.is_dir():
-            files = tuple(sorted(item for item in resolved.rglob("*.parquet") if item.is_file()))
+            files = tuple(
+                sorted(item for item in resolved.rglob("*.parquet") if item.is_file())
+            )
         else:
             msg = f"Parquet path does not exist or is not a parquet file/directory: {resolved}"
             raise SchemaError(msg)
@@ -80,11 +82,20 @@ class ParquetSource:
             for partitions, files in partition_groups.items():
                 frame = pl.scan_parquet(files, hive_partitioning=False)
                 names = frame.collect_schema().names()
-                missing_partitions = {name: value for name, value in partitions if name not in names}
+                missing_partitions = {
+                    name: value for name, value in partitions if name not in names
+                }
                 if missing_partitions:
-                    frame = frame.with_columns([pl.lit(value).alias(name) for name, value in missing_partitions.items()])
+                    frame = frame.with_columns([
+                        pl.lit(value).alias(name)
+                        for name, value in missing_partitions.items()
+                    ])
                 frames.append(frame)
-            return frames[0] if len(frames) == 1 else pl.concat(frames, how="diagonal_relaxed")
+            return (
+                frames[0]
+                if len(frames) == 1
+                else pl.concat(frames, how="diagonal_relaxed")
+            )
         except Exception as exc:
             msg = f"Failed to read parquet source {self.path}: {exc}"
             raise SchemaError(msg) from exc

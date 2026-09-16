@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Mapping, Protocol, Self
+from collections.abc import Mapping
+from typing import Any, Protocol, Self
 
 import numpy as np
 

@@ -9,7 +9,13 @@ import pytest
 from omegaconf import OmegaConf
 
 from avatar.automl.exceptions import ConfigError
-from tools.automl_parity.binary import compare_results, load_case, run_comparison, run_reference, task_config
+from tools.automl_parity.binary import (
+    compare_results,
+    load_case,
+    run_comparison,
+    run_reference,
+    task_config,
+)
 from tools.automl_parity.reference import (
     _channel_from_params_path,
     _normalized_scores,
@@ -21,17 +27,41 @@ from tools.automl_parity.reference import (
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 WORKSPACE_ROOT = REPO_ROOT.parent
-AUTOCAMPAIGN_CONFIG_PATH = REPO_ROOT / "examples" / "automl" / "configs" / "autocampaignxfm_binary.yaml"
+AUTOCAMPAIGN_CONFIG_PATH = (
+    REPO_ROOT / "examples" / "automl" / "configs" / "autocampaignxfm_binary.yaml"
+)
 FMLIB_CONFIG_PATH = REPO_ROOT / "examples" / "automl" / "configs" / "fmlib_binary.yaml"
 XGBOOST_AUTOCAMPAIGN_CONFIG_PATH = (
-    REPO_ROOT / "examples" / "automl" / "tests" / "configs" / "parity_xgboost_product_autocampaignxfm.yaml"
+    REPO_ROOT
+    / "examples"
+    / "automl"
+    / "tests"
+    / "configs"
+    / "parity_xgboost_product_autocampaignxfm.yaml"
 )
-XGBOOST_FMLIB_CONFIG_PATH = REPO_ROOT / "examples" / "automl" / "tests" / "configs" / "parity_xgboost_product_fmlib.yaml"
+XGBOOST_FMLIB_CONFIG_PATH = (
+    REPO_ROOT
+    / "examples"
+    / "automl"
+    / "tests"
+    / "configs"
+    / "parity_xgboost_product_fmlib.yaml"
+)
 XGBOOST_CHANNEL_AUTOCAMPAIGN_CONFIG_PATH = (
-    REPO_ROOT / "examples" / "automl" / "tests" / "configs" / "parity_xgboost_channel_autocampaignxfm.yaml"
+    REPO_ROOT
+    / "examples"
+    / "automl"
+    / "tests"
+    / "configs"
+    / "parity_xgboost_channel_autocampaignxfm.yaml"
 )
 XGBOOST_CHANNEL_FMLIB_CONFIG_PATH = (
-    REPO_ROOT / "examples" / "automl" / "tests" / "configs" / "parity_xgboost_channel_fmlib.yaml"
+    REPO_ROOT
+    / "examples"
+    / "automl"
+    / "tests"
+    / "configs"
+    / "parity_xgboost_channel_fmlib.yaml"
 )
 
 
@@ -55,10 +85,16 @@ def test_notebook_equivalent_yaml_resolves_expected_binary_settings():
     assert config.treatment_column == "treatment"
     assert config.inverse_treatment is True
     assert config.hidden_state_columns == ("seq_hidden_state",)
-    assert config.categorical_columns == tuple(f"cat_feature_{index}" for index in range(1, 6))
-    assert config.numerical_columns == tuple(f"num_feature_{index}" for index in range(1, 6))
+    assert config.categorical_columns == tuple(
+        f"cat_feature_{index}" for index in range(1, 6)
+    )
+    assert config.numerical_columns == tuple(
+        f"num_feature_{index}" for index in range(1, 6)
+    )
     assert autocampaign_config.evaluate.is_product is True
-    assert str(autocampaign_config.evaluate.model_configs_dir).endswith("/configs_product/")
+    assert str(autocampaign_config.evaluate.model_configs_dir).endswith(
+        "/configs_product/"
+    )
 
 
 def test_xgboost_parity_yaml_uses_shortened_native_search_space():
@@ -78,7 +114,9 @@ def test_xgboost_parity_yaml_uses_shortened_native_search_space():
         "colsample_bytree": {"type": "float", "low": 1.0, "high": 1.0},
         "eta": {"type": "float", "low": 0.1, "high": 0.1},
     }
-    assert OmegaConf.to_container(autocampaign_config.optuna_ranges.xgboost, resolve=True) == {
+    assert OmegaConf.to_container(
+        autocampaign_config.optuna_ranges.xgboost, resolve=True
+    ) == {
         "n_estimators": {"low": 12, "high": 12, "step": 1},
         "max_depth": {"low": 2, "high": 2},
         "lambda": {"low": 1.0, "high": 1.0, "log": False},
@@ -120,24 +158,20 @@ def test_reference_reads_real_evaluator_shards_and_normalizes_test_scores(tmp_pa
     case = load_case(AUTOCAMPAIGN_CONFIG_PATH, FMLIB_CONFIG_PATH)
     predict_dir = tmp_path / "predict"
     predict_dir.mkdir()
-    pl.DataFrame(
-        {
-            "epk_id": [1],
-            "report_month": ["2024-09-01"],
-            "target": [0],
-            "prediction": [0.25],
-            "split_type": ["calib"],
-        }
-    ).write_parquet(predict_dir / "validation.parquet")
-    pl.DataFrame(
-        {
-            "epk_id": [2],
-            "report_month": ["2024-10-01"],
-            "target": [1],
-            "prediction": [0.75],
-            "split_type": ["test"],
-        }
-    ).write_parquet(predict_dir / "test.parquet")
+    pl.DataFrame({
+        "epk_id": [1],
+        "report_month": ["2024-09-01"],
+        "target": [0],
+        "prediction": [0.25],
+        "split_type": ["calib"],
+    }).write_parquet(predict_dir / "validation.parquet")
+    pl.DataFrame({
+        "epk_id": [2],
+        "report_month": ["2024-10-01"],
+        "target": [1],
+        "prediction": [0.75],
+        "split_type": ["test"],
+    }).write_parquet(predict_dir / "test.parquet")
 
     validation, test = _read_scores(predict_dir, case)
     normalized = _normalized_scores(test, case)
@@ -150,7 +184,9 @@ def test_reference_reads_real_evaluator_shards_and_normalizes_test_scores(tmp_pa
     }
 
 
-def test_reference_runtime_config_casts_array_embeddings_without_changing_values(tmp_path):
+def test_reference_runtime_config_casts_array_embeddings_without_changing_values(
+    tmp_path,
+):
     case = load_case(AUTOCAMPAIGN_CONFIG_PATH, FMLIB_CONFIG_PATH)
     source_root = tmp_path / "source"
     paths = {}
@@ -158,14 +194,12 @@ def test_reference_runtime_config_casts_array_embeddings_without_changing_values
     for split_name in ("train", "valid", "test"):
         split_path = source_root / split_name
         split_path.mkdir(parents=True)
-        pl.DataFrame(
-            {
-                "epk_id": [1],
-                "cat_feature_1": ["known" if split_name == "train" else "unknown"],
-                "group": ["channel_b" if split_name == "train" else "channel_a"],
-                "seq_hidden_state": pl.Series(values, dtype=pl.Array(pl.Float32, 64)),
-            }
-        ).write_parquet(split_path / "part-0.parquet")
+        pl.DataFrame({
+            "epk_id": [1],
+            "cat_feature_1": ["known" if split_name == "train" else "unknown"],
+            "group": ["channel_b" if split_name == "train" else "channel_a"],
+            "seq_hidden_state": pl.Series(values, dtype=pl.Array(pl.Float32, 64)),
+        }).write_parquet(split_path / "part-0.parquet")
         paths[split_name] = split_path
     compatible_case = replace(
         case,
@@ -183,11 +217,16 @@ def test_reference_runtime_config_casts_array_embeddings_without_changing_values
     assert converted["cat_feature_1"].to_list() == [0]
     assert "group" not in converted.columns
     assert converted["target_attr_2"].to_list() == [0]
-    converted_test = pl.read_parquet(Path(runtime.data.input_dir.test) / "part-0.parquet")
+    converted_test = pl.read_parquet(
+        Path(runtime.data.input_dir.test) / "part-0.parquet"
+    )
     assert converted_test["cat_feature_1"].to_list() == [-1]
     assert converted_test["target_attr_2"].to_list() == [-1]
     assert runtime.data.group_column == "__product_only_group_column__"
-    assert runtime.train.output_dir == OmegaConf.load(AUTOCAMPAIGN_CONFIG_PATH).train.output_dir
+    assert (
+        runtime.train.output_dir
+        == OmegaConf.load(AUTOCAMPAIGN_CONFIG_PATH).train.output_dir
+    )
 
 
 def test_reference_runtime_config_preserves_group_for_channel_training(tmp_path):
@@ -203,20 +242,29 @@ def test_reference_runtime_config_preserves_group_for_channel_training(tmp_path)
 
     runtime_path = _write_runtime_config(case, tmp_path / "runtime")
     runtime = OmegaConf.load(runtime_path)
-    converted = pl.read_parquet(next(Path(runtime.data.input_dir.train).glob("*.parquet")))
+    converted = pl.read_parquet(
+        next(Path(runtime.data.input_dir.train).glob("*.parquet"))
+    )
 
     assert runtime.data.group_column == "group"
     assert runtime.evaluate.is_product is False
-    assert str(runtime.evaluate.model_configs_dir).endswith("evaluation_configs_channels")
+    assert str(runtime.evaluate.model_configs_dir).endswith(
+        "evaluation_configs_channels"
+    )
     assert "group" in converted.columns
     assert "target_attr_2" not in converted.columns
 
 
-@pytest.mark.skipif(os.name == "nt", reason="Native autocampaign filenames contain characters forbidden by Windows")
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="Native autocampaign filenames contain characters forbidden by Windows",
+)
 def test_channel_evaluation_config_copies_remove_only_trainer_separator(tmp_path):
     source = tmp_path / "configs_channels"
     source.mkdir()
-    (source / "<'catboost_binary_clf'>_channel_0.txt").write_text("{'depth': 4}", encoding="utf-8")
+    (source / "<'catboost_binary_clf'>_channel_0.txt").write_text(
+        "{'depth': 4}", encoding="utf-8"
+    )
     destination = tmp_path / "evaluation_configs_channels"
 
     _prepare_channel_evaluation_configs(source, destination)
@@ -228,18 +276,23 @@ def test_channel_evaluation_config_copies_remove_only_trainer_separator(tmp_path
 @pytest.mark.parametrize(
     ("filename", "expected"),
     [
-        ("<'catboost_binary_clf'>_channel_with_underscores.txt", "channel_with_underscores"),
+        (
+            "<'catboost_binary_clf'>_channel_with_underscores.txt",
+            "channel_with_underscores",
+        ),
         ("__ac_lt__'catboost_binary_clf'__ac_gt___product.txt", "product"),
     ],
 )
-def test_channel_parameter_filename_preserves_complete_channel_value(filename, expected):
+def test_channel_parameter_filename_preserves_complete_channel_value(
+    filename, expected
+):
     assert _channel_from_params_path(Path(filename)) == expected
 
 
 def test_xgboost_channel_parameter_filename_preserves_complete_channel_value():
-    assert _channel_from_params_path(Path("<'xgboost_binary_clf'>_channel_with_underscores.txt")) == (
-        "channel_with_underscores"
-    )
+    assert _channel_from_params_path(
+        Path("<'xgboost_binary_clf'>_channel_with_underscores.txt")
+    ) == ("channel_with_underscores")
 
 
 def test_channel_training_configs_contain_exactly_one_string_group(tmp_path):
@@ -256,14 +309,12 @@ def test_channel_training_configs_contain_exactly_one_string_group(tmp_path):
     for split_name in ("train", "valid", "test"):
         split_path = tmp_path / "source" / split_name
         split_path.mkdir(parents=True)
-        pl.DataFrame(
-            {
-                "epk_id": [1, 2],
-                "group": ["channel_a", "channel_b"],
-                "treatment": [0, 1],
-                "cat_feature_1": ["a", "b"],
-            }
-        ).write_parquet(split_path / "part.parquet")
+        pl.DataFrame({
+            "epk_id": [1, 2],
+            "group": ["channel_a", "channel_b"],
+            "treatment": [0, 1],
+            "cat_feature_1": ["a", "b"],
+        }).write_parquet(split_path / "part.parquet")
         source_paths[split_name] = split_path
     case = replace(
         base_case,
@@ -281,7 +332,9 @@ def test_channel_training_configs_contain_exactly_one_string_group(tmp_path):
     groups = []
     for config_path in configs:
         config = OmegaConf.load(config_path)
-        frame = pl.read_parquet(Path(config.data.input_dir.train) / "part-00000.parquet")
+        frame = pl.read_parquet(
+            Path(config.data.input_dir.train) / "part-00000.parquet"
+        )
         assert frame.schema["group"] == pl.String
         assert frame["group"].n_unique() == 1
         groups.extend(frame["group"].unique().to_list())
@@ -290,13 +343,11 @@ def test_channel_training_configs_contain_exactly_one_string_group(tmp_path):
 
 def _result(tmp_path, name, params, scores, timing):
     scores_path = tmp_path / f"{name}.parquet"
-    pl.DataFrame(
-        {
-            "epk_id": [1, 2, 3],
-            "report_month": ["2026-01-01"] * 3,
-            "score": scores,
-        }
-    ).write_parquet(scores_path)
+    pl.DataFrame({
+        "epk_id": [1, 2, 3],
+        "report_month": ["2026-01-01"] * 3,
+        "score": scores,
+    }).write_parquet(scores_path)
     timing = {
         "hyperparameter_search_and_train": 0.0,
         "inference_model_fit": 0.0,
@@ -328,7 +379,9 @@ def test_comparison_reports_parameters_scores_metrics_and_time(tmp_path):
         "total_train_before_predict": 1.5,
     }
     reference = _result(tmp_path, "reference", {"depth": 4}, [0.1, 0.5, 0.9], timing)
-    candidate = _result(tmp_path, "candidate", {"depth": 4}, [0.1001, 0.5001, 0.9001], timing)
+    candidate = _result(
+        tmp_path, "candidate", {"depth": 4}, [0.1001, 0.5001, 0.9001], timing
+    )
     candidate["resolved_model_params"]["product"]["random_seed"] = 42
 
     comparison = compare_results(reference, candidate, case)
@@ -344,7 +397,9 @@ def test_comparison_reports_parameters_scores_metrics_and_time(tmp_path):
     assert comparison["score_distribution"]["rows"] == 3
     assert comparison["score_distribution"]["ks_statistic"] == pytest.approx(1 / 3)
     assert comparison["metrics"]["passed"] is True
-    assert comparison["metrics"]["test_roc_auc"]["product"]["absolute_difference"] == 0.0
+    assert (
+        comparison["metrics"]["test_roc_auc"]["product"]["absolute_difference"] == 0.0
+    )
     assert comparison["timing_seconds"]["autocampaignxfm"] == timing
 
 
@@ -362,21 +417,32 @@ def test_comparison_includes_calibrated_scores_and_metrics(tmp_path):
         ("candidate_cal", candidate, [0.201, 0.501, 0.801]),
     ):
         path = tmp_path / f"{name}.parquet"
-        pl.DataFrame({"epk_id": [1, 2, 3], "report_month": ["2026-01-01"] * 3, "score": values}).write_parquet(path)
+        pl.DataFrame({
+            "epk_id": [1, 2, 3],
+            "report_month": ["2026-01-01"] * 3,
+            "score": values,
+        }).write_parquet(path)
         result["calibrated_scores_path"] = str(path)
         result["calibrated_test_roc_auc"] = {"product": 0.8}
-    candidate_calibrated = pl.read_parquet(candidate["calibrated_scores_path"]).with_columns(
-        pl.col("report_month").str.to_date()
-    )
+    candidate_calibrated = pl.read_parquet(
+        candidate["calibrated_scores_path"]
+    ).with_columns(pl.col("report_month").str.to_date())
     candidate_calibrated.write_parquet(candidate["calibrated_scores_path"])
 
     comparison = compare_results(reference, candidate, case)
 
     assert comparison["calibrated_score_distribution"]["rows"] == 3
-    assert comparison["metrics"]["calibrated_test_roc_auc"]["product"]["absolute_difference"] == 0.0
+    assert (
+        comparison["metrics"]["calibrated_test_roc_auc"]["product"][
+            "absolute_difference"
+        ]
+        == 0.0
+    )
 
 
-def test_comparison_reports_different_best_parameters_without_failing_quality_parity(tmp_path):
+def test_comparison_reports_different_best_parameters_without_failing_quality_parity(
+    tmp_path,
+):
     case = replace(
         load_case(AUTOCAMPAIGN_CONFIG_PATH, FMLIB_CONFIG_PATH),
         max_score_ks_statistic=1.0,
@@ -454,8 +520,12 @@ def test_comparison_fails_when_roc_auc_diverges(tmp_path):
     assert comparison["metrics"]["passed"] is False
 
 
-def test_reference_runner_uses_explicit_python_and_repository_paths(tmp_path, monkeypatch):
-    case = replace(load_case(AUTOCAMPAIGN_CONFIG_PATH, FMLIB_CONFIG_PATH), output_dir=tmp_path)
+def test_reference_runner_uses_explicit_python_and_repository_paths(
+    tmp_path, monkeypatch
+):
+    case = replace(
+        load_case(AUTOCAMPAIGN_CONFIG_PATH, FMLIB_CONFIG_PATH), output_dir=tmp_path
+    )
     autocampaign_root = WORKSPACE_ROOT / "autocampaignxfm"
     calls = []
 
@@ -463,7 +533,9 @@ def test_reference_runner_uses_explicit_python_and_repository_paths(tmp_path, mo
         calls.append((command, kwargs))
         output = tmp_path / "autocampaignxfm"
         output.mkdir(parents=True, exist_ok=True)
-        (output / "result.json").write_text(json.dumps({"pipeline": "autocampaignxfm"}), encoding="utf-8")
+        (output / "result.json").write_text(
+            json.dumps({"pipeline": "autocampaignxfm"}), encoding="utf-8"
+        )
 
     monkeypatch.setattr("tools.automl_parity.binary.subprocess.run", fake_run)
 
@@ -473,12 +545,18 @@ def test_reference_runner_uses_explicit_python_and_repository_paths(tmp_path, mo
     assert result == {"pipeline": "autocampaignxfm"}
     assert command[0] == sys.executable
     assert command[1:3] == ["-m", "tools.automl_parity.reference"]
-    assert command[command.index("--config") + 1] == str(AUTOCAMPAIGN_CONFIG_PATH.resolve())
-    assert command[command.index("--fmlib-config") + 1] == str(FMLIB_CONFIG_PATH.resolve())
+    assert command[command.index("--config") + 1] == str(
+        AUTOCAMPAIGN_CONFIG_PATH.resolve()
+    )
+    assert command[command.index("--fmlib-config") + 1] == str(
+        FMLIB_CONFIG_PATH.resolve()
+    )
     assert kwargs["check"] is True
     assert str(autocampaign_root.resolve()) in kwargs["env"]["PYTHONPATH"]
     assert kwargs["env"]["MPLBACKEND"] == "Agg"
-    assert kwargs["env"]["MPLCONFIGDIR"] == str((tmp_path / "autocampaignxfm" / ".matplotlib").resolve())
+    assert kwargs["env"]["MPLCONFIGDIR"] == str(
+        (tmp_path / "autocampaignxfm" / ".matplotlib").resolve()
+    )
 
 
 @pytest.mark.skipif(

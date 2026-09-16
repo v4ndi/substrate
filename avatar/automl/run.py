@@ -19,7 +19,13 @@ from avatar.automl.config import (
 )
 from avatar.automl.execution import ExecutionContext
 from avatar.automl.result_io import evaluation_payload
-from avatar.automl.tasks import BinaryTask, MulticlassTask, RegressionTask, ResponseTask, UpliftTask
+from avatar.automl.tasks import (
+    BinaryTask,
+    MulticlassTask,
+    RegressionTask,
+    ResponseTask,
+    UpliftTask,
+)
 
 _TASK_TYPES = {
     "binary": (BinaryTaskConfig, BinaryTask),
@@ -33,11 +39,16 @@ _TASK_TYPES = {
 def _configure_logging(log_path: Path, run_id: str) -> logging.Logger:
     """Configure one stdout and shared-filesystem log carrying the run ID."""
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    formatter = logging.Formatter(f"%(asctime)s %(levelname)s run_id={run_id} %(name)s: %(message)s")
+    formatter = logging.Formatter(
+        f"%(asctime)s %(levelname)s run_id={run_id} %(name)s: %(message)s"
+    )
     root = logging.getLogger()
     root.setLevel(logging.INFO)
     root.handlers.clear()
-    for handler in (logging.StreamHandler(), logging.FileHandler(log_path, encoding="utf-8")):
+    for handler in (
+        logging.StreamHandler(),
+        logging.FileHandler(log_path, encoding="utf-8"),
+    ):
         handler.setFormatter(formatter)
         root.addHandler(handler)
     return logging.getLogger(__name__)
@@ -76,7 +87,9 @@ def execute_spec(spec_path: str | Path) -> dict[str, Any]:
     try:
         if action == "train":
             artifact_root = Path(arguments["artifact_path"])
-            entity_config = config_class.from_mapping(arguments.get("entity_config", requested_config))
+            entity_config = config_class.from_mapping(
+                arguments.get("entity_config", requested_config)
+            )
             task = task_class(entity_config, _entity_path=artifact_root)
             execution = task._execution_view(ExecutionContext.from_config(config))
             training = execution._execute_train(
@@ -98,11 +111,17 @@ def execute_spec(spec_path: str | Path) -> dict[str, Any]:
             parent_layout = config.resolved_model_layout
             remote_layout = arguments["remote_layout"]
             remote_group_value = arguments.get("remote_group_value")
-            runtime_config = config if config.group_column is None else replace(config, model_layout=remote_layout)
+            runtime_config = (
+                config
+                if config.group_column is None
+                else replace(config, model_layout=remote_layout)
+            )
             task = task_class(runtime_config, _entity_path=artifact_root)
             task._restore_artifact(artifact_root)
             task._select_remote_prediction_part(remote_layout, remote_group_value)
-            execution = task._execution_view(ExecutionContext.from_config(runtime_config), prepare_backends=True)
+            execution = task._execution_view(
+                ExecutionContext.from_config(runtime_config), prepare_backends=True
+            )
             execution._validate_prediction_layout()
             prediction = execution._execute_predict(
                 arguments["test_path"],
@@ -123,7 +142,9 @@ def execute_spec(spec_path: str | Path) -> dict[str, Any]:
             artifact_root = Path(arguments["artifact_path"])
             task = task_class(config, _entity_path=artifact_root)
             task._restore_artifact(artifact_root)
-            execution = task._execution_view(ExecutionContext.from_config(config), prepare_backends=False)
+            execution = task._execution_view(
+                ExecutionContext.from_config(config), prepare_backends=False
+            )
             evaluation = execution._execute_evaluate(
                 arguments["test_path"],
                 arguments["scores_path"],
@@ -134,10 +155,12 @@ def execute_spec(spec_path: str | Path) -> dict[str, Any]:
                 **evaluation_payload(evaluation),
                 "status": "succeeded",
                 "figure_paths_raw": {
-                    name: str(Path(config.output_dir) / f"{name}.png") for name in evaluation.figures_raw
+                    name: str(Path(config.output_dir) / f"{name}.png")
+                    for name in evaluation.figures_raw
                 },
                 "figure_paths_calibrated": {
-                    name: str(Path(config.output_dir) / f"{name}.png") for name in evaluation.figures_calibrated
+                    name: str(Path(config.output_dir) / f"{name}.png")
+                    for name in evaluation.figures_calibrated
                 },
             }
         elif action == "calibrate":
@@ -170,7 +193,11 @@ def execute_spec(spec_path: str | Path) -> dict[str, Any]:
         result_path.parent.mkdir(parents=True, exist_ok=True)
         result_path.write_text(
             json.dumps(
-                {"status": "failed", "error_type": type(exc).__name__, "error": str(exc)},
+                {
+                    "status": "failed",
+                    "error_type": type(exc).__name__,
+                    "error": str(exc),
+                },
                 ensure_ascii=False,
                 indent=2,
             ),
@@ -178,8 +205,14 @@ def execute_spec(spec_path: str | Path) -> dict[str, Any]:
         )
         raise
     result_path.parent.mkdir(parents=True, exist_ok=True)
-    result_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
-    logger.info("Finished action=%s duration_seconds=%.3f", action, perf_counter() - action_started)
+    result_path.write_text(
+        json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    logger.info(
+        "Finished action=%s duration_seconds=%.3f",
+        action,
+        perf_counter() - action_started,
+    )
     return result
 
 

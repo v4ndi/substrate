@@ -28,7 +28,15 @@ def multiclass_objective(
     labels = np.arange(probabilities.shape[1])
     if name == "roc_auc_ovr_macro":
         try:
-            return float(roc_auc_score(target, probabilities, labels=labels, multi_class="ovr", average="macro"))
+            return float(
+                roc_auc_score(
+                    target,
+                    probabilities,
+                    labels=labels,
+                    multi_class="ovr",
+                    average="macro",
+                )
+            )
         except ValueError as exc:
             msg = f"roc_auc_ovr_macro is undefined for the validation split: {exc}"
             raise SchemaError(msg) from exc
@@ -66,12 +74,12 @@ def multiclass_class_metrics(
             class_auc = float(roc_auc_score(binary_target, probabilities[:, index]))
         metrics[f"roc_auc_class_{index}"] = class_auc
         metrics[f"n_positives_class_{index}"] = int(binary_target.sum())
-        metrics.update(
-            {
-                f"{name}_class_{index}": value
-                for name, value in binary_top_k_metrics(binary_target, probabilities[:, index]).items()
-            }
-        )
+        metrics.update({
+            f"{name}_class_{index}": value
+            for name, value in binary_top_k_metrics(
+                binary_target, probabilities[:, index]
+            ).items()
+        })
     return metrics
 
 
@@ -92,23 +100,42 @@ def multiclass_metrics(
         raise SchemaError(msg)
     if missing_classes:
         missing_labels = [class_order[index] for index in missing_classes]
-        logger.warning("Grouped multiclass ROC AUC is undefined and will be null; missing classes: %s", missing_labels)
+        logger.warning(
+            "Grouped multiclass ROC AUC is undefined and will be null; missing classes: %s",
+            missing_labels,
+        )
         auc = None
     else:
         try:
-            auc = float(roc_auc_score(target, probabilities, labels=labels, multi_class="ovr", average="macro"))
+            auc = float(
+                roc_auc_score(
+                    target,
+                    probabilities,
+                    labels=labels,
+                    multi_class="ovr",
+                    average="macro",
+                )
+            )
         except ValueError as exc:
             if not grouped:
                 msg = f"Overall multiclass ROC AUC is undefined: {exc}"
                 raise SchemaError(msg) from exc
-            logger.warning("Grouped multiclass ROC AUC is undefined and will be null: %s", exc)
+            logger.warning(
+                "Grouped multiclass ROC AUC is undefined and will be null: %s", exc
+            )
             auc = None
     return {
         "roc_auc_ovr_macro": auc,
         "log_loss": float(log_loss(target, probabilities, labels=labels)),
         "accuracy": float(accuracy_score(target, predicted)),
-        "f1_macro": float(f1_score(target, predicted, average="macro", labels=labels, zero_division=0)),
-        "f1_weighted": float(f1_score(target, predicted, average="weighted", labels=labels, zero_division=0)),
+        "f1_macro": float(
+            f1_score(target, predicted, average="macro", labels=labels, zero_division=0)
+        ),
+        "f1_weighted": float(
+            f1_score(
+                target, predicted, average="weighted", labels=labels, zero_division=0
+            )
+        ),
     } | multiclass_class_metrics(target, probabilities, class_order, grouped=grouped)
 
 
@@ -116,7 +143,9 @@ def multiclass_metrics(
 class MulticlassMetric:
     """One registered aggregate Multiclass metric."""
 
-    name: Literal["roc_auc_ovr_macro", "log_loss", "accuracy", "f1_macro", "f1_weighted"]
+    name: Literal[
+        "roc_auc_ovr_macro", "log_loss", "accuracy", "f1_macro", "f1_weighted"
+    ]
     optimization_direction: Literal["maximize", "minimize"] | None
     supported_tasks: frozenset[str] = frozenset({"multiclass"})
 
@@ -125,5 +154,13 @@ class MulticlassMetric:
         if self.name == "f1_weighted":
             labels = np.arange(data.scores.shape[1])
             predicted = data.scores.argmax(axis=1)
-            return float(f1_score(data.target, predicted, average="weighted", labels=labels, zero_division=0))
+            return float(
+                f1_score(
+                    data.target,
+                    predicted,
+                    average="weighted",
+                    labels=labels,
+                    zero_division=0,
+                )
+            )
         return multiclass_objective(self.name, data.target, data.scores, class_order)

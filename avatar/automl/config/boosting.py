@@ -66,7 +66,9 @@ def default_model_params(
             learning_rate, num_trees = 0.05, 3_000
         params.update(learning_rate=learning_rate, num_trees=num_trees)
     elif task == "multiclass":
-        params.update(learning_rate=0.03, num_trees=3_000 if train_rows <= 100_000 else 4_000)
+        params.update(
+            learning_rate=0.03, num_trees=3_000 if train_rows <= 100_000 else 4_000
+        )
     elif task == "regression":
         params.update(learning_rate=0.05, num_trees=2_000, od_wait=300)
     return params
