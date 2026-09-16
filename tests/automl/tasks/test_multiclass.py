@@ -14,7 +14,7 @@ from avatar.automl.metrics import binary_top_k_metrics, multiclass_class_metrics
 
 
 def test_multiclass_documentation_is_self_contained_and_base_is_task_neutral():
-    repository = Path(__file__).resolve().parents[4]
+    repository = Path(__file__).resolve().parents[3]
     documentation_paths = [
         repository / "avatar/automl/tasks/multiclass.py",
         repository / "avatar/automl/backends/boosting/multiclass.py",

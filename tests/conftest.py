@@ -15,6 +15,7 @@ from __future__ import annotations
 import glob as _glob
 import os
 import subprocess as _sp
+import sys
 import tempfile
 
 import numpy as np
@@ -59,6 +60,9 @@ def _ensure_java() -> bool:
 def spark_session():
     if not _ensure_java():
         pytest.skip("no Spark-compatible JDK (8/11/17) found")
+    # Spark workers otherwise inherit the *system* python, which fails with
+    # PYTHON_VERSION_MISMATCH whenever the suite runs inside a virtualenv.
+    os.environ.setdefault("PYSPARK_PYTHON", sys.executable)
     try:
         from pyspark.sql import SparkSession
     except ImportError:  # pragma: no cover

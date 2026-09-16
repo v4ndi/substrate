@@ -14,7 +14,7 @@ from avatar.automl.exceptions import ArtifactError, ConfigError, SchemaError
 
 
 def test_regression_api_and_documentation_are_self_contained():
-    repository = Path(__file__).resolve().parents[4]
+    repository = Path(__file__).resolve().parents[3]
     implementation_paths = [
         repository / "avatar/automl/calibrators/isotonic_regression.py",
         repository / "avatar/automl/tasks/base.py",
@@ -45,7 +45,7 @@ def test_regression_api_and_documentation_are_self_contained():
 
 
 def test_base_task_docstrings_are_task_neutral():
-    automl_root = Path(__file__).resolve().parents[2]
+    automl_root = Path(__file__).resolve().parents[3] / "avatar/automl"
     base_paths = [automl_root / "tasks/base.py", automl_root / "backends/boosting/base.py"]
     docstrings = []
     for base_path in base_paths:
