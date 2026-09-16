@@ -61,6 +61,8 @@ def _branches(
 
 @dataclass(frozen=True)
 class CalibrationOutput:
+    """A fitted calibration plus the state the task commits for it."""
+
     result: CalibrationResult
     state: Mapping[str, Any]
 

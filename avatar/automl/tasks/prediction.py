@@ -20,6 +20,7 @@ def execute_prediction(
     include_row_id: bool = False,
     include_group: bool = False,
 ) -> PredictionResult:
+    """Score ``test_path`` with every model the task's layout plans for."""
     task._require_fitted()
     total_started = perf_counter()
     stage_started = perf_counter()

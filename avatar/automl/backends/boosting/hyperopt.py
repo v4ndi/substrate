@@ -49,6 +49,9 @@ def suggest_params(
         engine: Boosting engine used to select the default space.
         model_params: Fixed estimator parameters.
         search_space: Explicit search definitions, or ``None`` for defaults.
+        n_trials: Trial budget, used to size the default space.
+        train_frame: Training frame, used to size data-dependent defaults.
+        schema: Feature schema of ``train_frame``.
 
     Returns:
         Fixed parameters merged with values suggested for this trial.

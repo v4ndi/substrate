@@ -59,6 +59,8 @@ def _runtime_metadata(config: BaseTaskConfig, **extra: Any) -> dict[str, Any]:
 
 @dataclass(frozen=True)
 class RemoteTrainingParts:
+    """Where a remote training run left its artifact and per-part outputs."""
+
     artifact_path: Path
     part_paths: tuple[Path, ...]
 

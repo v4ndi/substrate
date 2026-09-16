@@ -22,7 +22,7 @@ python -m pip install -e ".[spark,dev]"
 | `boosting` | `catboost`, `xgboost` | движки бустинга в `avatar.automl` |
 | `dev` | `pytest`, `ruff`, `pre-commit` | тесты и линтер |
 
-`requirements.txt` — обёртка, ставящая `-e .[spark,catboost,dev]`;
+`requirements.txt` — обёртка, ставящая `-e .[spark,boosting,dev]`;
 авторитетный источник версий — `pyproject.toml`.
 
 > Spark 3.5 не работает на JDK 21+. Укажите `JAVA_HOME` на JDK 8, 11 или 17.

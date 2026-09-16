@@ -11,6 +11,8 @@ from avatar.automl.execution import ExecutionContext
 
 @dataclass(frozen=True)
 class ModelPlan:
+    """Which models one operation trains or scores, and under which layout."""
+
     parts: tuple[tuple[str, Any | None], ...]
     layout: str
 

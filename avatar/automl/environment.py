@@ -218,6 +218,7 @@ class EnvironmentRunner:
             config: Osiris task configuration.
             action: Operation executed by the remote process.
             payload: JSON-serializable paths and operation-specific values.
+            run_dir: Directory the run specification is written to.
 
         Returns:
             A persistent handle containing the exact scheduler job ID.

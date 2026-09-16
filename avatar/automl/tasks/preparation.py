@@ -12,6 +12,8 @@ from avatar.automl.types import ParquetPath
 
 @dataclass(frozen=True)
 class DataPreparation:
+    """Reads parquet sources into polars frames under the task's schema."""
+
     context: ExecutionContext
 
     def read(self, path: ParquetPath) -> pl.DataFrame:

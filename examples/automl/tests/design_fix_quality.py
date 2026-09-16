@@ -211,6 +211,7 @@ def _task_frame(task: str, seed: int) -> pl.DataFrame:
 
 
 def generate(root: Path) -> dict[str, str]:
+    """Write the synthetic dataset of every task and return its fingerprints."""
     data_root = root / "data"
     fingerprints: dict[str, str] = {}
     for task_index, task in enumerate(TASKS):
@@ -426,6 +427,7 @@ def _comparison(
 
 
 def run_checkpoint(root: Path, checkpoint: str) -> None:
+    """Train and score every task once, recording the run under ``checkpoint``."""
     from avatar.automl import (
         BinaryTask,
         MulticlassTask,
@@ -523,6 +525,7 @@ def run_checkpoint(root: Path, checkpoint: str) -> None:
 
 
 def main() -> None:
+    """Entry point: ``generate`` the data, or run one ``checkpoint``."""
     parser = argparse.ArgumentParser()
     parser.add_argument("command", choices=("generate", "checkpoint"))
     parser.add_argument("--root", type=Path, required=True)

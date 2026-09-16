@@ -18,11 +18,14 @@ from .state import ModelEntry
 
 
 def part_name(layout: str, group_value: Any | None = None) -> str:
+    """Name of the model part for ``layout`` and, per group, ``group_value``."""
     return "global" if layout == "global" else f"per_group:{group_value}"
 
 
 @dataclass(frozen=True)
 class TrainingOutcome:
+    """Models fitted by one training run, with their source manifests."""
+
     models: tuple[ModelEntry, ...]
     source_manifests: Mapping[str, tuple[dict[str, Any], ...]]
     result: TrainingResult
@@ -33,6 +36,8 @@ class TrainingOutcome:
 
 @dataclass(frozen=True)
 class TrainingCoordinator:
+    """Drives one training run: read, plan, fit every part, collect state."""
+
     context: ExecutionContext
     task_name: str
     prepare_state: Callable[[pl.DataFrame, pl.DataFrame], None]

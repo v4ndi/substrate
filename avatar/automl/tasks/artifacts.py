@@ -33,6 +33,8 @@ def jsonable(value: Any) -> Any:
 
 @dataclass(frozen=True)
 class ArtifactState:
+    """Everything one saved artifact holds: config, models and manifests."""
+
     config: BaseTaskConfig
     models: tuple[ModelEntry, ...]
     source_manifests: Mapping[str, tuple[dict[str, Any], ...]]
@@ -46,6 +48,8 @@ class ArtifactState:
 
 @dataclass(frozen=True)
 class ArtifactRepository:
+    """Reads and writes an :class:`ArtifactState` under one directory."""
+
     task_name: str
     artifact_directory: str
     backend_class: type[BoostingBackend]

@@ -114,11 +114,9 @@ convention = "google"
 [tool.ruff.lint.per-file-ignores]
 "avatar/_version.py" = ["D"]
 "tests/**" = ["D"]
-
-[tool.ruff.lint.per-file-ignores]
 # The migrated AutoML tests match exception text literally; the regex-looking
 # characters in `pytest.raises(match=...)` are intentional. See automl_migration.md.
-"tests/automl/**" = ["RUF043"]
+"tests/automl/**" = ["D", "RUF043"]
 
 [tool.ruff.format]
 preview = true
