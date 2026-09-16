@@ -1,6 +1,6 @@
 # Design: neural-network backend for `avatar.automl`
 
-Status: **proposed** (2026-09-16). Stage 3 of
+Status: **proposed**, open questions resolved 2026-09-16 (§11). Stage 3 of
 `repos/combine_avatar_automl/combine_avatar_fmlib_automl.md`, on top of
 `automl_migration.md` (stages 1–2, done).
 
@@ -77,16 +77,19 @@ class ModelBackend(ABC):                     # today: BoostingBackend
     def for_execution(self, device: str) -> Self
 
 class TrainableBackend(ModelBackend):        # what the search loop needs
-    def prepare_fit_data(self, frame, target, schema, *, valid_frame, valid_target, reuse: bool) -> Prepared
+    consumes: ClassVar[Literal["frames", "sources"]]
+    def prepare_fit_data(self, train, target, schema, *, valid, valid_target, reuse: bool) -> Prepared
     def fit_prepared(self, prepared: Prepared) -> None
     def predict_prepared_score(self, features: Any) -> np.ndarray
     def can_reuse_prepared(self, search_space) -> bool
 ```
 
-For `tabnn`, `Prepared` holds encoded tensors (§5) rather than CatBoost pools —
-and unlike quantization, tensor encoding is *always* reusable across trials, so
-`can_reuse_prepared` returns `True` whenever the search space does not touch the
-encoding itself.
+`consumes` is what §6 turns on: `"frames"` (boosting, today's behaviour, two
+materialized polars frames) or `"sources"` (tabnn: `ParquetSource` + a group
+predicate, nothing materialized). For tabnn, `Prepared` holds **paths to an
+encoded parquet cache**, not tensors — and unlike CatBoost quantization that
+cache is *always* reusable across trials, so `can_reuse_prepared` returns `True`
+unless the search space touches the encoding itself.
 
 ## 3. Locked decisions (proposed)
 
@@ -105,12 +108,13 @@ encoding itself.
   `Task._backend_class` becomes `Task._backend_class_for(config.backend)`.
   `ArtifactRepository` takes the resolved class as it does today.
 - **N4 — the NN trains in-process with a plain torch loop,** not through
-  `avatar/train.py`. `train.py` is a Hydra CLI built around Accelerate, parquet
-  `IterableDataset`s, MLflow and checkpoint dirs; AutoML hands the backend two
-  in-memory polars frames and expects N fits inside one process. Reusing it
-  would mean serializing every trial to disk and re-reading it. The new loop is
-  ~200 lines in `backends/tabnn/trainer.py`; the *modules* it trains are
+  `avatar/train.py`. `train.py` is a Hydra CLI built around Accelerate, MLflow,
+  checkpoint directories and DDP sharding; AutoML needs N fits inside one
+  process, ranked by one validation metric, with no CLI and no distributed
+  setup. The new loop is ~200 lines in `backends/tabnn/trainer.py`; the
+  *modules* it trains and the *dataset/collate* classes it reads through are
   avatar's, not new ones.
+
 - **N5 — the modules are reused verbatim:**
   `avatar.nn.embedding.tabular.TabularEmbedding` → embedding,
   `avatar.nn.tabular.TabularTransformer` → encoder,
@@ -119,11 +123,15 @@ encoding itself.
   (`BCEWithLogitsLoss` / `CrossEntropyLoss` / `MSELoss` already selected by
   `num_classes` + `task_type`), `avatar.pipeline.uplift.SLearner` → uplift,
   `avatar.data.tabular_batch.TabularBatch` → the batch contract.
-- **N6 — engine naming.** The canonical tabnn engine becomes
-  `engine="tabular_transformer"` (the class was renamed from `STEv2` in
-  `tabular_refactor.md`); `"ste"` is accepted as a deprecated alias so the
-  reserved value in the shipped config keeps working. Adding an engine later
-  (MLP, FT-Transformer) is a registry entry plus a default space.
+- **N6 — the tabnn engine is `engine="transformer"`.** `"ste"` is *rejected*
+  with an `UnsupportedBackendError` naming the replacement: it was only ever a
+  reserved value, no tabnn artifact exists, and the class it referred to was
+  already renamed `STEv2 -> TabularTransformer` in `tabular_refactor.md`. The
+  `engine` string is persisted in `backend.json` and checked on load, so this is
+  the last free moment to choose it. Adding an engine later (`mlp`,
+  `ft_transformer`) is a registry entry plus a default search space; a
+  sequence-model engine, if it ever arrives, gets its own name rather than
+  overloading this one.
 - **N7 — encoding reuses `avatar.preprocessing.local.TabularPreprocessor`.**
   It fits from any `pyarrow.dataset.Dataset`, so the prepared polars frame is
   handed over in memory (`ds.dataset(frame.to_arrow())`) with no parquet round
@@ -134,10 +142,14 @@ encoding itself.
   `dump()` is JSON-safe and goes straight into `backend.json`; `load()` restores
   it for inference. This also keeps AutoML's encoding identical to the encoding
   used by hand-written avatar training runs.
-- **N8 — CPU is supported.** The current `tabnn + device="cpu"` ban has to go:
-  the unit suite has no GPU (and this host's driver is too old for torch CUDA),
-  so a CPU path is the only way the backend can be tested at all. GPU stays the
-  documented default and the only remote option.
+- **N8 — CPU is supported, with a warning.** The current `tabnn + device="cpu"`
+  ban goes: the unit suite has no GPU (this host's driver is too old for torch
+  CUDA), so a CPU path is the only way the backend is testable at all, and the
+  boosting backend already supports both devices. `env_type="osiris"` keeps
+  requiring `device="gpu"` (existing rule, unchanged). `device="cpu"` logs one
+  explicit warning naming the training-row count, because CPU x `n_trials` x
+  epochs is how a one-hour run silently becomes a one-day run.
+
 - **N9 — hyperopt is enabled for tabnn.** The `"Optuna hyperopt is available
   only for boosting"` guard is removed once `fit_model` is family-agnostic.
   Epoch count is part of the search space, and every trial early-stops on the
@@ -149,10 +161,27 @@ encoding itself.
   `uplift` via `SLearner` only — the boosting backend's S/T/X metalearner search
   is out of scope for v1, and `UpliftTaskConfig` gains no new field (an
   unsupported metalearner combination raises `UnsupportedBackendError`).
-- **N11 — model-part layouts are unchanged.** `global`, `per_group` and
-  `global_and_per_group` come from `TrainingCoordinator`, above the backend, so
-  they work for free — at N× the training cost. The docs will say plainly that
-  `per_group` × `n_trials` × epochs is how a one-hour run becomes a one-day run.
+- **N11 — model-part layouts are unchanged, but partitioned lazily.** `global`,
+  `per_group` and `global_and_per_group` are decided by `TrainingCoordinator`
+  above the backend, so they work for free. Under `consumes="sources"` the
+  per-group split becomes a scan predicate (`scan().filter(group == value)`)
+  instead of `DataFrame.partition_by`, which is what makes per-group training
+  possible at all when one split does not fit in RAM. Cost is unchanged in the
+  docs' warning sense: `per_group` x `n_trials` x epochs is how a one-hour run
+  becomes a one-day run.
+- **N12 — out-of-core by construction: encode once to a packed parquet cache.**
+  Real datasets already exceed RAM under the boosting backend, so the NN backend
+  must not inherit AutoML's in-memory assumption. `prepare_fit_data` therefore:
+  (1) fits `TabularPreprocessor` in one streaming pass (its `MeanStdAccumulator`
+  / `ValueCountAccumulator` are already batched at `batch_rows=250_000`), then
+  (2) `transform(..., output="packed", identity_cols=[target, treatment, …])`
+  writes `<output_dir>/cache/<part>/{train,valid}/part-0.parquet` with the
+  `cat_features` / `num_features` list columns that `avatar.data.TabularDataset`
+  expects. Every Optuna trial then streams that cache through
+  `TabularDataset` + `TabularCollateFn`; peak memory is one batch. The cache is
+  the streaming analogue of CatBoost's shared quantized pool: written once,
+  reused by every trial, deleted when the model part finishes (kept on
+  `verbose`/debug). Encoding cost is paid once, not `n_trials` times.
 
 ## 4. Target layout
 
@@ -166,8 +195,9 @@ avatar/automl/backends/
   tabnn/
     __init__.py
     interface.py      TabNNBackend: device handling, module construction
-    encoding.py       polars frame <-> TabularBatch via TabularPreprocessor
+    encoding.py       TabularPreprocessor fit + packed-parquet cache (N12)
     trainer.py        the training loop: epochs, early stop, best-weights
+    loader.py         TabularDataset + TabularCollateFn over the cache
     base.py           BaseTabNNBackend: prepare_fit_data / fit_prepared / save / load
     binary.py         BinaryTabNNBackend        (num_classes=1, classification)
     regression.py     RegressionTabNNBackend    (num_classes=1, regression)
@@ -176,56 +206,92 @@ avatar/automl/backends/
     spaces.py         default_search_space(engine, …)
 ```
 
-## 5. Encoding: polars frame -> `TabularBatch`
+## 5. Data path: sources -> encoded cache -> `TabularBatch`
 
-`prepare_data` (unchanged) already produces a frame with
-`schema.categorical` (strings) and `schema.numerical` (floats, hidden-state
-columns already expanded to `f"{column}__{i}"` scalars).
+Nothing is materialized. The three passes over the data are:
 
 ```
-fit:     TabularPreprocessor(categorical_columns=schema.categorical,
-                             numeric_columns=schema.numerical,
-                             spec_tokens={"unk": 0})
-             .fit(ds.dataset(frame.to_arrow()))
-transform: -> cat codes  (B, n_cat) int64, globally offset, unseen -> unk
-           -> num values (B, n_num) float32, standardized, NaN preserved
-batch:   TabularBatch(cat_features=…, num_features=…, hidden_states=…)
+1. schema        scan().collect_schema()          parquet footers only, no rows
+                 + hidden-state dims              one small read
+2. encoder fit   TabularPreprocessor.fit(ds)      streaming, batch_rows=250k
+                   categorical_columns=schema.categorical
+                   numeric_columns=schema.numerical
+                   spec_tokens={"unk": 0}
+3. encode        .transform(ds, out, output="packed",
+                            identity_cols=[target, treatment, group, date])
+                 -> cache/<part>/{train,valid}/part-0.parquet
+```
+
+`TabularPreprocessor` gives exactly what `TabularEmbedding` expects: a *shared*
+categorical vocabulary with per-column offsets (`offset_map`, `vocab_size`, a
+reserved `unk` id 0 that unseen values map to) and standardized numericals
+(`mean_std`, optional `signed_log1p`). Its `dump()` is JSON-safe and goes
+straight into `backend.json`; `load()` restores it for inference. This also
+keeps AutoML's encoding identical to the encoding used by hand-written avatar
+training runs.
+
+Each trial then reads the cache with the classes that already exist:
+
+```python
+TabularDataset(path=cache / "train", shuffle_files=True, shuffle_pq=True,
+               hidden_state_columns=[...])          # avatar/data/dataset/
+TabularCollateFn(target_column="target", is_regression=…)  # -> TabularBatch + targets
 ```
 
 Two details that are decisions, not mechanics:
 
 - **Hidden states.** `prepare_data` flattens `hidden_state_columns` into scalar
   numerical features, which is right for a booster and lossy for a network:
-  `TabularEmbedding` has a `hidden_state_aggregator` and
-  `TabularClassification` has a late-fusion `extra_hidden_dim` path for exactly
-  this. `_ModelEntry.hidden_dimensions` already records `{column: dim}`, so the
-  grouping is recoverable. **Wave 1** feeds them as plain numerical features
-  (simple, works, matches boosting). **Wave 2** regroups them into
-  `TabularBatch.hidden_states` and wires the late-fusion path.
+  `TabularEmbedding` has a `hidden_state_aggregator`, `TabularClassification`
+  has a late-fusion `extra_hidden_dim` path, and `TabularDataset` already reads
+  `hidden_state_columns` natively. Under N12 the cache can simply carry the
+  original list column through as an identity column, so the regrouping problem
+  disappears. **Wave 1** still feeds them as plain numerical features (matches
+  boosting, one less moving part); **wave 2** passes them through as
+  `TabularBatch.hidden_states` and wires late fusion.
 - **`TabularClassification.forward` is not hidden-state-optional today.** It
   runs `tab_features.hidden_states.isnan()` unconditionally, so it raises on
   `hidden_states=None` (and on the `dict` the `TabularBatch` docstring
-  advertises). Wave 1 must fix that guard in `avatar/pipeline/tabular/
-  classification.py` — a genuine pre-existing bug, not an AutoML concern.
+  advertises). Wave 1 must fix that guard in
+  `avatar/pipeline/tabular/classification.py` — a genuine pre-existing bug, not
+  an AutoML concern.
 
 ## 6. Training loop (`trainer.py`)
 
 One function, deliberately small:
 
 ```python
-fit_network(model, train, valid, *, objective, direction, params, device, seed, verbose) -> FitOutcome
+fit_network(model, train_cache, valid_cache, *, objective, direction,
+            params, device, seed, verbose) -> FitOutcome
 ```
 
-- full-batch tensors already on the device when they fit, otherwise an index
-  sampler over pinned CPU tensors — no `DataLoader` workers, no parquet;
+- batches come from `TabularDataset` + `TabularCollateFn` over the cache
+  (`num_workers=0` — the encoding is already done, the reader is IO-bound and a
+  worker pool inside an Optuna trial costs more than it saves);
 - AdamW + linear warmup / cosine decay (`lr`, `weight_decay`, `warmup_ratio`);
-- one validation pass per epoch computing the task's `objective_metric`;
+- one validation pass per epoch, streaming the valid cache, accumulating scores
+  and targets into two `float32` arrays (one value per row — that fits even when
+  the feature matrix does not) and computing the task's `objective_metric`;
 - `patience` epochs without improvement stops the trial; the best epoch's
-  `state_dict` is kept in memory and restored at the end;
+  `state_dict` is kept in memory (moved to CPU) and restored at the end;
 - `torch.manual_seed(random_state)` + deterministic algorithms where available,
-  so a re-run of the same trial reproduces its score;
+  so a re-run of the same trial reproduces its ranking;
 - progress through `avatar.automl.progress.log_progress`, in the existing
   `[stage i/n] …` format, so local and Osiris logs stay uniform.
+
+Prediction mirrors it: `predict_score` streams the test source through the
+fitted preprocessor and the model, concatenating scores — the one array that is
+allowed to be O(rows).
+
+**What this costs above the backend.** `TrainingCoordinator` currently calls
+`DataPreparation.read_source` and hands `_fit_one` two materialized frames. For
+`consumes="sources"` it must skip that and pass `ParquetSource` + the group
+value instead; `prepare_data`'s validation work (dtype checks, hidden-state
+dims, fitted-schema enforcement) gets a lazy sibling that operates on
+`ParquetSource.scan()` — which already returns a `pl.LazyFrame` — plus one
+sampled batch for the value-level checks. This is the single largest piece of
+work in the plan and the only one that touches shared code, which is why S0's
+parity harness exists before it.
 
 ## 7. Config surface
 
@@ -277,12 +343,18 @@ Every stage ends green on `pytest` **and** on the boosting parity harness.
   for everything below; without it the refactors are unverifiable.
 - **S1 — backend-neutral seams.** N2 + N3 + the `fit_model` generalization. Pure
   refactor: no new behaviour, parity must be byte-identical.
-- **S2 — config.** N6 + N8 + N9: engine alias, CPU allowed, hyperopt allowed for
-  tabnn. Guards replaced by `UnsupportedBackendError` where a combination truly
-  is unsupported.
-- **S3 — encoding + trainer + `BinaryTabNNBackend`,** `hyperopt=False`, CPU,
-  global layout. First end-to-end `train -> save -> load -> predict -> evaluate`
-  on synthetic data.
+- **S2 — config.** N6 + N8 + N9: `engine="transformer"`, CPU allowed, hyperopt
+  allowed for tabnn. Guards replaced by `UnsupportedBackendError` where a
+  combination truly is unsupported.
+- **S2b — the lazy data path** (N12, §6 "what this costs"): `consumes` on the
+  backend, `TrainingCoordinator` passing `ParquetSource` for `"sources"`
+  backends, and the lazy sibling of `prepare_data`. No tabnn code yet — this is
+  a shared-code change and lands on its own, with parity byte-identical and the
+  boosting path still taking materialized frames.
+- **S3 — encoder cache + trainer + `BinaryTabNNBackend`,** `hyperopt=False`,
+  CPU, global layout. First end-to-end `train -> save -> load -> predict ->
+  evaluate` on synthetic data, with a memory assertion: peak RSS stays flat as
+  the synthetic train split grows 10x.
 - **S4 — hyperopt for tabnn** (`fit_model` with the tabnn default space), then
   `per_group` / `global_and_per_group`.
 - **S5 — regression + multiclass + response**, including `class_order`
@@ -298,21 +370,30 @@ Every stage ends green on `pytest` **and** on the boosting parity harness.
 |---|---|
 | a refactor silently changes boosting results | S0 parity harness is the gate for every stage |
 | GPU memory accumulates across Optuna trials | one model per trial, explicit `del` + `torch.cuda.empty_cache()` between trials; the best trial keeps CPU weights |
-| in-memory training does not scale like the streaming `train.py` | AutoML already materializes both splits as polars frames — the NN adds tensors of the same order; document the ceiling and fall back to index-sampled CPU tensors |
+| the encoded cache needs disk next to `output_dir` | size it in the docs (packed float32 + int32 ≈ the source feature bytes); write under `output_dir/cache/<part>`, delete per model part, and fail early with a clear message if the write fails |
+| the cache write becomes the new bottleneck for small data | `prepare_fit_data` keeps an in-memory fast path when the split is provably small (row count x width under a threshold); same code path, no cache files |
+| tabnn scales past data the boosting backend cannot load | real asymmetry, and it is the boosting side that is wrong — logged as a separate follow-up (chunked pool construction / lazy `prepare_data` for boosting), not smuggled into this design |
 | NN results are not reproducible run to run | seed everything; accept that GPU non-determinism makes only the *trial ranking*, not the loss, exactly reproducible — state this in the docs rather than pretending otherwise |
 | CatBoost GPU and torch GPU in one process | they never run in the same task; `device` is resolved per operation |
 | `tabnn` quietly becomes the default | no: `backend` is a required explicit field |
 
-## 11. Open questions
+## 11. Decisions taken (2026-09-16)
 
-1. **Engine name.** `engine="tabular_transformer"` with `"ste"` as an alias
-   (N6), or keep `"ste"` as the only public name until the avatar -> fmlib
-   rename?
-2. **CPU support** (N8) — acceptable, or must tabnn stay GPU-only even though
-   that leaves the backend untestable in CI?
-3. **Task order.** Is `uplift` wanted earlier than wave 2? It is the task where
-   a network most plausibly beats the boosting S/T/X metalearners.
-4. **Streaming.** Does any real dataset already fail to fit in memory under the
-   boosting backend? If yes, the NN backend should read parquet directly
-   (`avatar.data.TabularDataset`) instead of inheriting AutoML's in-memory
-   assumption, and that changes §6 substantially.
+1. **Engine name — `engine="transformer"`.** `"ste"` is rejected outright; see N6.
+2. **CPU — supported, with a warning.** See N8. `env_type="osiris"` stays GPU-only.
+3. **Task order — binary -> regression/multiclass/response -> uplift,** i.e. the
+   two waves of N10 as written. S6 (uplift via `SLearner`) stays last.
+4. **Streaming — required.** Real datasets already exceed RAM under the boosting
+   backend, so the NN backend is out-of-core by construction (N12): sources in,
+   packed parquet cache, one batch resident. This is what S2b and §6 are for,
+   and it is the largest piece of shared-code work in the plan.
+
+### Still needed before S2b
+
+Concrete numbers for the split that does not fit, to size the cache and the
+in-memory fast path: rows, feature count split into categorical / numerical /
+hidden-state columns and their dimensions, the parquet size on disk, and the
+RAM ceiling of the box where it OOMs. The likely first suspect is
+`_expand_hidden_states`: every `hidden_state_column` of dimension *d* becomes
+*d* separate `Float32` columns inside the polars frame, so a 512-dim embedding
+is 512 new columns materialized in one `with_columns` call.
