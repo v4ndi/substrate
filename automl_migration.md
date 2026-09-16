@@ -1,6 +1,6 @@
 # Design: migrate `fmlib.automl` -> `avatar.automl`
 
-Status: **proposed** (2026-09-16). Stage 1 of
+Status: **done** (2026-09-16), except V3 (Osiris, cluster-only). Stages 1-2 of
 `repos/combine_avatar_automl/combine_avatar_fmlib_automl.md`.
 
 Source: `repos/combine_avatar_automl/automl/fmlib-main` (`sber-amazme-fmlib`,
@@ -107,6 +107,15 @@ of scope** (follow-up F2).
   --spec ...`). The generated Osiris command string is updated accordingly and
   is the one place where the import path leaks into runtime strings.
 
+- **D9 — the `autocampaignxfm` parity harness is not migrated.** `tools/automl_parity`
+  (1 949 lines) and the three `examples/automl/tests/*_autocampaignxfm_parity.ipynb`
+  notebooks with their `parity_*.yaml` configs are dropped. They target the
+  configuration API from before `model_scope`/`report_month_column` were removed,
+  and the `autocampaignxfm` reference package is in neither repository: run
+  against the *source* repo they are 22 failed / 6 passed / 4 skipped, i.e.
+  already dead there. Restoring them is one `git checkout` from
+  `automl/fmlib-main`, should the reference implementation resurface.
+
 ## 3. Execution plan
 
 ### Stage A — environment (no repo changes)
@@ -149,11 +158,7 @@ of scope** (follow-up F2).
    the installation section (fmlib poetry / shared `/home/datalab/nfs/...` env)
    with avatar's `pip install -e .`; keep the Osiris kernel recipe.
    Notebook outputs are stripped on copy.
-2. `tools/automl_parity/` (1 949 lines, 4 test modules) — the
-   autocampaignxfm parity harness. Copy to `substrate/tools/automl_parity/`,
-   its tests to `tests/automl/parity/`. The `autocampaignxfm` reference package
-   is **not** in either repo (it was deleted from the automl worktree), so
-   these tests keep their existing skip-if-missing guard.
+2. `tools/automl_parity/` — **not migrated**, see D9.
 3. `data/make_data/make_synth.ipynb` is **not** copied: it builds a one-row
    multimodal *sequence* parquet for `MultimodalParquetDataset`, not an AutoML
    tabular dataset. The pipeline notebooks read cluster paths
@@ -162,22 +167,42 @@ of scope** (follow-up F2).
    the task tests.
 4. `README.md` + `MAINTENANCE.md`: one section describing `avatar.automl`.
 
-### Stage E — verification (§4), then commit 5 = plan status -> done.
+### Stage E — verification (§4), then plan status -> done.
 
 ## 4. Verification
 
-- **V1 — unit suite.** 267 automl tests + 272 avatar tests green, no new skips.
-- **V2 — local end-to-end.** On generated synthetic parquet, for each of the five tasks:
-  `train -> save -> load -> predict -> evaluate` with `env_type="local"`,
-  `device="cpu"`, `hyperopt=True, n_trials=2`, both `catboost` and `xgboost`,
-  and `model_layout` in `{global, per_group, global_and_per_group}`. Assert
-  metrics and `best_params` match a run of the same config against the *source*
-  `fmlib.automl` in its own venv — the same bit-identical-by-construction
-  discipline used for the MTL and ResponseFeatureTransformer ports.
-- **V3 — Osiris.** Not reproducible locally. One `env_type="osiris"` binary run
-  on the cluster after the move, checked against the pre-migration run id.
-- **V4 — packaging.** `python -m build` and assert the wheel contains
-  `avatar/automl/**` and no `*/tests/*`.
+Results as of 2026-09-16, python 3.12.12 venv, CPU only.
+
+- **V1 — unit suite. PASS.** `pytest` on the whole repo: **740 passed**, 66 slow
+  deselected — 165 avatar (119 + 46 Spark) + 575 automl. The same 575 automl
+  cases run against the *source* repo with the same interpreter: 575 passed.
+  No new skips. `ruff check .` clean.
+- **V2 — local end-to-end parity. PASS, byte-identical.** Six configurations
+  over synthetic parquet (4 000 / 1 500 / 1 500 rows, 2 categorical + 3
+  numerical + one `List(Float32)` hidden-state column, a group role, a date
+  role and a treatment role):
+
+  | case | task | engine | hyperopt | model_layout |
+  |---|---|---|---|---|
+  | `binary_catboost_both` | binary | catboost | 2 trials | global_and_per_group |
+  | `binary_xgboost_per_group` | binary | xgboost | off | per_group |
+  | `response_catboost_global` | response | catboost | off | global (+treatment) |
+  | `regression_xgboost_hyperopt` | regression | xgboost | 2 trials | global |
+  | `multiclass_catboost_global` | multiclass | catboost | off | global |
+  | `uplift_catboost_global` | uplift | catboost | off | global (+propensity) |
+
+  Each case runs `train -> save -> load -> predict -> evaluate` and records
+  `best_params`, `validation_metrics`, `feature_names`, `class_order`, the
+  evaluation metrics, and a SHA-256 digest of every numeric score column. The
+  JSON from `avatar.automl` and from `fmlib.automl` (source repo, same
+  interpreter, same data) compare **equal byte for byte**.
+- **V3 — Osiris. NOT RUN** (no scheduler here). One `env_type="osiris"` binary
+  run on the cluster, checked against a pre-migration run id, plus loading one
+  pre-migration artifact, still has to happen before anyone depends on the
+  remote path.
+- **V4 — packaging. PASS.** `python -m build --wheel` produces
+  `avatar-0.1.0-py3-none-any.whl` with 55 `avatar/automl/*` modules and zero
+  test files.
 
 ## 5. Risks
 
@@ -185,7 +210,7 @@ of scope** (follow-up F2).
 |---|---|
 | `numpy<2` in avatar vs `numpy==1.26.4` in fmlib | same major; pin stays `<2`, V1 catches the rest |
 | catboost GPU unavailable on this host (driver too old) | V2 runs `device="cpu"`; GPU path is V3 |
-| reformatting 9 795 lines hides a real change | D4 is a separate commit on top of a green suite; review with `--ignore-all-space` |
+| reformatting 9 795 lines hides a real change | D4 is a separate commit on top of a green suite; V2 then reproduced byte-identical results |
 | trained artifacts on the cluster stop loading | D5 freezes every persisted string; V3 loads a pre-migration artifact |
 | `polars` becomes a hard dep of a torch library | accepted — automl's public result types are `pl.DataFrame` |
 
@@ -200,6 +225,14 @@ of scope** (follow-up F2).
 - **F2** — reconcile `avatar.automl.metrics.uplift` with `avatar.metrics.uplift`
   and `avatar.automl.reporting` with `avatar.metrics.campaign`.
 - **F3** — drop the `avatar/nn/tabular/ste` shim once D7 is resolved.
+- **F5** — the internal scratch column names (`__fmlib_remote_row_id`,
+  `__fmlib_calibration_row_id`, `__fmlib_key_occurrence`, `__fmlib_truth_row`)
+  and the Osiris job-name prefix `fmlib-<action>-<run id>` are kept verbatim.
+  They are transient, not persisted, so renaming them is free — but pointless
+  until the avatar -> fmlib rename decides the final name.
+- **F6** — `examples/automl/configs/fmlib_*.yaml` keep their names: the prefix
+  used to contrast with the dropped `autocampaignxfm_*.yaml` and is consistent
+  with the eventual rename. Two migrated tests reference the paths literally.
 - **F4** — `EnvironmentConfig` defaults still point at the shared fmlib
   checkout (`/home/datalab/nfs/sber-amazme-fmlib/env`) and the gigachat image;
   revisit when avatar is renamed to fmlib.
