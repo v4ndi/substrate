@@ -1,0 +1,201 @@
+# Design: migrate `fmlib.automl` -> `avatar.automl`
+
+Status: **proposed** (2026-09-16). Stage 1 of
+`repos/combine_avatar_automl/combine_avatar_fmlib_automl.md`.
+
+Source: `repos/combine_avatar_automl/automl/fmlib-main` (`sber-amazme-fmlib`,
+GitHub `ConstantIrritation/automl`), package `fmlib/automl`.
+Target: `repos/combine_avatar_automl/substrate` (`avatar`, GitHub
+`v4ndi/substrate`), new package `avatar/automl`.
+
+After the whole migration `avatar` is renamed back to `fmlib`, so the eventual
+import path is `fmlib.automl` again. Every rename below is therefore chosen to
+survive that second rename without another sweep.
+
+---
+
+## 0. What is being moved
+
+`fmlib/automl` — 91 `.py` files, 16 966 lines (9 795 non-test + 30 test modules
+with 267 test functions).
+
+```
+automl/
+  config/      typed frozen dataclass configs (+ from_mapping/from_yaml)
+  data/        ParquetSource, FeatureSchema, CanonicalColumnMapper, prepare_data
+  backends/
+    boosting/  CatBoost/XGBoost adapters + Optuna hyperopt loop
+  calibrators/ isotonic + beta calibration
+  metrics/     registry: binary / multiclass / regression / uplift
+  tasks/       Binary/Response/Regression/Multiclass/Uplift facades
+               + planning/routing/preparation/training/prediction/evaluation/
+                 calibration/artifacts/operations/state
+  environment.py  local vs Osiris runners
+  lifecycle.py    artifact save/load/restore
+  reporting.py    matplotlib figures + XlsxWriter reports
+  run.py          remote worker entrypoint (`--spec run_spec.json`)
+  result_io.py, execution.py, progress.py, exceptions.py, types.py
+```
+
+**Key fact that makes this cheap:** `fmlib/automl` imports *nothing* from the
+rest of `fmlib`.
+
+```
+$ grep -rhoE "from fmlib\.[a-zA-Z0-9_.]+|import fmlib\.[a-zA-Z0-9_.]+" fmlib/automl \
+    | grep -v "fmlib\.automl"
+(no output)
+```
+
+All 263 `fmlib` references inside the package are `fmlib.automl.*`. The module
+is a self-contained, polars-based, sklearn/boosting subsystem that happens to
+live in a torch repo. Migration is a copy + a namespace rewrite, not a port.
+
+## 1. Gap analysis: source vs target
+
+| | `fmlib` (source) | `avatar` (target) | action |
+|---|---|---|---|
+| python | `>=3.11,<3.13` | `>=3.10` | bump avatar to `>=3.11` (**D3**) |
+| build | poetry | setuptools + `pyproject` | keep avatar's |
+| dataframes | polars (automl), pyarrow (nn) | pandas + pyarrow | add `polars` dep |
+| tests | in-package `**/tests/` | top-level `tests/`, `testpaths=["tests"]` | move (**D2**) |
+| ruff | line-length 128, ~25 rule sets | line-length 88, `E,F,I,W,B,UP,RUF` | reformat (**D4**) |
+| deps missing in avatar | — | — | `polars`, `optuna`, `xgboost`, `scikit-learn`, `scipy`, `matplotlib`, `XlsxWriter` |
+| deps already in avatar | — | `catboost` (extra), `betacal`, `omegaconf`, `pandas`, `numpy<2` | reuse |
+| `osiris` | optional, lazy `import osiris` | absent | stays optional (**D6**) |
+
+Name collisions inside `avatar` — none. `avatar.metrics.uplift`,
+`avatar.metrics.campaign` and `avatar.pipeline.uplift` are torch/pandas code;
+the AutoML copies live under `avatar.automl.metrics` / `avatar.automl.tasks`
+and never meet them on an import path. Deduplicating them is explicitly **out
+of scope** (follow-up F2).
+
+## 2. Locked decisions
+
+- **D1 — one package, verbatim first.** `fmlib/automl/**` lands at
+  `avatar/automl/**` with exactly one content change: `fmlib.automl` ->
+  `avatar.automl` in imports and docstrings. No refactor, no re-layout, no
+  renames in the same commit. Everything else is a separate, reviewable commit.
+- **D2 — tests move to `tests/automl/`,** mirroring the package path
+  (`avatar/automl/tasks/tests/test_binary.py` -> `tests/automl/tasks/test_binary.py`).
+  Rationale: avatar sets `testpaths = ["tests"]`, and
+  `[tool.setuptools.packages.find] include = ["avatar*"]` would otherwise ship
+  `avatar.automl.tests` (and its 7 200 lines) inside the wheel — the top-level
+  `exclude = ["tests*"]` does not match nested packages.
+- **D3 — `requires-python = ">=3.11"`.** `typing.Self` (used by
+  `backends/boosting/interface.py`) is 3.11+. avatar's own code is 3.10-clean
+  but nothing runs on 3.10 here; the dev venv is 3.12. Cheaper than rewriting
+  `Self` to a `TypeVar`.
+- **D4 — style alignment is its own commit,** run after the test suite is green
+  on the verbatim copy: `ruff format` at avatar's line-length 88 + `ruff check
+  --fix` for `E,F,I,W,B,UP,RUF`. Diff is large but mechanical, and the green
+  suite from the previous commit is the guard.
+- **D5 — artifact-format strings are frozen.** `__FMLIB_NULL__` /
+  `__FMLIB_UNKNOWN__` (`backends/boosting/base.py`) are baked into saved
+  XGBoost category vocabularies, and `backend.json` / `manifest.json` keys are
+  read by already-trained artifacts on the cluster. They are **not** renamed to
+  `AVATAR`, now or after the avatar->fmlib rename. Same for the
+  `binary_model`/`uplift_model`… artifact directory names.
+- **D6 — Osiris stays optional and untested locally.** `environment.py` already
+  lazy-imports `osiris` and raises `MissingDependencyError`. Only
+  `env_type="local"` is exercised by the migrated suite; the remote path is
+  verified on the cluster after the move (V3).
+- **D7 — `backend="tabnn"` / `engine="ste"` are kept as-is** in stage 2 even
+  though avatar's class is now `TabularTransformer` (`ste/` is a deprecation
+  shim). Renaming the public enum value belongs to the neural-network design
+  (stage 3), not to the migration.
+- **D8 — `run.py` stays a module entrypoint** (`python -m avatar.automl.run
+  --spec ...`). The generated Osiris command string is updated accordingly and
+  is the one place where the import path leaks into runtime strings.
+
+## 3. Execution plan
+
+### Stage A — environment (no repo changes)
+
+1. `uv venv --python 3.12 .venv` in `substrate/`.
+2. Add the new dependencies to `pyproject.toml` (see §1). `avatar.automl` is
+   not optional, so its deps go into `[project.dependencies]` — including
+   `polars`, which appears in the public result types (`avatar.automl.types`).
+   The two native boosting engines stay optional: `catboost` keeps its existing
+   extra and `xgboost` joins it, so a pure-torch install stays slim and the
+   engines raise `MissingDependencyError` when absent (they already do).
+3. `uv pip install -e .[spark,catboost,dev]` + `polars optuna xgboost
+   scikit-learn scipy matplotlib XlsxWriter` via the proxy from
+   `~/rusakov/init.sh`.
+4. Baseline: `pytest` on avatar (expect the current 272 passed / 2 skipped).
+
+### Stage B — verbatim copy (commit 1)
+
+1. `cp -r automl/fmlib-main/fmlib/automl substrate/avatar/automl`.
+2. `grep -rl 'fmlib\.automl' | xargs sed -i 's/fmlib\.automl/avatar.automl/g'`;
+   fix the three prose occurrences (`fmlib AutoML` in module docstrings ->
+   `avatar AutoML`) and the `fmlib_automl_progress_logger` ContextVar name.
+3. `python -c "import avatar.automl"`, then `pytest avatar/automl -q`
+   (tests still in-package at this point, run by explicit path).
+4. **Gate:** 267 test functions must pass with zero skips other than the
+   engine-availability ones.
+
+### Stage C — layout + style (commits 2–3)
+
+1. `git mv` the 30 test modules to `tests/automl/**` per D2; delete the empty
+   `**/tests/` packages; add `tests/automl/conftest.py` if any fixture relied on
+   package-relative paths.
+2. `pytest` (whole repo) — avatar's 272 + automl's 267.
+3. `ruff format` + `ruff check --fix` per D4; `pytest` again.
+
+### Stage D — docs, examples, tools (commit 4)
+
+1. `examples/automl/` — 5 pipeline notebooks + 12 test notebooks + 4 YAML
+   configs. Copy to `substrate/examples/automl/`, rewrite imports, and replace
+   the installation section (fmlib poetry / shared `/home/datalab/nfs/...` env)
+   with avatar's `pip install -e .`; keep the Osiris kernel recipe.
+   Notebook outputs are stripped on copy.
+2. `tools/automl_parity/` (1 949 lines, 4 test modules) — the
+   autocampaignxfm parity harness. Copy to `substrate/tools/automl_parity/`,
+   its tests to `tests/automl/parity/`. The `autocampaignxfm` reference package
+   is **not** in either repo (it was deleted from the automl worktree), so
+   these tests keep their existing skip-if-missing guard.
+3. `data/make_data/make_synth.ipynb` -> `examples/automl/make_synth.ipynb`
+   (the synthetic dataset every notebook reads).
+4. `README.md` + `MAINTENANCE.md`: one section describing `avatar.automl`.
+
+### Stage E — verification (§4), then commit 5 = plan status -> done.
+
+## 4. Verification
+
+- **V1 — unit suite.** 267 automl tests + 272 avatar tests green, no new skips.
+- **V2 — local end-to-end.** On `make_synth` output, for each of the five tasks:
+  `train -> save -> load -> predict -> evaluate` with `env_type="local"`,
+  `device="cpu"`, `hyperopt=True, n_trials=2`, both `catboost` and `xgboost`,
+  and `model_layout` in `{global, per_group, global_and_per_group}`. Assert
+  metrics and `best_params` match a run of the same config against the *source*
+  `fmlib.automl` in its own venv — the same bit-identical-by-construction
+  discipline used for the MTL and ResponseFeatureTransformer ports.
+- **V3 — Osiris.** Not reproducible locally. One `env_type="osiris"` binary run
+  on the cluster after the move, checked against the pre-migration run id.
+- **V4 — packaging.** `python -m build` and assert the wheel contains
+  `avatar/automl/**` and no `*/tests/*`.
+
+## 5. Risks
+
+| risk | mitigation |
+|---|---|
+| `numpy<2` in avatar vs `numpy==1.26.4` in fmlib | same major; pin stays `<2`, V1 catches the rest |
+| catboost GPU unavailable on this host (driver too old) | V2 runs `device="cpu"`; GPU path is V3 |
+| reformatting 9 795 lines hides a real change | D4 is a separate commit on top of a green suite; review with `--ignore-all-space` |
+| trained artifacts on the cluster stop loading | D5 freezes every persisted string; V3 loads a pre-migration artifact |
+| `polars` becomes a hard dep of a torch library | accepted — automl's public result types are `pl.DataFrame` |
+
+## 6. Follow-ups (not in this migration)
+
+- **F1** — stage 3: neural-network backend (`backend="tabnn"`), separate design
+  doc. The seams already exist: `BaseTaskConfig` validates `backend in
+  {"boosting","tabnn"}`, and `config/base.py` currently rejects
+  `tabnn+hyperopt` and `tabnn+cpu`. The work is generalizing
+  `BaseBoostingTask`/`SupervisedBoostingTask`/`fit_boosting_model` to a
+  backend-agnostic protocol.
+- **F2** — reconcile `avatar.automl.metrics.uplift` with `avatar.metrics.uplift`
+  and `avatar.automl.reporting` with `avatar.metrics.campaign`.
+- **F3** — drop the `avatar/nn/tabular/ste` shim once D7 is resolved.
+- **F4** — `EnvironmentConfig` defaults still point at the shared fmlib
+  checkout (`/home/datalab/nfs/sber-amazme-fmlib/env`) and the gigachat image;
+  revisit when avatar is renamed to fmlib.
