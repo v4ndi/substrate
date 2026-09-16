@@ -259,8 +259,9 @@ conflicted. What the new base asked for:
 | `tests/docs` checks every dotted name and path-looking code span in every markdown file | both documents move to `docs/decisions/`, which that check excludes by design, and the two example READMEs qualify their paths |
 | `accelerate` dropped from dependencies | nothing: `avatar.automl` never imported it |
 
-Verification after the rebase: 575 automl tests pass unchanged; the full suite
-is 1165 passed / 2 skipped with one pre-existing failure
+Verification after the rebase: 575 automl tests pass unchanged; the full
+default suite is 1156 passed / 2 skipped / 76 `slow` deselected, with one
+pre-existing failure
 (`docs/configuration/schema.md` still names `avatar.cam_inference`, removed by
 the inference refactor — untouched here, it is not ours to fix).
 
