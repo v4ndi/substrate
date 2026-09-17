@@ -111,11 +111,19 @@ unless the search space touches the encoding itself.
 
 ## 3. Locked decisions
 
-- **N1 — one new package, `avatar/automl/backends/tabnn/`,** mirroring
-  `backends/boosting/`: `interface.py` (shared runtime), `base.py` (assembly,
-  the `Trainer` call, persistence), `binary.py` / `regression.py` /
-  `multiclass.py` / `uplift.py` (task adapters), `spaces.py` (default space).
-  `backends/boosting/**` keeps its files; only the three shared pieces move up.
+- **N1 — one new package, `avatar/automl/backends/tabnn/`, laid out by what
+  changes on its own, not by mirroring `backends/boosting/`.** The boosting
+  package has a file per task because each task needs a different *native
+  estimator*: `regression.py:26-45` exists to choose between `CatBoostRegressor`
+  and `XGBRegressor` and to arrange their parameters. tabnn has no such fork —
+  by N5 the model is always `SupervisedLearner`, and binary, response,
+  regression and multiclass differ only in `num_classes` / `task_type`, the
+  injected loss and the score post-processing (sigmoid / softmax / identity).
+  That is a table, not four modules; the boosting shape solves a problem this
+  backend does not have. The rule is therefore **a module earns its file by
+  having its own reason to change**, which gives the eight files of §4 instead
+  of twelve. `backends/boosting/**` keeps its files; only the three shared
+  pieces move up.
 - **N2 — backend-neutral names at the task layer, renamed outright.**
   `BaseBoostingTask -> BaseTask`, `SupervisedBoostingTask -> SupervisedTask`,
   `fit_boosting_model -> fit_model` (`backends/search.py`),
@@ -288,7 +296,7 @@ unless the search space touches the encoding itself.
 
   The cache is written as **many files, not one**. `TabularPreprocessor.transform`
   currently opens a single `pq.ParquetWriter(output_path, schema)`
-  (`avatar/preprocessing/local/pipeline/tabular_pipe.py:156`); tabnn needs it
+  (`avatar/preprocessing/local/pipeline/tabular_pipe.py:154`); tabnn needs it
   split by row count or target file size. Sharding correctness does not depend
   on this — `ShardPlanner` splits by record, not by file
   (`avatar/data/base/iterable.py`) — but read parallelism and shuffle
@@ -332,8 +340,8 @@ unless the search space touches the encoding itself.
   projection. tabnn therefore uses **late fusion only**:
   `SupervisedLearner(hidden_state_dim=…, normalize_hidden_states={name: width},
   proj_hiddens_to_dim=…)` (`avatar/pipeline/tabular/supervised.py:154-175`,
-  width accounted at line 233), with `TabularDataset(hidden_state_columns=[…])`
-  reading the list column natively (`avatar/data/tabular/dataset.py:61`). Early
+  width accounted at lines 233-234), with `TabularDataset(hidden_state_columns=[…])`
+  reading the list column natively (`avatar/data/tabular/dataset.py:62`). Early
   fusion (`hidden_state_aggregator`, the embedding as an extra token) is not in
   wave 1 — it touches the encoder — and stays a candidate search axis later.
 
@@ -399,7 +407,7 @@ unless the search space touches the encoding itself.
     per-trial `run_dir` plus `mkdir(exist_ok=False)`
     (`avatar/automl/environment.py:238`) is the write-ahead marker, and the job
     name must carry `trial_id` (today it is `f"fmlib-{action}-{run_id[:8]}"`
-    with a fresh uuid, `environment.py:265`), so a crash between submit and
+    with a fresh uuid, `environment.py:266`), so a crash between submit and
     recording the id yields a findable orphan rather than a duplicate job.
   - **A failed trial is `tell(state=FAIL)` and the run continues.** Under
     `random` that costs one point out of K; the operation succeeds if any trial
@@ -440,9 +448,9 @@ unless the search space touches the encoding itself.
 
   - **An operation must not be terminal before it is finalized.** `status()`
     writes `state=aggregate` — i.e. `succeeded` — at
-    `tasks/operations.py:381`, *then* calls `_finalize_remote_train` (:388),
+    `tasks/operations.py:382`, *then* calls `_finalize_remote_train` (:388),
     and the polling loop skips operations already in
-    `succeeded`/`failed`/`partial_failed` (:375). A crash in between leaves an
+    `succeeded`/`failed`/`partial_failed` (:374-380). A crash in between leaves an
     operation that is terminal and unfinished, and no later `status()` will
     touch it again. Fix: a non-terminal `finalizing` state written before
     finalization, `succeeded` only after it, and finalization itself
@@ -484,7 +492,7 @@ unless the search space touches the encoding itself.
     "cards per trial" (N14) would be a lie locally.
 
   A fifth audit item — unsynchronized read-modify-write on `operation.json`
-  (`lifecycle.py:182-193`, with a shared `operation.json.tmp` temp name) — is
+  (`lifecycle.py:183-193`, with a shared `operation.json.tmp` temp name) — is
   **not** a concurrency problem in this design: the driver is the only writer
   of that file, and trial jobs write `result.json` inside their own `run_dir`.
   It becomes one through N14's recovery story, where "the container died, I run
@@ -499,27 +507,50 @@ unless the search space touches the encoding itself.
 ```
 avatar/automl/backends/
   __init__.py
-  interface.py        ModelBackend, TrainableBackend  (from boosting/interface.py)
+  interface.py        ModelBackend, TrainableBackend  (ModelBackend from
+                      boosting/interface.py, where it is BoostingBackend; the
+                      Trainable half is factored out of boosting/base.py)
   search.py           FitResult, fit_model, suggest_params  (from boosting/hyperopt.py)
   boosting/           unchanged except the three imports above
   tabnn/
     __init__.py
-    interface.py      TabNNBackend: device handling, module construction
-    encoding.py       TabularPreprocessor fit + packed-parquet cache (N12)
+    data.py           one cache contract, both directions: TabularPreprocessor fit,
+                      packed-parquet write, TabularDataset + TabularCollateFn read (N12)
     assembly.py       build model/optimizer/scheduler/dataloaders/EarlyStopping
     metric.py         AutoMLMetric(ScalarMetric) adapter (N4c)
-    loader.py         TabularDataset + TabularCollateFn over the cache
     runner.py         trial runners: in-process / torchrun subprocess / Osiris job (N4b)
-    base.py           BaseTabNNBackend: prepare_fit_data / fit_prepared / save / load
-    binary.py         BinaryTabNNBackend        (num_classes=1, classification)
-    regression.py     RegressionTabNNBackend    (num_classes=1, regression)
-    multiclass.py     MulticlassTabNNBackend    (num_classes=K, class_order in backend.json)
+    base.py           BaseTabNNBackend (prepare_fit_data / fit_prepared / save / load)
+                      + Binary / Response / Regression / Multiclass adapters
     uplift.py         UpliftTabNNBackend        (SLearner, wave 2)
     spaces.py         default_search_space(engine, preset)
 ```
 
 No `registry.py` (N3): the family→class mapping is a dict in
 `Task._backend_class_for()`.
+
+Why these eight and not the twelve of the first draft (N1):
+
+- **No tabnn `interface.py`.** The shared ABCs move *up* to
+  `backends/interface.py`, so a second file of that name inside `tabnn/` would
+  be both redundant and confusing, and the boundary the draft drew through it
+  ("device handling" vs "persistence") is not a boundary anything follows.
+- **`loader.py` folded into `data.py`.** Reading and writing the cache are two
+  sides of one contract: change `identity_cols` on the write side and
+  `hidden_state_columns` must change on the read side. Splitting them invites
+  exactly the drift that would silently produce wrong features.
+- **The per-task modules folded into `base.py`.** The adapters are still
+  classes — the task layer binds one as a class attribute (`tasks/binary.py:49`,
+  `tasks/regression.py:44`, read again when an artifact is loaded at
+  `tasks/base.py:849`) — but each is 10-20 lines, and multiclass adds only
+  `class_order` persistence. `base.py` then lands around 250-350 lines, still
+  smaller than `boosting/base.py` (440).
+- **What stays separate, and why.** `uplift.py`: a different model (`SLearner`),
+  treatment handling, a later wave, and the place that grows if S/T/X parity is
+  ever wanted — `boosting/uplift.py` is 649 lines for that reason. `metric.py`:
+  small, but it is the single point where torch meets AutoML's metric registry,
+  and its separateness is what documents that boundary. `runner.py`: two of its
+  three implementations arrive later and none of them belong inside a backend.
+  `spaces.py`: data, not logic.
 
 ## 5. Data path: sources -> encoded cache -> `TabularBatch`
 
@@ -617,7 +648,8 @@ them:
   The loop sets `control.should_save = True` before firing `on_evaluate` and
   lets callbacks veto it; `EarlyStoppingCallback` clears the flag whenever the
   metric did not improve. So a checkpoint exists only for an improvement, and
-  `max_checkpoints=1` keeps exactly one file per trial.
+  `max_checkpoints=1` keeps exactly one step directory per trial
+  (`avatar/train/callbacks/checkpoint.py:26`).
 - **Callback order is a contract, not a style choice.** Early stopping must run
   before the checkpoint callback, or the veto arrives after the write.
 - **Evaluation cadence is a function of data size** (N9). On a 3 M-row split,
@@ -659,7 +691,7 @@ What AutoML contributes on top, and nothing more:
    materialize, so its behaviour is unchanged and only the call site of
    `read_source` moves. The plan step needs no new code —
    `ParquetSource.unique_column_values` already exists for exactly this reason
-   (`tasks/base.py:226`, used by the remote path).
+   (`tasks/base.py:229`, used by the remote path).
 2. Schema construction must stop expanding hidden states for tabnn (N13), and
    `TabularSchema` must carry their widths as a field.
 
@@ -726,7 +758,10 @@ backend.json        engine, params, random_state, verbose, task_state,
 preprocessor.yaml   the same preprocessor state as a standalone file (§12, D5),
                     loadable with TabularPreprocessor.load() without parsing the
                     AutoML artifact — for hand-written training and inference
-model.safetensors   state_dict of the assembled module (the `embedding`,
+model.safetensors   state_dict of the winning trial's checkpoint, re-saved by
+                    `save()`: `CheckpointCallback` writes the full training
+                    state (optimizer, scheduler, RNG) per step directory, and
+                    the artifact keeps only the weights (the `embedding`,
                     `tabular_backbone`, `agg_layer`, `proj`, `out_head` key
                     prefixes SupervisedLearner fixes, so a checkpoint trained
                     by hand and one trained by AutoML are interchangeable)
@@ -741,7 +776,10 @@ validated on predict the same way `feature_order` is.
 ## 9. Staged plan
 
 Every stage ends green on `pytest` **and** on the boosting parity harness.
-Order confirmed in §12 (E4).
+The backbone order was confirmed in §12 (E4); three stages were added after it
+and do not disturb it — **S2c** (parallel encoding, §13) can run beside S3,
+**S4a** (remote reliability, N16) is a prerequisite of **S4b** (trial fan-out,
+N14) and depends on nothing tabnn-specific, so it may land any time after S0.
 
 - **S0 — lock boosting.** Land the migration's V2 harness as
   `tests/automl/test_boosting_parity.py` (marked `slow`): the six
@@ -848,7 +886,7 @@ answered, and where it landed:
 
 | id | answer | effect |
 |---|---|---|
-| A1 | one package | N1 unchanged |
+| A1 | one package | N1 — one package; its internal layout revised later the same day (§4) |
 | A2 | rename without aliases | N2 rewritten |
 | A3 | dict, no registry module | N3 rewritten, `registry.py` dropped from §4 |
 | A4 | `engine="tabular_transformer"` | N6, S2 |
@@ -881,7 +919,7 @@ Each was re-checked against this branch; seven reproduce in the current code.
 |---|---|---|
 | operation `succeeded` before finalization | `tasks/operations.py:375,381,388` | **N16**, S4a |
 | partial submit loses job ids | `tasks/operations.py:178-208` | **N16**, S4a; the remaining window by N14 |
-| no synchronization of shared lifecycle state | `lifecycle.py:182-193`, `write_json` :48 | **N16** — single-writer check, not a lock; not a parallel-jobs problem here |
+| no synchronization of shared lifecycle state | `lifecycle.py:183-193`, `write_json` :48 | **N16** — single-writer check, not a lock; not a parallel-jobs problem here |
 | `status(wait=True)` waits forever on `unknown` | `environment.py:345,372`, `tasks/operations.py:428` | **N16**, S4a |
 | `CUDA_VISIBLE_DEVICES` mutates the user's process | `environment.py:142`, no restore at :165 | **N16**, S2 |
 | backend boundary hard-wired to boosting | `config/base.py`, `tasks/supervised.py` | N2, N3, N6, N8, N9; S1, S2 |
