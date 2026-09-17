@@ -2,7 +2,8 @@
 
 Status: **proposed**, open questions resolved 2026-09-16 (§11), review answers
 and the `obligatory.md` audit items applied 2026-09-17 (§12), cross-checked
-against an independent design the same day (§13). Stage 3 of the combine-avatar-automl task, on top of
+against an independent design the same day (§13); §14 says how the remote path
+is tested without a cluster. Stage 3 of the combine-avatar-automl task, on top of
 [automl_migration.md](automl_migration.md) (stages 1–2, done).
 
 Written against `master`, re-grounded on `refactor/data-sharding-hdfs`
@@ -212,9 +213,12 @@ unless the search space touches the encoding itself.
   file** next to the model (§8) so it can be restored with
   `TabularPreprocessor.load()` without parsing the AutoML artifact.
 - **N8 — CPU is supported, with a warning** (§12, D1). The current
-  `tabnn + device="cpu"` ban goes: the unit suite has no GPU, so a CPU path is
-  the only way the backend is testable at all, and the boosting backend already
-  supports both devices. `env_type="osiris"` keeps requiring `device="gpu"`.
+  `tabnn + device="cpu"` ban goes: the default unit suite must stay runnable
+  without a card, and the boosting backend already supports both devices. The
+  development box does have one A100 80 GB — the target card of §7 — so the GPU
+  path is genuinely testable here (§14) and the CPU path is not a substitute
+  for it; it is what keeps the suite portable.
+  `env_type="osiris"` keeps requiring `device="gpu"`.
   `device="cpu"` logs one explicit warning naming the training-row count,
   because CPU × `n_trials` × epochs is how a one-hour run silently becomes a
   one-day run.
@@ -808,6 +812,7 @@ Order confirmed in §12 (E4).
 | encoding is a serial bottleneck in front of every trial | process pool over shards, mergeable accumulators, one file per shard (N12, S2c) |
 | NFS cannot feed the cards | write the cache as many files, not one; if the split fits, copy it to node-local disk once at job start and read locally |
 | an expired Kerberos ticket kills a long job | training jobs never read HDFS: the source is read once during encoding, the cache lives on NFS (N12) |
+| the scheduler contract is assumed, not verified: `create(**kwargs)` and the state strings behind `_STATE_ALIASES` (`environment.py:346`) | all contact with the client stays in three methods (`create`, `list`, `failure_logs`); a contract test asserts the stub accepts exactly what `submit` sends; the strings themselves are V3 on the cluster (§14) |
 | a crash between submit and recording a job id duplicates work | deterministic per-trial `run_dir` (`mkdir(exist_ok=False)`) and `trial_id` in the job name, so an orphan is found instead of resubmitted (N14) |
 | tabnn scales past data the boosting backend cannot load | real asymmetry, and it is the boosting side that is wrong — logged as a separate follow-up (chunked pool construction / lazy `prepare_data` for boosting), not smuggled into this design |
 | NN results are not reproducible run to run | seed everything; byte-identical parity is claimed only for the local sequential CPU path, cluster runs assert metrics within tolerance (N14) |
@@ -885,7 +890,10 @@ Each was re-checked against this branch; seven reproduce in the current code.
 
 ### Still open
 
-- **V3** — the Osiris verification of the migration itself (needs the cluster).
+- **V3** — what genuinely needs the cluster, now that §14 says what does not:
+  the real `osiris.create` signature and the real state strings, pool and
+  resource semantics, Kerberos/HDFS, shared-filesystem latency under K jobs,
+  and a second GPU.
 - **Early fusion** of hidden states as a search axis (N13 defers it).
 - **Wave-based TPE on the cluster** — supported by the persistence in N14,
   switched on only if a live driver turns out to be acceptable.
@@ -938,3 +946,78 @@ hardware and the defaults derived from it (§7); cache lifetime, keying, sizing
 and NFS-vs-HDFS under an expiring Kerberos ticket (N12); epochs versus steps for
 early stopping on large splits (N9). Its `engine="ste"` also predates the
 `STEv2 -> TabularTransformer` rename (N6).
+
+## 14. Testing without a cluster
+
+No Osiris exists on the development machine, and `osiris` is not even installed
+in the venv — `_load_osiris` (`avatar/automl/environment.py:51-61`) raises, so no
+test can reach a real scheduler by accident. That is a constraint on where the
+proof comes from, not on how much of the remote path is provable: the job
+contract is a JSON file and an entrypoint, so a local stub can execute it.
+
+### Three levels of stub
+
+`EnvironmentRunner.__init__(osiris_client=None)` is an injection seam whose
+docstring already says "primarily for tests" (`environment.py:68-93`).
+
+1. **Recording client** — exists today: `_FakeOsiris`
+   (`tests/automl/test_environment.py:24`) returns scripted `list()` states and
+   records `create(**kwargs)`. Tasks can also stub one level higher
+   (`monkeypatch.setattr(task._runner(), "submit", ...)`,
+   `tests/automl/tasks/test_calibration.py:386`). It proves the submit payload,
+   the job name, `run_dir` creation and the poll aggregation — nothing runs.
+2. **Executing local scheduler** — new, and the one that makes trial fan-out
+   testable end to end. `submit` already writes a complete `run_spec.json` and
+   the job command is `python -m avatar.automl.run --spec <spec>`, while
+   `execute_spec(spec_path)` is a plain function that
+   `tests/automl/test_run.py` already calls directly. So the stub's `create()`
+   takes the spec out of the submitted command and runs it — in-process for
+   unit speed, or through `subprocess.Popen` for one slower and more honest
+   test — and its `list()` derives `queued`/`running`/`succeeded`/`failed` from
+   the real task states. Results land in the same `run_dir` layout the cluster
+   uses. K trials, K `result.json`, collection and selection, all under
+   `tmp_path`; with 128 cores, K tiny CPU trials cost seconds.
+3. **Fault injection** — the only way N16 is provable at all, because these are
+   the states a healthy cluster will not produce on demand:
+
+   | scripted failure | what it proves |
+   |---|---|
+   | a job stops appearing in `list()` | `unknown` -> `unknown_job_grace_seconds` -> terminal `lost` -> `tell(FAIL)`, and the surviving trials still finalize |
+   | `create()` raises on call *k* | the ids of jobs 1..k-1 are already in `operation.json` |
+   | the driver dies between `succeeded` and finalization | `finalizing` is not terminal, a later `status()` finishes the job idempotently |
+   | two `status()` loops on one operation | the single-writer check on `owner.{hostname,pid,token}` |
+   | a trial exits non-zero, or writes an unreadable `result.json` | the search continues, the reason reaches `operation.json` and the report |
+   | `max_parallel_jobs` with the driver killed mid-submission | trials in state `planned` without a `job_id` are re-submitted, not duplicated |
+
+### What the development machine can and cannot prove
+
+The box is, as it happens, the target hardware of §7: one **A100 80 GB**
+(torch 2.9.0+cu128, `device_count() == 1`), 128 cores, 243 GB RAM, and
+`/home/jovyan` on NFS with ~1.3 TB free.
+
+- **The GPU path is real here**, on the card the defaults are calibrated for.
+  What S3 asserts about memory, AMP and throughput is measured, not assumed.
+- **The multi-GPU launcher is testable without a second card.**
+  `tests/train/test_distributed_training.py:40-80` already spawns a real
+  `python -m torch.distributed.run` with `--nnodes` / `--nproc_per_node` on
+  gloo with `CUDA_VISIBLE_DEVICES=""`. That is exactly the harness the N4b
+  subprocess runner needs: it proves the launch, the spec round-trip, the
+  `result.json` hand-back and rank agreement — everything except the second
+  device. It is reused rather than rewritten.
+- **Out-of-core is proved by shape, not by size.** The assertion is that peak
+  RSS stays flat as the synthetic split grows 10x (1 M -> 10 M rows); filling
+  243 GB proves nothing extra.
+- **MLflow (N15)** runs against a file `tracking_uri` under `tmp_path`.
+- **Tests never write the encoding cache outside `tmp_path`.** The cache is
+  kept by default (N12) and a 768-dim embedding is ~3 KB/row, so a careless
+  test is a disk-filling test on a shared NFS volume that is already 80% full.
+
+### Suite layout
+
+- default run stays CPU-only and fast: `addopts = "-m 'not slow'"` is the gate
+  for every commit;
+- a new `gpu` marker with `skipif(not torch.cuda.is_available())` — today no
+  test in the suite touches CUDA, and that must remain true off this box;
+- `slow` keeps the S0 parity harness and the S3a leak test;
+- the boosting engines are an optional extra (`avatar[boosting]`), so tabnn
+  tests must not import them and vice versa.
