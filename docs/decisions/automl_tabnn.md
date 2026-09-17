@@ -1,7 +1,7 @@
 # Design: neural-network backend for `avatar.automl`
 
 Status: **proposed**, open questions resolved 2026-09-16 (§11), review answers
-applied 2026-09-17 (§12). Stage 3 of the combine-avatar-automl task, on top of
+and the `obligatory.md` audit items applied 2026-09-17 (§12). Stage 3 of the combine-avatar-automl task, on top of
 [automl_migration.md](automl_migration.md) (stages 1–2, done).
 
 Written against `master`, re-grounded on `refactor/data-sharding-hdfs`
@@ -359,7 +359,15 @@ unless the search space touches the encoding itself.
   - **A failed trial is `tell(state=FAIL)` and the run continues.** Under
     `random` that costs one point out of K; the operation succeeds if any trial
     produced a model, and failure counts and reasons land in `operation.json`
-    and the report.
+    and the report. **The local sequential path needs the same tolerance:**
+    `study.optimize` is called without `catch=`
+    (`backends/boosting/hyperopt.py:336`), so today the first failing trial
+    aborts the whole search. That is tolerable for boosting, where a trial
+    rarely fails, and wrong for tabnn, where OOM is an ordinary outcome of a
+    sampled `batch_size` x `hidden_size` pair. `fit_model` therefore catches
+    per-trial exceptions **for tabnn only** and records them as failed trials;
+    the boosting call keeps today's fail-fast behaviour, because changing it
+    would change boosting results on a failing trial.
   - **Boosting keeps its execution path.** Trial fan-out is tabnn-only: a
     boosting trial takes minutes, the per-job overhead is not worth it, and the
     first constraint of this design is not to disturb that path. The shared
@@ -379,6 +387,67 @@ unless the search space touches the encoding itself.
   config; when no URI is configured the callback is not constructed and nothing
   is logged. AutoML's own `progress.py` reporting stays as it is — MLflow is in
   addition to it, not instead.
+- **N16 — four reliability defects of the remote path are fixed before trial
+  fan-out is built on top of it.** They come from an independent audit
+  (`obligatory.md`) and were re-verified against this branch on 2026-09-17.
+  Trial fan-out replaces one or two jobs per operation with K, which moves each
+  of them from "rare annoyance" to "loses a night of training":
+
+  - **An operation must not be terminal before it is finalized.** `status()`
+    writes `state=aggregate` — i.e. `succeeded` — at
+    `tasks/operations.py:381`, *then* calls `_finalize_remote_train` (:388),
+    and the polling loop skips operations already in
+    `succeeded`/`failed`/`partial_failed` (:375). A crash in between leaves an
+    operation that is terminal and unfinished, and no later `status()` will
+    touch it again. Fix: a non-terminal `finalizing` state written before
+    finalization, `succeeded` only after it, and finalization itself
+    idempotent so a resumed driver can repeat it. This is the same failure the
+    persisted search state of N14 exists for, one step later in time — for
+    tabnn, "finalization" *is* "collect K trial results and pick the best".
+  - **Job ids are persisted per submit, not per batch.** `_start_remote_train`
+    appends to a local `jobs` list and calls `update_operation` once after the
+    loop (`tasks/operations.py:178-208`), so a failure on submit *k* loses the
+    ids of jobs 1..k-1 while they keep running and keep holding cards. Fix:
+    `update_operation(..., jobs=jobs)` after **every** successful `submit`.
+    N14's write-ahead `run_dir` and `trial_id`-bearing job name then cover the
+    remaining window — a crash *between* `submit` and the write leaves a
+    findable orphan instead of a silent duplicate.
+  - **`unknown` needs a finite policy.** A job missing from `osiris.list()`
+    polls as `unknown` (`environment.py:345`), the aggregate becomes `unknown`
+    (:372), and `status(wait=True)` counts that as active forever
+    (`tasks/operations.py:428`). With K trial jobs the chance of meeting it is
+    K times higher, and the cost is a run that hangs all night *and* withholds
+    the results that did arrive. Fix: `unknown` is tolerated for
+    `unknown_job_grace_seconds` (default 900) and then becomes a terminal
+    `lost` with diagnostics; a `lost` trial is `tell(state=FAIL)` like any
+    other failure and the search finishes with the trials it has.
+  - **`CUDA_VISIBLE_DEVICES` stops leaking, and stops being `"0"` for tabnn.**
+    `run_local` sets it for every backend and never restores it
+    (`environment.py:142`; the `finally` at :165 only closes log handlers), so
+    one AutoML call permanently narrows the notebook kernel to one card. Two
+    separate corrections, and only the first applies to boosting:
+    **(i)** the variable is set through a context manager that restores the
+    previous value in `finally` — inside the callback nothing changes, so the
+    parity gate stays green; **(ii)** the pinning applies **only to
+    `backend="boosting"`**, exactly as `submit` already does for remote jobs
+    (`environment.py:268-271`). The `"0"` is deliberate and stays: CatBoost
+    with `task_type="GPU"` and no explicit `devices`
+    (`backends/boosting/binary.py:41`) spreads over every visible card, and
+    `tests/automl/test_environment.py:159` asserts the current behaviour. For
+    tabnn, visibility follows `num_gpus` — without that the multi-GPU
+    subprocess runner of N4b cannot see a second card, and `num_gpus` as
+    "cards per trial" (N14) would be a lie locally.
+
+  A fifth audit item — unsynchronized read-modify-write on `operation.json`
+  (`lifecycle.py:182-193`, with a shared `operation.json.tmp` temp name) — is
+  **not** a concurrency problem in this design: the driver is the only writer
+  of that file, and trial jobs write `result.json` inside their own `run_dir`.
+  It becomes one through N14's recovery story, where "the container died, I run
+  `status()` again" can put two drivers on one operation. The answer is a
+  single-writer check rather than a lock: the record already carries
+  `owner.{hostname,pid,token}` (`lifecycle.py:173-178`) and
+  `reconcile_local_operations` (`lifecycle.py:244`) already implements the
+  liveness test, so a second driver either takes ownership or refuses.
 
 ## 4. Target layout
 
@@ -512,6 +581,16 @@ them:
 - **Nothing else is switched on.** `build_default_callbacks` needs a Hydra
   `DictConfig` and brings the profiler, throughput and progress bars; AutoML
   builds its callbacks directly and keeps its own `progress.py` reporting.
+- **A trial returns a path and a number, never a model.** `TrialResult` carries
+  the `trial_id`, the objective and the checkpoint directory; the fitted module
+  stays on disk, and the search loop holds no torch object between trials.
+  Boosting does the opposite — `best_backend = backend`
+  (`backends/boosting/hyperopt.py:313`) keeps the best fitted estimator in the
+  coordinator's RAM — which is affordable for a booster and is not for a
+  network, on top of being impossible for two of the three runners: a
+  subprocess and an Osiris job cannot hand back a Python object. After the
+  search the backend is rebuilt once, from the winning checkpoint. The boosting
+  behaviour is left alone (constraint 1); it stays a separate backlog item.
 
 What AutoML contributes on top, and nothing more:
 
@@ -584,7 +663,8 @@ New operational fields:
 | `search_strategy` | `tpe` (local default) / `random` (Osiris default) / `explicit` (N14) |
 | `search_preset` | `fast` / `deep` |
 | `max_parallel_jobs` | optional cap on concurrently submitted trial jobs (N14) |
-| `num_gpus` | **cards per trial**, i.e. per job — docstring corrected (N14) |
+| `num_gpus` | **cards per trial**, i.e. per job — docstring corrected (N14); locally it also sets `CUDA_VISIBLE_DEVICES` for tabnn (N16) |
+| `unknown_job_grace_seconds` | how long a job missing from the scheduler listing stays `unknown` before it becomes `lost`; default 900 (N16) |
 
 The existing `task_owned_model_params` guard (which rejects `device`, `seed`,
 `verbose`, … inside `model_params`) applies unchanged.
@@ -627,7 +707,10 @@ Order confirmed in §12 (E4).
   refactor, no aliases, no new behaviour; parity must be byte-identical.
 - **S2 — config.** N6 + N8 + N9: `engine="tabular_transformer"`, CPU allowed,
   hyperopt allowed for tabnn. Guards replaced by `UnsupportedBackendError`
-  where a combination truly is unsupported.
+  where a combination truly is unsupported. Also the `CUDA_VISIBLE_DEVICES`
+  correction of N16 — scoped and restored, boosting-only pinning — because it
+  is environment-layer work, it is covered by an existing test, and every local
+  GPU run from S3 on depends on it.
 - **S2b — the lazy data path and the un-expanded schema** (N12, N13, §6): the
   part descriptor on the backend contract, `TrainingCoordinator` passing
   sources, the lazy sibling of `prepare_data`, and `TabularSchema` carrying
@@ -648,6 +731,12 @@ Order confirmed in §12 (E4).
   **This is v1** (§12, E5): the first result shown.
 - **S4 — hyperopt for tabnn** (`fit_model` with the tabnn default space and the
   two presets), then `per_group` / `global_and_per_group`.
+- **S4a — remote reliability** (N16): the `finalizing` state and idempotent
+  finalization, job ids persisted per submit, the `unknown` deadline, the
+  single-writer check on `operation.json`. This lands **before** S4b: trial
+  fan-out multiplies every one of these by K, and the boosting fan-out that
+  exists today gets the fixes for free. Parity is unaffected — none of it
+  touches how a model is fitted.
 - **S4b — Osiris trial fan-out** (N14): Optuna in the driver, persisted search
   state, job per trial, resumable submission, `FAIL` handling. Boosting is not
   touched.
@@ -675,6 +764,10 @@ Order confirmed in §12 (E4).
 | NN results are not reproducible run to run | seed everything; byte-identical parity is claimed only for the local sequential CPU path, cluster runs assert metrics within tolerance (N14) |
 | CatBoost GPU and torch GPU in one process | they never run in the same task; `device` is resolved per operation |
 | `tabnn` quietly becomes the default | no: `backend` is a required explicit field |
+| the driver dies between `succeeded` and finalization, losing a finished run | non-terminal `finalizing` state, idempotent finalization, `succeeded` written last (N16, S4a) |
+| a trial job disappears from the scheduler and `wait=True` hangs all night | `unknown_job_grace_seconds` then terminal `lost` + `tell(FAIL)`; the surviving trials still finalize (N16) |
+| an AutoML call narrows the notebook's GPU visibility for good | the variable is scoped to the call and restored, and pinned only for boosting (N16) |
+| one OOM trial aborts a whole local tabnn search | per-trial exceptions are caught for tabnn and recorded as failed trials (N14) |
 
 ## 11. Decisions taken (2026-09-16)
 
@@ -724,6 +817,22 @@ answered, and where it landed:
 | E1–E5 | wave split, S0 first, spike kept, order kept, v1 = S3 | §9 |
 | F1–F3 | 3–100 M rows, ~200 features, 1×A100 80 GB, a night or two | §7 defaults and presets, N9 evaluation cadence |
 | G1–G7 | Optuna in the driver with persisted state; no waves under `random`; `num_gpus` per trial; resumable submission; `FAIL` and continue; tabnn only; scoped reproducibility; cache on NFS | **N14 added**, S4b, §7, risks |
+
+### Audit items required for tabnn (`obligatory.md`, 2026-09-17)
+
+An independent audit listed eight items as prerequisites for the NN backend.
+Each was re-checked against this branch; seven reproduce in the current code.
+
+| audit item | verified at | where it lands |
+|---|---|---|
+| operation `succeeded` before finalization | `tasks/operations.py:375,381,388` | **N16**, S4a |
+| partial submit loses job ids | `tasks/operations.py:178-208` | **N16**, S4a; the remaining window by N14 |
+| no synchronization of shared lifecycle state | `lifecycle.py:182-193`, `write_json` :48 | **N16** — single-writer check, not a lock; not a parallel-jobs problem here |
+| `status(wait=True)` waits forever on `unknown` | `environment.py:345,372`, `tasks/operations.py:428` | **N16**, S4a |
+| `CUDA_VISIBLE_DEVICES` mutates the user's process | `environment.py:142`, no restore at :165 | **N16**, S2 |
+| backend boundary hard-wired to boosting | `config/base.py`, `tasks/supervised.py` | N2, N3, N6, N8, N9; S1, S2 |
+| the boosting Optuna loop is the wrong orchestrator | `hyperopt.py:336` (no `catch=`) | N14 (job per trial, driver-side Optuna) + per-trial `catch` for tabnn |
+| the best NN model cannot live in coordinator RAM | `hyperopt.py:313` (`best_backend = backend`) | §6 — a trial returns a checkpoint path and a metric |
 
 ### Still open
 
