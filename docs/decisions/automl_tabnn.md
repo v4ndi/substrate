@@ -1,7 +1,8 @@
 # Design: neural-network backend for `avatar.automl`
 
 Status: **proposed**, open questions resolved 2026-09-16 (§11), review answers
-and the `obligatory.md` audit items applied 2026-09-17 (§12). Stage 3 of the combine-avatar-automl task, on top of
+and the `obligatory.md` audit items applied 2026-09-17 (§12), cross-checked
+against an independent design the same day (§13). Stage 3 of the combine-avatar-automl task, on top of
 [automl_migration.md](automl_migration.md) (stages 1–2, done).
 
 Written against `master`, re-grounded on `refactor/data-sharding-hdfs`
@@ -288,6 +289,35 @@ unless the search space touches the encoding itself.
   on this — `ShardPlanner` splits by record, not by file
   (`avatar/data/base/iterable.py`) — but read parallelism and shuffle
   granularity do, and on NFS a single file is a contention point for K jobs.
+
+  **Encoding runs in a process pool over parquet shards, not in one process.**
+  Encoding blocks every trial, so a serial pass is a card standing idle: at
+  100 M rows x ~200 features a single-process `NumCatPipeline.fit`
+  (`avatar/preprocessing/local/pipeline/base_pipe.py:70-105`, one sequential
+  loop over `iter_record_batches`) is measured in hours before the first step
+  of the first trial. The shape is `shard -> worker -> partial state -> merge`
+  for the fit and `shard -> worker -> part-*.parquet` for the transform, which
+  is also how the cache ends up as many files. No distributed framework: a
+  process pool over the accumulators that already exist. What has to be added
+  is small and the existing code is unusually friendly to it:
+
+  - `MeanStdAccumulator.update` already combines a batch's `(n, mean, m2)` into
+    the running state with Chan's parallel formula
+    (`avatar/preprocessing/base/accumulators.py:49-68`), so `merge(other)` is
+    those same three lines with a second state in place of a batch.
+  - `ValueCountAccumulator` holds `{column: {value: count}}`, so merging is
+    summing dicts.
+  - **The vocabulary does not depend on shard order.** Ids are assigned in
+    `finalize(order="sorted")` — the default (`label_encoder.py:41`) — and the
+    count-descending orders break ties by value
+    (`accumulators.py:136-176`), so a parallel fit reproduces the serial
+    artifact exactly. `order="first_seen"` is the one order-dependent mode and
+    is rejected when the parallel path is used.
+  - The unit of parallelism is `NumCatPipeline.fit`, not the individual
+    accumulator: both accumulators are updated in one pass over the same
+    batches, and splitting them would read the source twice.
+
+  This is the one idea taken from the independent design (§13).
 - **N13 — hidden states reach the model as vectors; there is no flatten path**
   (§12, C4). `_expand_hidden_states` (`avatar/automl/data/schema.py:162`, called
   at line 306) turns a 256-dim embedding into 256 scalar columns and folds them
@@ -320,9 +350,20 @@ unless the search space touches the encoding itself.
   changes around it:
 
   - **Optuna moves to the driver** and the job becomes "train one parameter set,
-    return a metric". `search_strategy: "tpe" | "random" | "explicit"` decides
-    how the driver samples; the default is `tpe` for the local sequential path
-    (the driver is alive by construction) and **`random` for Osiris fan-out**.
+    return a metric". `search_strategy: "tpe" | "random" | "grid" |
+    "explicit"` decides how the driver samples; the default is `tpe` for the
+    local sequential path (the driver is alive by construction) and **`random`
+    for Osiris fan-out**.
+  - **`grid` is the Optuna-free mode** (§13). It expands a fully categorical
+    `search_space` into its Cartesian product, and when `n_trials` is smaller
+    than the product it picks that many combinations deterministically from
+    `random_state`. Nothing is sampled and nothing is persisted: the trial list
+    is a pure function of the config, so resuming after a dead driver needs no
+    state at all. It is an option, not the default, because it cannot express a
+    continuous axis — `lr` log-uniform matters more for a network than for a
+    booster — and because the product explodes on the ten axes of §7 (three
+    values each is ~59 000 combinations). Use it for a small explicit grid,
+    where it is strictly better than sampling.
   - **With `random`/`explicit` there are no waves.** All K parameter sets are
     sampled before the first submit, so the driver's only job is to submit and
     later collect. This matters because the driver is a notebook container that
@@ -660,7 +701,7 @@ New operational fields:
 |---|---|
 | `cache_dir` | where the encoded cache lives; default `<output_dir>/cache/`, NFS on Osiris (N12) |
 | `cache_policy` | `keep` (default) or `delete` (N12) |
-| `search_strategy` | `tpe` (local default) / `random` (Osiris default) / `explicit` (N14) |
+| `search_strategy` | `tpe` (local default) / `random` (Osiris default) / `grid` / `explicit` (N14) |
 | `search_preset` | `fast` / `deep` |
 | `max_parallel_jobs` | optional cap on concurrently submitted trial jobs (N14) |
 | `num_gpus` | **cards per trial**, i.e. per job — docstring corrected (N14); locally it also sets `CUDA_VISIBLE_DEVICES` for tabnn (N16) |
@@ -717,6 +758,13 @@ Order confirmed in §12 (E4).
   hidden-state widths. No tabnn code yet — this is the shared-code change and
   lands on its own, with parity byte-identical and boosting still taking
   materialized frames.
+- **S2c — parallel encoding** (N12): `merge()` on both accumulators, a
+  process pool over shards for `fit` and `transform`, one output file per
+  shard, `order="first_seen"` rejected in that mode. It is `avatar.preprocessing`
+  work with its own unit tests (a parallel fit must reproduce the serial
+  `dump()` byte for byte) and touches no AutoML code, so it can land in
+  parallel with S3. It is on the critical path to the first honest run on real
+  data: without it every trial waits hours behind a single-process encode.
 - **S3a — leak test: 50 sequential `Trainer` runs in one process** (§12, E3).
   With `accelerate` gone there is no global state to corrupt (N4b), so this is
   no longer a correctness question: it asserts that RSS, open file descriptors
@@ -757,6 +805,7 @@ Order confirmed in §12 (E4).
 | AutoML's needs slowly bend `avatar.train` out of shape | the backend passes only what `Trainer` already accepts and adds nothing to it; a need that cannot be expressed as a callback is a design review, not a patch |
 | `avatar` keeps moving under this design | it already did once, between the draft and this revision, and every seam it touched got better; the seams are named here (N4, N5, N12) so the next divergence is a diff, not a rewrite |
 | the kept cache fills the disk | content-keyed directories, `cache_policy`, `cache_dir` on a sized volume; size it as rows × (numericals + embedding widths) × 4 B — a 768-dim embedding alone is 3 KB/row, so 100 M rows is 300 GB |
+| encoding is a serial bottleneck in front of every trial | process pool over shards, mergeable accumulators, one file per shard (N12, S2c) |
 | NFS cannot feed the cards | write the cache as many files, not one; if the split fits, copy it to node-local disk once at job start and read locally |
 | an expired Kerberos ticket kills a long job | training jobs never read HDFS: the source is read once during encoding, the cache lives on NFS (N12) |
 | a crash between submit and recording a job id duplicates work | deterministic per-trial `run_dir` (`mkdir(exist_ok=False)`) and `trial_id` in the job name, so an orphan is found instead of resubmitted (N14) |
@@ -840,3 +889,52 @@ Each was re-checked against this branch; seven reproduce in the current code.
 - **Early fusion** of hidden states as a search axis (N13 defers it).
 - **Wave-based TPE on the cluster** — supported by the persistence in N14,
   switched on only if a live driver turns out to be acceptable.
+
+## 13. Cross-check against an independent design (2026-09-17)
+
+A second design for the same migration was written independently
+(`tabnn_design.md`, kept outside the repository). It reaches the same
+architecture from the same starting point, which is worth recording because the
+agreement was not coordinated: reuse the Avatar training stack rather than build
+a second one; dispatch on `backend` and leave boosting untouched; fit the
+preprocessor on train only and persist it beside the artifact; **hand hidden
+states to Avatar the way Avatar takes them instead of expanding them into scalar
+columns** (our N13); encode once and reuse across trials; one Osiris job per
+trial, submitted without waiting, a failed trial not cancelling the others,
+selection by the existing `optimization_metric`; uplift restricted to `SLearner`
+or deferred; the `obligatory.md` fixes as a prerequisite (our N16).
+
+What was taken from it:
+
+- **Parallel encoding** (N12, S2c). The strongest idea in it and a genuine gap
+  here: this design specified a streaming single-process fit and said nothing
+  about its throughput, although it blocks every trial.
+- **`search_strategy="grid"`** (N14): a deterministic expansion of an explicit
+  finite space, which needs no persisted search state at all.
+
+Where the two differ, and why this design keeps its choice:
+
+- **Naming.** The other design leaves `BaseBoostingTask` and friends in place
+  to keep the diff small and clean up later. N2 renames outright, without
+  aliases, as decided in §12 (A2): it is a pure refactor under the S0 parity
+  gate, and a rename that leaves both spellings alive tends to stay that way.
+- **The artifact seam.** It proposes a `fit_model` / `predict_model` function
+  pair plus teaching the repository to load a tabnn payload. `ArtifactRepository`
+  already delegates to `item.backend.save(dir)` / `backend_class.load(dir)` and
+  reads only `engine` from `backend.json` (`tasks/artifacts.py:50-90`), so
+  following the `ModelBackend` contract leaves the artifact layer untouched —
+  which better serves that design's own minimal-diff principle.
+- **Optuna.** It drops Optuna for tabnn entirely. This design keeps it as
+  bookkeeping under `random` (one `search_space` format for both families, one
+  trial history in the report, TPE later as a one-line sampler change) and adds
+  `grid` as the Optuna-free mode for the case where it is enough.
+
+What it does not cover, and this design does: the in-memory assumption of
+`TrainingCoordinator` (`tasks/training.py:83-84`) that makes every path start by
+materializing both splits, which is the actual blocker at 100 M rows (S2b); the
+metric bridge between `avatar.metrics` and AutoML's registry without importing
+torch into `avatar/automl/**` (N4c); launcher and multi-GPU (N4b, N4d); target
+hardware and the defaults derived from it (§7); cache lifetime, keying, sizing
+and NFS-vs-HDFS under an expiring Kerberos ticket (N12); epochs versus steps for
+early stopping on large splits (N9). Its `engine="ste"` also predates the
+`STEv2 -> TabularTransformer` rename (N6).
