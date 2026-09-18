@@ -8,12 +8,12 @@ from collections.abc import Mapping, Sequence
 from copy import copy
 from dataclasses import asdict, replace
 from pathlib import Path
-from typing import Any, Generic, Literal, TypeVar
+from typing import Any, ClassVar, Generic, Literal, TypeVar
 
 import numpy as np
 import polars as pl
 
-from fmlib.automl.backends.boosting.interface import BoostingBackend
+from fmlib.automl.backends.interface import ModelBackend
 from fmlib.automl.config.base import BaseTaskConfig, EnvironmentConfig
 from fmlib.automl.data import CanonicalColumnMapper, ParquetSource
 from fmlib.automl.environment import EnvironmentRunner
@@ -21,6 +21,7 @@ from fmlib.automl.exceptions import (
     ArtifactIntegrityError,
     ConfigError,
     NotFittedError,
+    UnsupportedBackendError,
 )
 from fmlib.automl.execution import ExecutionContext
 from fmlib.automl.lifecycle import AutoMLStore, read_json, write_json
@@ -48,10 +49,10 @@ from fmlib.automl.types import (
     TrainingResult,
 )
 
-_BackendT = TypeVar("_BackendT", bound=BoostingBackend)
+_BackendT = TypeVar("_BackendT", bound=ModelBackend)
 
 
-class BaseBoostingTask(ABC, Generic[_BackendT]):
+class BaseTask(ABC, Generic[_BackendT]):
     """Common lifecycle for independent boosting task facades.
 
     Input methods accept a parquet file or a directory containing parquet files.
@@ -66,7 +67,9 @@ class BaseBoostingTask(ABC, Generic[_BackendT]):
         config: Public configuration supplied by the caller.
     """
 
-    _backend_class: type[_BackendT]
+    #: Adapter per backend family. The dict *is* the dispatch: adding a
+    #: family is an entry here, not a new branch in the task layer.
+    _backend_classes: ClassVar[Mapping[str, type]]
     _config_class: type[BaseTaskConfig]
     _task_name: str
     _artifact_directory: str
@@ -150,11 +153,11 @@ class BaseBoostingTask(ABC, Generic[_BackendT]):
         """Return a stable public key for global or per-group model results."""
         return "global" if layout == "global" else f"per_group:{group_value}"
 
-    def _copy_task_state(self, other: BaseBoostingTask) -> None:
+    def _copy_task_state(self, other: BaseTask) -> None:
         """Copy concrete task state from one complete loaded artifact."""
         return None
 
-    def _merge_task_state(self, other: BaseBoostingTask) -> None:
+    def _merge_task_state(self, other: BaseTask) -> None:
         """Merge concrete task state from one independently trained model part."""
         self._copy_task_state(other)
 
@@ -331,7 +334,7 @@ class BaseBoostingTask(ABC, Generic[_BackendT]):
         """Load the completed training summary for this entity."""
         return self._store.load_training()
 
-    def _adopt(self, restored: BaseBoostingTask) -> None:
+    def _adopt(self, restored: BaseTask) -> None:
         """Adopt fitted model and task-specific state from an artifact instance."""
         self._models = restored._models
         self._source_manifests = restored._source_manifests
@@ -702,7 +705,7 @@ class BaseBoostingTask(ABC, Generic[_BackendT]):
         return self._artifact_repository().save(state, path, overwrite=overwrite)
 
     @classmethod
-    def load(cls, path: str | Path) -> BaseBoostingTask:
+    def load(cls, path: str | Path) -> BaseTask:
         """Restore a complete AutoML entity or a standalone model artifact.
 
         Args:
@@ -767,7 +770,7 @@ class BaseBoostingTask(ABC, Generic[_BackendT]):
         return task
 
     @classmethod
-    def _load_artifact(cls, root: Path) -> BaseBoostingTask:
+    def _load_artifact(cls, root: Path) -> BaseTask:
         """Load a standalone artifact into a fresh AutoML entity."""
         repository = cls._repository()
         config = repository.read_config(root, cls._config_class)
@@ -844,9 +847,32 @@ class BaseBoostingTask(ABC, Generic[_BackendT]):
         self._source_manifests = dict(state.source_manifests)
 
     @classmethod
+    def _backend_class_for(cls, backend: str) -> type[_BackendT]:
+        """Return the adapter of one backend family.
+
+        Args:
+            backend: Backend family name from the task configuration.
+
+        Returns:
+            The adapter class this task uses for that family.
+
+        Raises:
+            UnsupportedBackendError: If the task has no adapter for it.
+        """
+        try:
+            return cls._backend_classes[backend]
+        except KeyError:
+            supported = ", ".join(sorted(cls._backend_classes))
+            msg = (
+                f"Task {cls._task_name!r} does not support backend {backend!r}; "
+                f"supported: {supported}"
+            )
+            raise UnsupportedBackendError(msg) from None
+
+    @classmethod
     def _repository(cls) -> ArtifactRepository:
         return ArtifactRepository(
-            cls._task_name, cls._artifact_directory, cls._backend_class
+            cls._task_name, cls._artifact_directory, cls._backend_class_for
         )
 
     def _artifact_repository(self) -> ArtifactRepository:

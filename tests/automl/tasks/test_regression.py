@@ -9,7 +9,8 @@ import polars as pl
 import pytest
 
 from fmlib.automl import RegressionTask, RegressionTaskConfig
-from fmlib.automl.backends.boosting import RegressionBoostingBackend, suggest_params
+from fmlib.automl.backends.boosting import RegressionBoostingBackend
+from fmlib.automl.backends.search import suggest_params
 from fmlib.automl.exceptions import ArtifactError, ConfigError, SchemaError
 
 
@@ -432,7 +433,7 @@ def test_regression_search_space_float_step_and_log_validation(tmp_path):
 
 
 def test_regression_uses_packaged_default_search_space(tmp_path, monkeypatch):
-    import fmlib.automl.backends.boosting.hyperopt as boosting_hyperopt
+    import fmlib.automl.backends.search as boosting_hyperopt
 
     monkeypatch.setattr(
         boosting_hyperopt,

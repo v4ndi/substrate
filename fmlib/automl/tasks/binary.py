@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import numpy as np
 import polars as pl
@@ -23,7 +24,7 @@ from fmlib.automl.tasks.evaluation import (
     scalar_prediction_result,
     scalar_score_inputs,
 )
-from fmlib.automl.tasks.supervised import SupervisedBoostingTask
+from fmlib.automl.tasks.supervised import SupervisedTask
 from fmlib.automl.types import (
     CalibrationResult,
     EvaluationKind,
@@ -35,7 +36,7 @@ from fmlib.automl.types import (
 logger = logging.getLogger(__name__)
 
 
-class BinaryTask(SupervisedBoostingTask[BinaryBoostingBackend]):
+class BinaryTask(SupervisedTask[BinaryBoostingBackend]):
     """Train, score, evaluate, and persist binary boosting models.
 
     Global, per-group, or combined layouts are selected through the configuration.
@@ -46,7 +47,7 @@ class BinaryTask(SupervisedBoostingTask[BinaryBoostingBackend]):
         config: Validated binary-task configuration.
     """
 
-    _backend_class = BinaryBoostingBackend
+    _backend_classes: ClassVar[Mapping[str, type]] = {"boosting": BinaryBoostingBackend}
     _config_class = BinaryTaskConfig
     _task_name = "binary"
     _artifact_directory = "binary_model"

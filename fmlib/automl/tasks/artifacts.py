@@ -5,12 +5,12 @@ from __future__ import annotations
 import json
 import os
 import uuid
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from fmlib.automl.backends.boosting.interface import BoostingBackend
+from fmlib.automl.backends.interface import ModelBackend
 from fmlib.automl.config.base import BaseTaskConfig
 from fmlib.automl.data import FeatureSchema
 from fmlib.automl.exceptions import ArtifactError, ArtifactIntegrityError
@@ -52,7 +52,7 @@ class ArtifactRepository:
 
     task_name: str
     artifact_directory: str
-    backend_class: type[BoostingBackend]
+    backend_class_for: Callable[[str], type[ModelBackend]]
 
     def save(
         self,
@@ -336,7 +336,7 @@ class ArtifactRepository:
             try:
                 models.append(
                     ModelEntry(
-                        backend=self.backend_class.load(
+                        backend=self.backend_class_for(config.backend).load(
                             model_root, device=runtime_device
                         ),
                         schema=schema,

@@ -4,7 +4,7 @@ import numpy as np
 import polars as pl
 import pytest
 
-from fmlib.automl.backends.boosting import resolve_default_search_space, suggest_params
+from fmlib.automl.backends.search import resolve_default_search_space, suggest_params
 from fmlib.automl.data import FeatureSchema
 
 

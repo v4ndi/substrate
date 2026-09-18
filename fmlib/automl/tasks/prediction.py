@@ -9,11 +9,11 @@ from fmlib.automl.progress import log_progress
 from fmlib.automl.types import ParquetPath, PredictionResult
 
 if TYPE_CHECKING:
-    from .base import BaseBoostingTask
+    from .base import BaseTask
 
 
 def execute_prediction(
-    task: BaseBoostingTask,
+    task: BaseTask,
     test_path: ParquetPath,
     *,
     remote_group_value: Any | None = None,

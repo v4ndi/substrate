@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import numpy as np
 import polars as pl
@@ -16,7 +16,7 @@ from fmlib.automl.data import ParquetSource
 from fmlib.automl.exceptions import SchemaError
 from fmlib.automl.metrics import MetricInput, resolve_evaluation_metrics
 from fmlib.automl.reporting import ConfusionData, EvaluationData
-from fmlib.automl.tasks.base import BaseBoostingTask, _ModelEntry
+from fmlib.automl.tasks.base import BaseTask, _ModelEntry
 from fmlib.automl.tasks.evaluation import (
     align_prediction_scores,
     combine_metric_slices,
@@ -24,7 +24,7 @@ from fmlib.automl.tasks.evaluation import (
     metric_slices,
     prepare_evaluation_truth,
 )
-from fmlib.automl.tasks.supervised import SupervisedBoostingTask
+from fmlib.automl.tasks.supervised import SupervisedTask
 from fmlib.automl.types import (
     EvaluationKind,
     EvaluationResult,
@@ -35,7 +35,7 @@ from fmlib.automl.types import (
 logger = logging.getLogger(__name__)
 
 
-class MulticlassTask(SupervisedBoostingTask[MulticlassBoostingBackend]):
+class MulticlassTask(SupervisedTask[MulticlassBoostingBackend]):
     """Train, score, evaluate, and persist multiclass boosting models.
 
     Labels may be strings, integers, or finite floats. The fitted global label
@@ -45,7 +45,9 @@ class MulticlassTask(SupervisedBoostingTask[MulticlassBoostingBackend]):
         config: Validated multiclass-task configuration.
     """
 
-    _backend_class = MulticlassBoostingBackend
+    _backend_classes: ClassVar[Mapping[str, type]] = {
+        "boosting": MulticlassBoostingBackend
+    }
     _config_class = MulticlassTaskConfig
     _task_name = "multiclass"
     _artifact_directory = "multiclass_model"
@@ -535,7 +537,7 @@ class MulticlassTask(SupervisedBoostingTask[MulticlassBoostingBackend]):
             confusions=self._confusion_data(evaluated),
         )
 
-    def _copy_task_state(self, other: BaseBoostingTask) -> None:
+    def _copy_task_state(self, other: BaseTask) -> None:
         if (
             self._class_order is not None
             and other._class_order is not None
@@ -547,7 +549,7 @@ class MulticlassTask(SupervisedBoostingTask[MulticlassBoostingBackend]):
         self._target_dtype = other._target_dtype
         self._target_encoding = list(other._target_encoding)
 
-    def _merge_task_state(self, other: BaseBoostingTask) -> None:
+    def _merge_task_state(self, other: BaseTask) -> None:
         if self._class_order is None:
             self._class_order = other._class_order
             self._target_dtype = other._target_dtype

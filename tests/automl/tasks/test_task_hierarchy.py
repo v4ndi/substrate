@@ -14,10 +14,10 @@ from fmlib.automl import (
     UpliftTask,
     UpliftTaskConfig,
 )
-from fmlib.automl.exceptions import ConfigError
-from fmlib.automl.tasks.base import BaseBoostingTask
+from fmlib.automl.exceptions import ConfigError, UnsupportedBackendError
+from fmlib.automl.tasks.base import BaseTask
 from fmlib.automl.tasks.calibration import CalibratableTask
-from fmlib.automl.tasks.supervised import SupervisedBoostingTask
+from fmlib.automl.tasks.supervised import SupervisedTask
 
 
 def _config(config_class, tmp_path):
@@ -46,12 +46,12 @@ def _config(config_class, tmp_path):
 
 
 def test_task_hierarchy_keeps_response_as_the_binary_specialization():
-    assert BinaryTask.__bases__ == (SupervisedBoostingTask,)
+    assert BinaryTask.__bases__ == (SupervisedTask,)
     assert ResponseTask.__bases__ == (CalibratableTask, BinaryTask)
-    assert RegressionTask.__bases__ == (SupervisedBoostingTask,)
-    assert MulticlassTask.__bases__ == (SupervisedBoostingTask,)
-    assert UpliftTask.__bases__ == (CalibratableTask, BaseBoostingTask)
-    assert inspect.isabstract(BaseBoostingTask)
+    assert RegressionTask.__bases__ == (SupervisedTask,)
+    assert MulticlassTask.__bases__ == (SupervisedTask,)
+    assert UpliftTask.__bases__ == (CalibratableTask, BaseTask)
+    assert inspect.isabstract(BaseTask)
     assert issubclass(ResponseTask, BinaryTask)
     assert not issubclass(RegressionTask, BinaryTask)
     assert not issubclass(BinaryTask, RegressionTask)
@@ -60,16 +60,16 @@ def test_task_hierarchy_keeps_response_as_the_binary_specialization():
 
 
 def test_common_lifecycle_does_not_require_supervised_metrics():
-    assert not issubclass(UpliftTask, SupervisedBoostingTask)
+    assert not issubclass(UpliftTask, SupervisedTask)
     for name in ("_metric", "_optimization_metric"):
-        assert not hasattr(BaseBoostingTask, name)
+        assert not hasattr(BaseTask, name)
         assert not hasattr(UpliftTask, name)
-        assert hasattr(SupervisedBoostingTask, name)
+        assert hasattr(SupervisedTask, name)
     assert not inspect.isabstract(UpliftTask)
 
 
 def test_common_task_base_has_no_task_specific_treatment_contract():
-    assert "_apply_treatment_convention" not in BaseBoostingTask.__dict__
+    assert "_apply_treatment_convention" not in BaseTask.__dict__
 
 
 @pytest.mark.parametrize(
@@ -146,6 +146,29 @@ def test_evaluate_api_reads_target_only_from_the_dataset():
 
 
 def test_persisted_result_loaders_use_parallel_public_names():
-    assert hasattr(BaseBoostingTask, "load_prediction")
-    assert hasattr(BaseBoostingTask, "load_evaluation")
-    assert not hasattr(BaseBoostingTask, "evaluation")
+    assert hasattr(BaseTask, "load_prediction")
+    assert hasattr(BaseTask, "load_evaluation")
+    assert not hasattr(BaseTask, "evaluation")
+
+
+def test_every_task_resolves_its_backend_family_through_one_dictionary():
+    """The dispatch point P6 asks for: a family name in, an adapter class out."""
+    for task_class in (
+        BinaryTask,
+        MulticlassTask,
+        RegressionTask,
+        ResponseTask,
+        UpliftTask,
+    ):
+        assert set(task_class._backend_classes) == {"boosting"}
+        adapter = task_class._backend_class_for("boosting")
+        assert adapter is task_class._backend_classes["boosting"]
+
+
+def test_unknown_backend_family_names_the_task_and_what_is_supported():
+    with pytest.raises(UnsupportedBackendError) as error:
+        BinaryTask._backend_class_for("tabnn")
+    message = str(error.value)
+    assert "'binary'" in message
+    assert "'tabnn'" in message
+    assert "boosting" in message

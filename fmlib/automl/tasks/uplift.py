@@ -6,7 +6,7 @@ import logging
 from collections.abc import Mapping
 from pathlib import Path
 from time import perf_counter
-from typing import Any
+from typing import Any, ClassVar
 
 import numpy as np
 import polars as pl
@@ -36,7 +36,7 @@ from fmlib.automl.types import (
     TrainingResult,
 )
 
-from .base import BaseBoostingTask, _ModelEntry
+from .base import BaseTask, _ModelEntry
 from .calibration import CalibratableTask
 from .evaluation import align_prediction_scores, combine_metric_slices, metric_slices
 
@@ -49,7 +49,7 @@ _LEARNER_COLUMNS = {
 }
 
 
-class UpliftTask(CalibratableTask, BaseBoostingTask[UpliftBoostingBackend]):
+class UpliftTask(CalibratableTask, BaseTask[UpliftBoostingBackend]):
     """Estimate heterogeneous treatment effects with S-, T-, and X-learners.
 
     All three learners are fitted for every selected model scope. Channel and
@@ -60,7 +60,7 @@ class UpliftTask(CalibratableTask, BaseBoostingTask[UpliftBoostingBackend]):
         config: Validated uplift-task configuration.
     """
 
-    _backend_class = UpliftBoostingBackend
+    _backend_classes: ClassVar[Mapping[str, type]] = {"boosting": UpliftBoostingBackend}
     _config_class = UpliftTaskConfig
     _task_name = "uplift"
     _artifact_directory = "uplift_model"

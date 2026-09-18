@@ -15,12 +15,12 @@ import polars as pl
 
 from fmlib.automl.backends.boosting.base import BaseBoostingBackend
 from fmlib.automl.backends.boosting.binary import BinaryBoostingBackend
-from fmlib.automl.backends.boosting.hyperopt import (
+from fmlib.automl.backends.boosting.regression import RegressionBoostingBackend
+from fmlib.automl.backends.interface import ModelBackend
+from fmlib.automl.backends.search import (
     resolve_default_search_space,
     suggest_params,
 )
-from fmlib.automl.backends.boosting.interface import BoostingBackend
-from fmlib.automl.backends.boosting.regression import RegressionBoostingBackend
 from fmlib.automl.data import FeatureSchema
 from fmlib.automl.exceptions import (
     ArtifactIntegrityError,
@@ -56,7 +56,7 @@ _COMPONENT_KIND = {
 
 
 @dataclass
-class UpliftBoostingBackend(BoostingBackend):
+class UpliftBoostingBackend(ModelBackend):
     """Contain independently fitted S-, T-, and X-learner components.
 
     Args:
@@ -641,7 +641,7 @@ class UpliftBoostingBackend(BoostingBackend):
         if device == self.device:
             return self
         backend = copy(self)
-        BoostingBackend.set_runtime_device(backend, device)
+        ModelBackend.set_runtime_device(backend, device)
         backend.components = {
             name: component.for_execution(device)
             for name, component in self.components.items()

@@ -8,19 +8,19 @@ from typing import Any, TypeVar
 import numpy as np
 import polars as pl
 
-from fmlib.automl.backends.boosting.base import BaseBoostingBackend
-from fmlib.automl.backends.boosting.hyperopt import fit_boosting_model
+from fmlib.automl.backends.interface import ModelBackend
+from fmlib.automl.backends.search import fit_model
 from fmlib.automl.data import normalize_optional_binary_treatment, prepare_data
 from fmlib.automl.metrics import MetricInput, resolve_metric
 from fmlib.automl.progress import log_progress
 from fmlib.automl.types import PredictionResult
 
-from .base import BaseBoostingTask, _ModelEntry
+from .base import BaseTask, _ModelEntry
 
-_SingleBackendT = TypeVar("_SingleBackendT", bound=BaseBoostingBackend)
+_SingleBackendT = TypeVar("_SingleBackendT", bound=ModelBackend)
 
 
-class SupervisedBoostingTask(BaseBoostingTask[_SingleBackendT]):
+class SupervisedTask(BaseTask[_SingleBackendT]):
     """Share single-model fitting between binary, regression and multiclass."""
 
     def _backend_options(self) -> Mapping[str, Any]:
@@ -128,8 +128,8 @@ class SupervisedBoostingTask(BaseBoostingTask[_SingleBackendT]):
         metric = resolve_metric(
             self.config.optimization_metric, self._task_name, "optimization"
         )
-        fit_result = fit_boosting_model(
-            backend_class=self._backend_class,
+        fit_result = fit_model(
+            backend_class=self._backend_class_for(self.config.backend),
             engine=self.config.engine,
             model_params=self.config.model_params,
             search_space=self.config.search_space,

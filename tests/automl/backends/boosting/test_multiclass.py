@@ -4,7 +4,8 @@ import numpy as np
 import polars as pl
 import pytest
 
-from fmlib.automl.backends.boosting import MulticlassBoostingBackend, suggest_params
+from fmlib.automl.backends.boosting import MulticlassBoostingBackend
+from fmlib.automl.backends.search import suggest_params
 from fmlib.automl.data import FeatureSchema
 from fmlib.automl.exceptions import ConfigError, UnsupportedBackendError
 

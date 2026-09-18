@@ -13,7 +13,8 @@ from fmlib.automl import (
     ResponseTask,
     ResponseTaskConfig,
 )
-from fmlib.automl.backends.boosting import BinaryBoostingBackend, suggest_params
+from fmlib.automl.backends.boosting import BinaryBoostingBackend
+from fmlib.automl.backends.search import suggest_params
 from fmlib.automl.exceptions import (
     ArtifactError,
     ArtifactIntegrityError,

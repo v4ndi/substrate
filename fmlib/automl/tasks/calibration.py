@@ -18,7 +18,7 @@ from fmlib.automl.tasks.evaluation import align_prediction_scores, align_scalar_
 from fmlib.automl.types import CalibrationResult, ParquetPath
 
 if TYPE_CHECKING:
-    from .base import BaseBoostingTask
+    from .base import BaseTask
 
 _ROW_ID = "__fmlib_calibration_row_id"
 _UPLIFT_LEARNERS = {
@@ -68,7 +68,7 @@ class CalibrationOutput:
 
 
 def execute_calibration(
-    task: BaseBoostingTask,
+    task: BaseTask,
     test_scores_path: ParquetPath,
     calibration_scores_path: ParquetPath,
     calibration_path: ParquetPath,

@@ -3,10 +3,10 @@
 from dataclasses import dataclass
 from typing import Any, Generic, TypeVar
 
-from fmlib.automl.backends.boosting.interface import BoostingBackend
+from fmlib.automl.backends.interface import ModelBackend
 from fmlib.automl.data import FeatureSchema
 
-_BackendT = TypeVar("_BackendT", bound=BoostingBackend)
+_BackendT = TypeVar("_BackendT", bound=ModelBackend)
 
 
 @dataclass(frozen=True)

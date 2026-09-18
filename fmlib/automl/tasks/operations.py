@@ -36,7 +36,7 @@ from fmlib.automl.types import (
 from .artifacts import jsonable as _jsonable
 
 if TYPE_CHECKING:
-    from .base import BaseBoostingTask
+    from .base import BaseTask
 logger = logging.getLogger(__name__)
 _LOCAL_HEARTBEAT_INTERVAL_SECONDS = 10.0
 _REMOTE_ROW_ID = "__fmlib_remote_row_id"
@@ -70,9 +70,9 @@ class OperationHooks:
     """Only the facade can create execution views or commit fitted state."""
 
     resolve_config: Callable[..., BaseTaskConfig]
-    execution_view: Callable[..., BaseBoostingTask]
+    execution_view: Callable[..., BaseTask]
     save: Callable[..., Path]
-    adopt: Callable[[BaseBoostingTask], None]
+    adopt: Callable[[BaseTask], None]
     rollback_training: Callable[[Path], None]
     set_artifact: Callable[[Path], None]
     assemble_training: Callable[[RemoteTrainingParts], tuple[str, ...]]

@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import numpy as np
 import polars as pl
@@ -23,7 +24,7 @@ from fmlib.automl.tasks.evaluation import (
     scalar_prediction_result,
     scalar_score_inputs,
 )
-from fmlib.automl.tasks.supervised import SupervisedBoostingTask
+from fmlib.automl.tasks.supervised import SupervisedTask
 from fmlib.automl.types import (
     EvaluationKind,
     EvaluationResult,
@@ -34,14 +35,16 @@ from fmlib.automl.types import (
 logger = logging.getLogger(__name__)
 
 
-class RegressionTask(SupervisedBoostingTask[RegressionBoostingBackend]):
+class RegressionTask(SupervisedTask[RegressionBoostingBackend]):
     """Train, score, evaluate, and persist continuous-target boosting models.
 
     Args:
         config: Validated regression-task configuration.
     """
 
-    _backend_class = RegressionBoostingBackend
+    _backend_classes: ClassVar[Mapping[str, type]] = {
+        "boosting": RegressionBoostingBackend
+    }
     _config_class = RegressionTaskConfig
     _task_name = "regression"
     _artifact_directory = "regression_model"

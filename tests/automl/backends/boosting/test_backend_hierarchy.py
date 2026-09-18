@@ -9,7 +9,7 @@ from fmlib.automl.backends.boosting import (
     UpliftBoostingBackend,
 )
 from fmlib.automl.backends.boosting.base import BaseBoostingBackend
-from fmlib.automl.backends.boosting.interface import BoostingBackend
+from fmlib.automl.backends.interface import ModelBackend
 from fmlib.automl.exceptions import ConfigError
 
 
@@ -18,8 +18,8 @@ def test_boosting_backends_are_independent_siblings():
     assert BinaryBoostingBackend.__bases__ == (BaseBoostingBackend,)
     assert RegressionBoostingBackend.__bases__ == (BaseBoostingBackend,)
     assert MulticlassBoostingBackend.__bases__ == (BaseBoostingBackend,)
-    assert issubclass(BaseBoostingBackend, BoostingBackend)
-    assert issubclass(UpliftBoostingBackend, BoostingBackend)
+    assert issubclass(BaseBoostingBackend, ModelBackend)
+    assert issubclass(UpliftBoostingBackend, ModelBackend)
     assert not issubclass(UpliftBoostingBackend, BaseBoostingBackend)
     assert inspect.isabstract(BaseBoostingBackend)
     assert not issubclass(RegressionBoostingBackend, BinaryBoostingBackend)
@@ -54,7 +54,7 @@ def test_composite_exposes_only_supported_operations():
 )
 def test_common_runtime_device_validation_preserves_state(backend_class):
     backend = backend_class(engine="xgboost", params={}, random_state=42, device="cpu")
-    with pytest.raises(ConfigError, match="Unsupported boosting runtime device"):
+    with pytest.raises(ConfigError, match="Unsupported runtime device"):
         backend.set_runtime_device("invalid")
     assert backend.device == "cpu"
 

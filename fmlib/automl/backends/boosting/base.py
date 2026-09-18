@@ -14,7 +14,7 @@ from typing import Any, ClassVar
 import numpy as np
 import polars as pl
 
-from fmlib.automl.backends.boosting.interface import BoostingBackend
+from fmlib.automl.backends.interface import ModelBackend
 from fmlib.automl.config.boosting import default_model_params
 from fmlib.automl.data.schema import FeatureSchema
 from fmlib.automl.exceptions import (
@@ -48,7 +48,7 @@ class _PreparedFitData:
 
 
 @dataclass
-class BaseBoostingBackend(BoostingBackend):
+class BaseBoostingBackend(ModelBackend):
     """Common preparation and persistence for independent boosting adapters.
 
     The adapter keeps feature ordering and categorical encoding stable across

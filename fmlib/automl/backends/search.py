@@ -1,24 +1,37 @@
-"""Training and hyperparameter search owned by the boosting backend layer."""
+"""Hyperparameter search, shared by every backend family.
+
+What is genuinely shared lives here: the search-space grammar and its
+validation (:func:`suggest_params`), the default-space resolution and the
+result container. :func:`fit_model` drives one search through the
+:class:`~fmlib.automl.backends.interface.TrainableBackend` surface, so no
+adapter is named here and nothing is imported from ``backends.boosting``.
+
+One thing is still family-specific: the default space comes from
+``config.boosting``. Resolving it becomes backend-aware when TabNN brings a
+second default space.
+"""
 
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from time import perf_counter
-from typing import Any, Literal
+from typing import Any, Generic, Literal, TypeVar
 
 import numpy as np
 import polars as pl
 
-from fmlib.automl.backends.boosting.base import BaseBoostingBackend
+from fmlib.automl.backends.interface import TrainableBackend
 from fmlib.automl.config.boosting import default_search_space
 from fmlib.automl.data import FeatureSchema
 from fmlib.automl.exceptions import ConfigError, MissingDependencyError
 from fmlib.automl.progress import log_progress
 
+_BackendT = TypeVar("_BackendT", bound=TrainableBackend)
+
 
 @dataclass(frozen=True)
-class BoostingFitResult:
+class FitResult(Generic[_BackendT]):
     """Contain the selected fitted backend and search diagnostics.
 
     Attributes:
@@ -27,7 +40,7 @@ class BoostingFitResult:
         validation_metric: Selected validation objective value.
     """
 
-    backend: BaseBoostingBackend
+    backend: _BackendT
     best_params: dict[str, Any]
     validation_metric: float
 
@@ -46,7 +59,7 @@ def suggest_params(
 
     Args:
         trial: Optuna trial implementing ``suggest_*`` methods.
-        engine: Boosting engine used to select the default space.
+        engine: Engine name used to select the default space.
         model_params: Fixed estimator parameters.
         search_space: Explicit search definitions, or ``None`` for defaults.
         n_trials: Trial budget, used to size the default space.
@@ -173,9 +186,9 @@ def resolve_default_search_space(
     )
 
 
-def fit_boosting_model(
+def fit_model(
     *,
-    backend_class: type[BaseBoostingBackend],
+    backend_class: type[_BackendT],
     engine: str,
     model_params: Mapping[str, Any],
     search_space: Mapping[str, Any] | None,
@@ -192,12 +205,12 @@ def fit_boosting_model(
     objective_metric: Callable[[np.ndarray, np.ndarray], float],
     direction: Literal["minimize", "maximize"],
     backend_options: Mapping[str, Any] | None = None,
-) -> BoostingFitResult:
+) -> FitResult[_BackendT]:
     """Fit once or run Optuna and retain the best already-fitted model.
 
     Args:
-        backend_class: Concrete task-specific boosting adapter.
-        engine: Native boosting engine.
+        backend_class: Concrete task-specific backend adapter.
+        engine: Native engine of the backend family.
         model_params: Fixed estimator parameters.
         search_space: Search-space overrides, or ``None`` for defaults.
         hyperopt: Run Optuna when ``True``.
@@ -222,7 +235,7 @@ def fit_boosting_model(
         RuntimeError: If hyperparameter search produces no fitted model.
     """
 
-    def make_backend(params: Mapping[str, Any]) -> BaseBoostingBackend:
+    def make_backend(params: Mapping[str, Any]) -> _BackendT:
         return backend_class(
             engine=engine,
             params=params,
@@ -277,7 +290,7 @@ def fit_boosting_model(
             perf_counter() - fit_started,
             value,
         )
-        return BoostingFitResult(backend, dict(model_params), value)
+        return FitResult(backend, dict(model_params), value)
 
     if n_trials is None:
         msg = "hyperopt=True requires a resolved n_trials value"
@@ -289,7 +302,7 @@ def fit_boosting_model(
         msg = "hyperopt=True requires the 'optuna' package"
         raise MissingDependencyError(msg) from exc
 
-    best_backend: BaseBoostingBackend | None = None
+    best_backend: _BackendT | None = None
     best_params: dict[str, Any] = {}
     best_value = float("-inf") if direction == "maximize" else float("inf")
 
@@ -345,4 +358,4 @@ def fit_boosting_model(
         perf_counter() - search_started,
         best_value,
     )
-    return BoostingFitResult(best_backend, best_params, best_value)
+    return FitResult(best_backend, best_params, best_value)
