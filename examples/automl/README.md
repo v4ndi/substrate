@@ -2,6 +2,10 @@
 
 Рабочие notebooks: `binary_pipeline.ipynb`, `response_pipeline.ipynb`, `regression_pipeline.ipynb`, `multiclass_pipeline.ipynb`, `uplift_pipeline.ipynb`. Каждый показывает typed config, train, одну ячейку вариантов `model_layout`, predict/evaluate, persistence и Osiris. Только Response/Uplift содержат одну отдельную path-based calibration ячейку.
 
+Ноутбуки написаны под `backend="boosting"`. Для `backend="tabnn"` смотрите
+раздел [TabNN](#tabnn) и запускаемый скрипт `benchmark_backends.py`, который
+обучает обе семьи на одних данных.
+
 ## Запуск
 
 ### Установка
@@ -113,9 +117,9 @@ prediction = task.load_prediction("/shared/data/test")
 | Поле | Значения/default и назначение |
 |---|---|
 | `env_type` | Явно `"local"` или `"osiris"`. |
-| `backend` | Обязательное `"boosting"`; TabNN/STE зарезервирован. |
-| `engine` | `"catboost"` или `"xgboost"`. |
-| `device` | Explicit CPU/GPU; Osiris только GPU. |
+| `backend` | `"boosting"` или `"tabnn"` — см. раздел [TabNN](#tabnn). |
+| `engine` | Бустинг: `"catboost"` или `"xgboost"`. TabNN: `"tabular_transformer"` (значение `"ste"` отвергается с указанием замены — класс переименован `STEv2 -> TabularTransformer`). |
+| `device` | Explicit CPU/GPU; Osiris только GPU. TabNN работает и на CPU. |
 | `target_column` | Train/evaluate target; production predict может не содержать target. |
 | `client_id_column` | Обязательная identity column. |
 | `group_column` | Имя или `None`; настроенная role обязательна в релевантных datasets. |
@@ -123,16 +127,18 @@ prediction = task.load_prediction("/shared/data/test")
 | `treatment_column`, `inverse_treatment` | Только Response/Uplift. Response treatment optional; Uplift treatment и bool inversion обязательны. |
 | `categorical_columns` | Sequence либо absolute YAML path; пусто допустимо, null допустим. |
 | `numerical_columns` | Sequence либо absolute YAML path; null допустим, infinity запрещён. |
-| `hidden_state_columns` | Fixed-size List/Array Float32/Float64, разворачивается в Float32 features. |
-| `model_layout` | При group: `global`, `per_group`, `global_and_per_group`; без group поле запрещено. Layout с per-group branch отклоняет unknown inference group. |
+| `hidden_state_columns` | Fixed-size List/Array Float32/Float64. Бустинг разворачивает эмбеддинг в скалярные признаки; TabNN подаёт его вектором (late fusion). |
+| `model_layout` | При group: `global`, `per_group`, `global_and_per_group`; без group поле запрещено. Layout с per-group branch отклоняет unknown inference group. **Для `backend="tabnn"` `global_and_per_group` отвергается на валидации** — двум раскладкам нужны разные физические раскладки обработанных данных. |
 | `hyperopt` | False — `model_params`; True — Optuna. |
 | `optimization_metric` | Зарегистрированное имя метрики выбора модели; `None` разрешается в task default. Callable не поддерживается. |
 | `verbose` | bool или integer ≥ 0, default True. |
 | `model_params` | Только без hyperopt; task-owned runtime/objective/logging params запрещены. |
 | `search_space` | Только с hyperopt; explicit mapping целиком заменяет dynamic default. |
-| `n_trials` | Только с hyperopt; default 50. |
+| `n_trials` | Только с hyperopt; default зависит от бэкенда: 50 у бустинга, **10 у TabNN**. Явное значение не ограничивается. Для TabNN это **потолок, а не количество**: дубли отбрасываются, а при полностью категориальном пространстве размером ≤ `n_trials` выполняется полный перебор. |
 | `random_state` | Integer, default 42. |
 | `output_dir` | Root entities/artifacts/results/reports/logs. |
+| `processed_data_path` | Только TabNN: куда пишутся и откуда переиспользуются обработанные данные; `None` → `<output_dir>/processed`. |
+| `max_parallel_jobs` | Предел одновременно сабмиченных remote-джоб; `None` — сабмитить весь план сразу. |
 | `environment` | Optional `EnvironmentConfig`; operation-only override config/artifact не мутирует. |
 | `estimate_propensity` | Explicit bool только Uplift. |
 
@@ -162,6 +168,149 @@ Default Optuna space динамичен: CatBoost учитывает trial budge
 | `poll_interval_seconds` | Positive number, default 30.0. |
 | `log_dir` | Path/None; default `<output_dir>/logs`. |
 
+## TabNN
+
+`backend="tabnn"` обучает табличную сеть через тот же публичный API. Всё, что
+ниже по течению — маршрутизация по `model_layout`, артефакты, калибровка,
+оценка, отчёты — не знает, какая семья бэкендов произвела скоры.
+
+```python
+from fmlib.automl import BinaryTask, BinaryTaskConfig
+
+config = BinaryTaskConfig(
+    env_type="local",
+    backend="tabnn",
+    engine="tabular_transformer",
+    device="gpu",
+    target_column="target_attr_1",
+    client_id_column="epk_id",
+    group_column=None,
+    date_column="report_month",
+    categorical_columns=["category"],
+    numerical_columns=["amount"],
+    hidden_state_columns=["seq_hidden_state"],
+    hyperopt=True,
+    output_dir="outputs/binary_tabnn",
+)
+task = BinaryTask(config)
+task.train("data/train", "data/valid")
+prediction = task.predict("data/test")
+```
+
+### Обработанные данные
+
+Препроцессинг не является отдельным действием: `train()` получает сырой
+parquet, фитит препроцессор **на полном train**, применяет его к train и valid
+без переобучения и пишет результат в каталог под `processed_data_path`. Только
+после этого `model_layout` режет **уже обработанные** данные, поэтому все части
+делят один словарь категорий и одно масштабирование — это осознанное отличие от
+бустинга, где схема считается по части.
+
+Каталог адресуется content-key: хэш источников, конфигурации препроцессинга,
+схемы и версии контракта. Поэтому «данные поменялись» — это просто другой
+каталог, а не ошибка. Внутри лежит манифест завершённости, который пишется последним и
+перечисляет ожидаемые файлы: без него каталог считается отсутствующим, потому
+что 17 файлов из 40 после падения неотличимы от датасета из 17 файлов.
+Публикация атомарная, так что незавершённый каталог никогда не виден под
+настоящим именем.
+
+Переиспользование — полное совпадение ключа. Если каталог с нужным именем есть,
+но его манифест не сходится с содержимым, запуск падает с объяснением и **ничего
+не перезаписывает**.
+
+Обработанные данные не удаляются автоматически: они нужны `calibrate()`,
+отчёту, повторному `evaluate` и возобновлённому поиску. Удаление — вызов:
+
+```python
+from fmlib.automl.backends.tabnn.data import clear_processed_data
+
+clear_processed_data(config.resolved_processed_data_path)
+```
+
+Оговорка, которую надо знать: идентичность файла — это `path + size +
+modified_ns`. Источник, перезаписанный файлом того же размера и с той же
+mtime, ключ не изменит.
+
+### Поиск гиперпараметров
+
+Стратегия определяется бэкендом и полем не задаётся: бустинг ищет TPE, TabNN —
+случайной выборкой. Иначе один и тот же конфиг искал бы по-разному в
+зависимости от того, где его запустили, и локальный прогон нельзя было бы
+сравнить с кластерным.
+
+Все наборы параметров выбираются **до первого запуска**. Дефолтное пространство
+— `hidden_size` 32/64, `num_layers` 2/3/4, `lr` 1e-4/3e-4/1e-3, то есть 18
+комбинаций при бюджете 10. Дубли отбрасываются; если все оси категориальные и
+произведение не больше бюджета, выполняется полный перебор. Поэтому фактическое
+число трейлов бывает меньше запрошенного — это пишется в лог, а не молчаливо
+проглатывается.
+
+Падение одного трейла не заканчивает поиск: он записывается как упавший, а
+лучший выбирается среди завершившихся. Операция падает, только если не осталось
+ни одного.
+
+### Fan-out на Osiris
+
+При `env_type="osiris"` один трейл — одна джоба. Волн нет: весь план известен и
+записан в запись операции до первого сабмита, потому что драйвер — это
+контейнер ноутбука, который может умереть, а из джобы джобу запустить нельзя.
+
+`max_parallel_jobs` включает сабмит чанками. Он возобновляемый: трейлы,
+оставшиеся в состоянии `planned`, несут свои параметры, и следующий `status()`
+их досабмитит; уже отправленный трейл никогда не отправляется дважды.
+
+Бустинг остаётся на своём пути: одна джоба на model part, а трейлы — внутри
+джобы. Бустинговый трейл занимает минуты, и джоба на трейл стоила бы больше,
+чем экономит.
+
+### Восстановление после смерти драйвера
+
+Happy path ничего не требует: живой процесс финализирует сам внутри `status()`.
+Если контейнер умер между окончанием джоб и сборкой результата, операция
+останется в нетерминальном состоянии `finalizing`, и `status()` покажет её, но
+не тронет — сборка чужой работы это решение, а не побочный эффект опроса.
+Досборка — явный вызов:
+
+```python
+task = BinaryTask.load(entity_path)
+task.finalize()
+```
+
+`finalize()` идемпотентен. Если операцию всё ещё держит живой владелец, он
+откажется работать и назовёт его; `finalize(force=True)` забирает владение.
+
+### Ограничения
+
+- **Uplift — только S-Learner.** T- и X-метаобучатели в первую версию не входят,
+  поэтому uplift-модель TabNN выдаёт три колонки скоров (`score_s`,
+  `score_s_control`, `score_s_treatment`) там, где бустинг выдаёт десять, а
+  `estimate_propensity=True` отвергается: propensity принадлежит X-метаобучателю.
+- **`global_and_per_group` не поддерживается.** Батч приходит из одного файла, и
+  буфера перемешивания между файлами нет, поэтому global-модель на
+  партиционированных по группе данных видела бы одну группу за шаг. `global` и
+  `per_group` по отдельности работают; вместе — это две разные задачи.
+- **Паритета признаков с бустингом нет по построению:** бустинг видит эмбеддинг
+  развёрнутым в скалярные колонки, TabNN — одним вектором. Сравнение метрик
+  честное, но сравниваются пайплайны, а не только архитектуры.
+- **Воспроизводимость названа явно.** Побитовое совпадение утверждается только
+  для локального последовательного CPU-пути. На кластере арифметика GPU
+  недетерминирована, набор завершившихся трейлов может отличаться, поэтому
+  утверждается равенство метрики в пределах допуска, а не равенство
+  `best_params`. Сам поиск воспроизводим: засеянный random даёт те же наборы.
+- **Multi-GPU проверен на CPU-рангах** (`torch.distributed.run` на gloo): запуск,
+  круговорот спеки, согласие рангов и то, что каждая строка шардированного
+  сплита читается ровно один раз. Настоящие NCCL-коллективы и раскладка рангов
+  по картам не проверены.
+
+### Бенчмарк
+
+`benchmark_backends.py` обучает обе семьи на одних синтетических данных и
+печатает метрики рядом — вместе с оговоркой о признаках выше:
+
+```bash
+.venv/bin/python examples/automl/benchmark_backends.py --rows 20000
+```
+
 ## Публичный lifecycle
 
 Общий для пяти matching typed tasks.
@@ -178,6 +327,7 @@ Default Optuna space динамичен: CatBoost учитывает trial budge
 | `evaluate(test_path, scores=None, *, metrics=None, ...)` | Один вызов оценивает один вид scores: `PredictionResult` → `*_raw`, допустимый `CalibrationResult` → `*_calibrated`; `metrics=None` означает фиксированный task default, явный непустой список полностью задаёт пользовательские метрики; разрешён зарегистрированный task parquet path, `scores=None` означает stored prediction. |
 | `load_evaluation(test_path)` | Exact persisted evaluation; после двух вызовов для одного `test_path` содержит обе независимые половины. |
 | `status(wait=False)` | Operation/scheduler states; confirmed dead local owner → interrupted. |
+| `finalize(force=False)` | Досборка remote-операции, чьи джобы закончились, а результат не собран. **В обычной работе не нужен**: живой драйвер финализирует сам внутри `status()`. Идемпотентен. См. [восстановление](#восстановление-после-смерти-драйвера). |
 | `save(path=None, overwrite=False)` | Standalone snapshot; train уже сохранил entity artifact. Существующий destination заменяется только при явном `overwrite=True`. |
 | `TaskClass.load(path)` | Entity сохраняет ID/lifecycle; standalone artifact создаёт independent entity. |
 
