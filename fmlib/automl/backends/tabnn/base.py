@@ -56,6 +56,8 @@ class TabNNBackend(ModelBackend):
         hidden_states: ``{column: width}`` of the pass-through embeddings.
         preprocessor_state: The fitted preprocessor's artifact dict.
         state_dict: The trained weights, on CPU.
+        validation_metric: The objective of the trial that produced these
+            weights, carried so a report can name it without re-scoring.
     """
 
     task_name: str = "binary"
@@ -68,6 +70,7 @@ class TabNNBackend(ModelBackend):
     preprocessor_state: Mapping[str, Any] | None = None
     state_dict: Mapping[str, Any] | None = None
     batch_size: int = 4096
+    validation_metric: float = float("nan")
 
     # -- runtime -----------------------------------------------------------
     def _model(self):
@@ -191,6 +194,7 @@ class TabNNBackend(ModelBackend):
                     "column_names": dict(self.column_names),
                     "hidden_states": dict(self.hidden_states),
                     "batch_size": self.batch_size,
+                    "validation_metric": self.validation_metric,
                     "params": dict(self.params),
                     "random_state": self.random_state,
                     "config_contract_version": CONFIG_CONTRACT_VERSION,
@@ -258,6 +262,7 @@ class TabNNBackend(ModelBackend):
             column_names=metadata.get("column_names", {}),
             hidden_states=metadata.get("hidden_states", {}),
             batch_size=int(metadata.get("batch_size", 4096)),
+            validation_metric=float(metadata.get("validation_metric", "nan")),
             preprocessor_state=yaml.safe_load(
                 (path / PREPROCESSOR).read_text(encoding="utf-8")
             ),

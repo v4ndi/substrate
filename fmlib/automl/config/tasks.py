@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from fmlib.automl.exceptions import ConfigError
+from fmlib.automl.exceptions import ConfigError, UnsupportedBackendError
 
 from .base import BaseTaskConfig
 
@@ -104,3 +104,12 @@ class UpliftTaskConfig(BaseTaskConfig):
         if not isinstance(self.estimate_propensity, bool):
             msg = "estimate_propensity must be a boolean"
             raise ConfigError(msg)
+        if self.backend == "tabnn" and self.estimate_propensity:
+            # Propensity belongs to the X-metalearner, and TabNN uplift is one
+            # S-Learner. Saying so here beats fitting a model nobody reads.
+            msg = (
+                "estimate_propensity=True is not supported with backend='tabnn': "
+                "TabNN uplift is an S-Learner only, and propensity belongs to the "
+                "X-metalearner"
+            )
+            raise UnsupportedBackendError(msg)

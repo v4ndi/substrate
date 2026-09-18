@@ -1,0 +1,12 @@
+# What makes an uplift task different from the others.
+#
+# Not a value but a protocol: one training pass with each record's real
+# treatment, two scoring passes with everything forced to treated and then to
+# control, and a matrix rather than a vector. That is why uplift keeps a class
+# of its own while the four supervised tasks share one.
+score_transform: uplift
+is_regression: false
+model:
+  _target_: fmlib.pipeline.tabular.SLearner
+  num_classes: 2
+  task_type: classification

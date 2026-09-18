@@ -20,7 +20,6 @@ from fmlib.automl.tasks.preparation import DataPreparation
 from fmlib.automl.tasks.state import ModelEntry, TrainingInput
 
 from .assembly import build_train_config
-from .base import TabNNBackend
 from .data import build_schema, prepare_processed_data
 from .runner import InProcessRunner, TrialResult, TrialSpec
 
@@ -77,9 +76,13 @@ def fit_model_part(
     config = task.config
     internal = task._internal_config
     mapper = CanonicalColumnMapper.from_config(config)
+    # The treatment column is an ordinary categorical feature of a response
+    # model, and an input of its own for an uplift one -- there the S-Learner
+    # feeds it in itself, so it must not also become a feature.
+    is_uplift = task._task_name == "uplift"
     categorical_roles = (
         internal.group_column if layout == "global" else None,
-        getattr(internal, "treatment_column", None),
+        None if is_uplift else getattr(internal, "treatment_column", None),
     )
 
     schema = build_schema(
@@ -123,7 +126,7 @@ def fit_model_part(
                 params=dict(trial_params),
                 trial_dir=root / name,
                 group_value=group_value,
-                backend_options=task._backend_options(),
+                backend_options=_backend_options(task),
                 class_order=class_order,
             )
             spec = TrialSpec(
@@ -184,7 +187,8 @@ def fit_model_part(
         perf_counter() - started,
     )
 
-    backend = TabNNBackend(
+    adapter = task._backend_class_for(config.backend)
+    backend = adapter(
         engine=config.engine,
         params=dict(best_params),
         random_state=int(config.random_state),
@@ -199,6 +203,7 @@ def fit_model_part(
         hidden_states=dict(processed.hidden_states),
         preprocessor_state=processed.preprocessor().dump(),
         state_dict=_weights_of(result.checkpoint_dir),
+        validation_metric=float(result.objective),
         batch_size=int(train_config["train_dataloader"]["batch_size"]),
     )
     return ModelEntry(
@@ -210,6 +215,17 @@ def fit_model_part(
         layout=layout,
         group_value=group_value,
     )
+
+
+def _backend_options(task: Any) -> dict[str, Any]:
+    """Task-specific values the assembly needs, from the hook that already exists."""
+    # _backend_options is SupervisedTask's hook; uplift does not have it,
+    # because its boosting adapter takes its arguments another way.
+    options = dict(getattr(task, "_backend_options", dict)())
+    treatment = getattr(task._internal_config, "treatment_column", None)
+    if task._task_name == "uplift" and treatment:
+        options["treatment_column"] = treatment
+    return options
 
 
 def _plain(config: Any) -> dict[str, Any]:

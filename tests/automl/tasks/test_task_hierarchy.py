@@ -173,11 +173,16 @@ def test_the_supervised_tasks_can_reach_the_tabnn_adapter(task_class):
     assert adapter.__name__ == "TabNNBackend"
 
 
-def test_a_task_without_a_tabnn_adapter_says_what_it_supports():
-    """Uplift arrives later; until then the refusal names the task and the list."""
+def test_uplift_reaches_its_own_tabnn_adapter():
+    """Its protocol differs, so it keeps a class where the others share one."""
+    assert UpliftTask._backend_class_for("tabnn").__name__ == "UpliftTabNNBackend"
+
+
+def test_an_unknown_backend_family_names_the_task_and_what_it_supports():
     with pytest.raises(UnsupportedBackendError) as error:
-        UpliftTask._backend_class_for("tabnn")
+        BinaryTask._backend_class_for("random_forest")
     message = str(error.value)
-    assert "'uplift'" in message
-    assert "'tabnn'" in message
+    assert "'binary'" in message
+    assert "'random_forest'" in message
     assert "boosting" in message
+    assert "tabnn" in message

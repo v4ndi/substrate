@@ -29,19 +29,12 @@ from fmlib.automl.exceptions import (
 )
 from fmlib.automl.metrics.base import Metric, MetricInput
 from fmlib.automl.progress import log_progress
+from fmlib.automl.uplift_scores import ALL_UPLIFT_SCORE_COLUMNS
 
-UPLIFT_SCORE_COLUMNS = (
-    "score_s",
-    "score_s_control",
-    "score_s_treatment",
-    "score_t",
-    "score_t_control",
-    "score_t_treatment",
-    "score_x",
-    "score_x_control",
-    "score_x_treatment",
-    "score_x_propensity",
-)
+#: What this backend emits. The names and the order live in
+#: :mod:`fmlib.automl.uplift_scores`, because TabNN produces a subset of them
+#: and a single tuple would have forced it to invent the rest.
+UPLIFT_SCORE_COLUMNS = ALL_UPLIFT_SCORE_COLUMNS
 
 _COMPONENT_KIND = {
     "s_outcome": "classifier",

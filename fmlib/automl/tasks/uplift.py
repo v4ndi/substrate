@@ -12,7 +12,6 @@ import numpy as np
 import polars as pl
 
 from fmlib.automl.backends.boosting.uplift import (
-    UPLIFT_SCORE_COLUMNS,
     UpliftBoostingBackend,
 )
 from fmlib.automl.config import UpliftTaskConfig
@@ -35,6 +34,7 @@ from fmlib.automl.types import (
     PredictionResult,
     TrainingResult,
 )
+from fmlib.automl.uplift_scores import uplift_learners, uplift_score_columns
 
 from .base import BaseTask, _ModelEntry
 from .calibration import CalibratableTask
@@ -43,11 +43,12 @@ from .state import TrainingInput
 
 logger = logging.getLogger(__name__)
 
-_LEARNER_COLUMNS = {
-    "s": ("score_s", "score_s_control", "score_s_treatment"),
-    "t": ("score_t", "score_t_control", "score_t_treatment"),
-    "x": ("score_x", "score_x_control", "score_x_treatment"),
-}
+
+def _tabnn_uplift_backend() -> type:
+    """Import the TabNN uplift adapter only when a run asks for it."""
+    from fmlib.automl.backends.tabnn.uplift import UpliftTabNNBackend
+
+    return UpliftTabNNBackend
 
 
 class UpliftTask(CalibratableTask, BaseTask[UpliftBoostingBackend]):
@@ -63,6 +64,7 @@ class UpliftTask(CalibratableTask, BaseTask[UpliftBoostingBackend]):
 
     _backend_loaders: ClassVar[Mapping[str, Callable[[], type]]] = {
         "boosting": lambda: UpliftBoostingBackend,
+        "tabnn": lambda: _tabnn_uplift_backend(),
     }
     _config_class = UpliftTaskConfig
     _task_name = "uplift"
@@ -141,6 +143,12 @@ class UpliftTask(CalibratableTask, BaseTask[UpliftBoostingBackend]):
         layout: str,
         group_value: Any | None = None,
     ) -> _ModelEntry[UpliftBoostingBackend]:
+        if self.config.backend != "boosting":
+            from fmlib.automl.backends.tabnn.fit import fit_model_part
+
+            return fit_model_part(
+                self, train, valid, layout=layout, group_value=group_value
+            )
         train_frame = train.require_frame()
         valid_frame = valid.require_frame()
         preparation_started = perf_counter()
@@ -294,28 +302,61 @@ class UpliftTask(CalibratableTask, BaseTask[UpliftBoostingBackend]):
                 columns.append(column)
         return frame.select(columns)
 
-    @staticmethod
+    def _score_columns(self) -> tuple[str, ...]:
+        """The score columns this task's backend family produces."""
+        return uplift_score_columns(self.config.backend)
+
+    def _learners(self) -> dict[str, tuple[str, str, str]]:
+        """The learner triples this task's backend family produces."""
+        return uplift_learners(self.config.backend)
+
     def _validate_score_matrix(
-        values: np.ndarray, *, require_x_effect: bool = False
+        self, values: np.ndarray, *, require_x_effect: bool = False
     ) -> None:
-        if values.ndim != 2 or values.shape[1] != len(UPLIFT_SCORE_COLUMNS):
-            msg = f"Uplift score matrix must have shape (N, {len(UPLIFT_SCORE_COLUMNS)}); got {values.shape}"
+        """Check a raw uplift matrix against the columns its backend emits.
+
+        The rules are stated over column *names* rather than positions, because
+        which columns exist now depends on the backend family: boosting reports
+        S, T and X, TabNN reports one S-Learner.
+
+        Args:
+            values: The raw score matrix.
+            require_x_effect: Also require the X triple to be self-consistent.
+                False on a raw prediction, where the X effect is the learner's
+                own estimate rather than a difference; true after calibration,
+                which recomputes it as one.
+
+        Raises:
+            SchemaError: On the wrong shape, non-finite values, probabilities
+                outside [0, 1] or an effect that is not treated minus control.
+        """
+        columns = self._score_columns()
+        if values.ndim != 2 or values.shape[1] != len(columns):
+            msg = f"Uplift score matrix must have shape (N, {len(columns)}); got {values.shape}"
             raise SchemaError(msg)
         if not np.isfinite(values).all():
             msg = "Uplift scores contain NaN or infinite values"
             raise SchemaError(msg)
-        probability_indices = (1, 2, 4, 5, 7, 8, 9)
-        if np.any(values[:, probability_indices] < 0) or np.any(
-            values[:, probability_indices] > 1
+        index = {name: position for position, name in enumerate(columns)}
+        probability_indices = tuple(
+            position
+            for name, position in index.items()
+            if name.endswith(("_control", "_treatment", "_propensity"))
+        )
+        if probability_indices and (
+            np.any(values[:, probability_indices] < 0)
+            or np.any(values[:, probability_indices] > 1)
         ):
             msg = "Uplift outcome/propensity probabilities must lie in [0, 1]"
             raise SchemaError(msg)
-        consistent_learners = [(0, 1, 2), (3, 4, 5)]
-        if require_x_effect:
-            consistent_learners.append((6, 7, 8))
-        for effect, control, treated in consistent_learners:
+        learners = uplift_learners(self.config.backend)
+        for name, (effect, control, treated) in learners.items():
+            if name == "x" and not require_x_effect:
+                continue
             if not np.allclose(
-                values[:, effect], values[:, treated] - values[:, control], atol=1e-10
+                values[:, index[effect]],
+                values[:, index[treated]] - values[:, index[control]],
+                atol=1e-10,
             ):
                 msg = "Uplift effects are inconsistent with treatment-control score differences"
                 raise SchemaError(msg)
@@ -340,7 +381,7 @@ class UpliftTask(CalibratableTask, BaseTask[UpliftBoostingBackend]):
         public_frame = frame.drop("__row_id") if "__row_id" in frame.columns else frame
         base = self._score_base(public_frame)
         scores = base.with_columns([
-            pl.Series(name, raw[:, i]) for i, name in enumerate(UPLIFT_SCORE_COLUMNS)
+            pl.Series(name, raw[:, i]) for i, name in enumerate(self._score_columns())
         ])
         treatment = self._internal_config.treatment_column
         if treatment and treatment in scores.columns and self.config.inverse_treatment:
@@ -440,7 +481,7 @@ class UpliftTask(CalibratableTask, BaseTask[UpliftBoostingBackend]):
             self._treatment(truth, require_both=True),
         )
         overall: dict[str, float | int] = {}
-        for learner, (effect, control, treated) in _LEARNER_COLUMNS.items():
+        for learner, (effect, control, treated) in self._learners().items():
             values = self._learner_metrics(
                 target,
                 treatment,
@@ -454,7 +495,7 @@ class UpliftTask(CalibratableTask, BaseTask[UpliftBoostingBackend]):
                 f"{learner}_{name}": value for name, value in values.items()
             })
         combined = truth.with_columns([
-            score_frame[name] for name in UPLIFT_SCORE_COLUMNS
+            score_frame[name] for name in self._score_columns()
         ])
         config = self._internal_config
         tables: list[pl.DataFrame] = []
@@ -463,7 +504,7 @@ class UpliftTask(CalibratableTask, BaseTask[UpliftBoostingBackend]):
             for keys, part in combined.group_by(group_columns, maintain_order=True):
                 key_values = keys if isinstance(keys, tuple) else (keys,)
                 part_target, part_treatment = self._target(part), self._treatment(part)
-                for learner, (effect, control, treated) in _LEARNER_COLUMNS.items():
+                for learner, (effect, control, treated) in self._learners().items():
                     metrics = self._learner_metrics(
                         part_target,
                         part_treatment,
@@ -554,7 +595,7 @@ class UpliftTask(CalibratableTask, BaseTask[UpliftBoostingBackend]):
                     learner: function(
                         target, layout_table[effect].to_numpy(), treatment
                     )
-                    for learner, (effect, _, _) in _LEARNER_COLUMNS.items()
+                    for learner, (effect, _, _) in self._learners().items()
                 }
                 curves[f"{name}_curves{layout_suffix}"] = CurveData(
                     name, layout_suffix, learners
@@ -580,12 +621,12 @@ class UpliftTask(CalibratableTask, BaseTask[UpliftBoostingBackend]):
                 truth,
                 config,
                 self._column_mapper,
-                score_columns=UPLIFT_SCORE_COLUMNS,
+                score_columns=self._score_columns(),
                 warn_duplicates=warn_duplicates,
             )
 
         raw_frame = aligned_score_frame(self._score_input(scores))
-        self._validate_score_matrix(raw_frame.select(UPLIFT_SCORE_COLUMNS).to_numpy())
+        self._validate_score_matrix(raw_frame.select(self._score_columns()).to_numpy())
         metrics, grouped = self._evaluate_table(truth, raw_frame, metric_names)
 
         importance: list[pl.DataFrame] = []

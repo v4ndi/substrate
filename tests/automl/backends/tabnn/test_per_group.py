@@ -94,9 +94,7 @@ def test_a_model_per_group_reads_its_own_partition(tmp_path, data):
     )
     partitions = sorted(path.name for path in (processed / "train").iterdir())
     assert partitions == ["channel=corp", "channel=retail"]
-    assert all(
-        list(path.glob("*.parquet")) for path in (processed / "train").iterdir()
-    )
+    assert all(list(path.glob("*.parquet")) for path in (processed / "train").iterdir())
 
 
 def test_every_row_still_reaches_exactly_one_partition(tmp_path, data):

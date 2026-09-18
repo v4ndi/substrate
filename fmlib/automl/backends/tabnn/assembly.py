@@ -151,6 +151,7 @@ def _dataloader(
     num_workers: int,
     is_regression: bool,
     device: str,
+    treatment_column: str | None = None,
 ) -> dict[str, Any]:
     dataset: dict[str, Any] = {
         "_target_": "fmlib.data.TabularDataset",
@@ -168,6 +169,15 @@ def _dataloader(
         "pin_memory": device == "gpu",
         "drop_last": False,
         "collate_fn": {
+            "_target_": "fmlib.data.UpliftCollateFn",
+            "target_column": processed.target_column,
+            "treatment_column": treatment_column,
+            # The AutoML data boundary has already normalised the flag, so
+            # inverting it again here would undo that.
+            "inverse_treatment": False,
+        }
+        if treatment_column
+        else {
             "_target_": "fmlib.data.TabularCollateFn",
             "target_column": processed.target_column,
             "is_regression": is_regression,
@@ -243,8 +253,15 @@ def build_train_config(
     batch_size = int(settings["batch_size"])
     trial_dir = str(trial_dir)
 
+    treatment_column = (
+        options.get("treatment_column")
+        if template["score_transform"] == "uplift"
+        else None
+    )
     model: dict[str, Any] = {
-        "_target_": "fmlib.pipeline.tabular.SupervisedLearner",
+        "_target_": template["model"].get(
+            "_target_", "fmlib.pipeline.tabular.SupervisedLearner"
+        ),
         "embedding": {
             "_target_": "fmlib.nn.embedding.TabularEmbedding",
             "num_numerical_features": processed.num_numerical or None,
@@ -293,6 +310,7 @@ def build_train_config(
             num_workers=int(settings["num_workers"]),
             is_regression=bool(template["is_regression"]),
             device=device,
+            treatment_column=treatment_column,
         ),
         "valid_dataloader": _dataloader(
             processed.split_path("valid", group_value),
@@ -302,6 +320,7 @@ def build_train_config(
             num_workers=int(settings["num_workers"]),
             is_regression=bool(template["is_regression"]),
             device=device,
+            treatment_column=treatment_column,
         ),
         "optimizer": {
             "_target_": "torch.optim.AdamW",
@@ -336,6 +355,7 @@ def build_train_config(
                 "task_name": task_name,
                 "score_transform": template["score_transform"],
                 "class_order": list(class_order) if class_order else None,
+                "target_key": "targets",
             }
         },
         # Explicit, and in this order: early stopping has to run before the

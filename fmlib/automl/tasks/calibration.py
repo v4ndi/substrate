@@ -9,23 +9,18 @@ from typing import TYPE_CHECKING, Any, Literal
 
 import polars as pl
 
-from fmlib.automl.backends.boosting.uplift import UPLIFT_SCORE_COLUMNS
 from fmlib.automl.calibrators import CalibrationStrategy, calibrator_class
 from fmlib.automl.config.base import EnvironmentConfig
 from fmlib.automl.data import ParquetSource
 from fmlib.automl.exceptions import ConfigError, SchemaError
 from fmlib.automl.tasks.evaluation import align_prediction_scores, align_scalar_scores
 from fmlib.automl.types import CalibrationResult, ParquetPath
+from fmlib.automl.uplift_scores import uplift_learners, uplift_score_columns
 
 if TYPE_CHECKING:
     from .base import BaseTask
 
 _ROW_ID = "__fmlib_calibration_row_id"
-_UPLIFT_LEARNERS = {
-    "s": ("score_s", "score_s_control", "score_s_treatment"),
-    "t": ("score_t", "score_t_control", "score_t_treatment"),
-    "x": ("score_x", "score_x_control", "score_x_treatment"),
-}
 
 
 def _required(frame: pl.DataFrame, columns: set[str], source: str) -> None:
@@ -102,7 +97,7 @@ def execute_calibration(
             truth,
             task._internal_config,
             task._column_mapper,
-            score_columns=UPLIFT_SCORE_COLUMNS,
+            score_columns=uplift_score_columns(task.config.backend),
             truth_columns=(treatment_column,),
             operation_name="Calibration",
         )
@@ -143,10 +138,11 @@ def execute_calibration(
             states[layout] = {"score": state.to_dict()}
         else:
             treatment_column = task._internal_config.treatment_column
-            _required(score_frame, set(UPLIFT_SCORE_COLUMNS), "test prediction")
+            score_columns = uplift_score_columns(task.config.backend)
+            _required(score_frame, set(score_columns), "test prediction")
             _required(
                 reference,
-                {*UPLIFT_SCORE_COLUMNS, target_column, treatment_column},
+                {*score_columns, target_column, treatment_column},
                 "calibration prediction",
             )
             treatment = task._binary_values(
@@ -155,7 +151,9 @@ def execute_calibration(
             target = task._binary_values(reference[target_column], target_column)
             output = score_frame.clone()
             branch_state: dict[str, Any] = {}
-            for learner, (effect, control, treated) in _UPLIFT_LEARNERS.items():
+            for learner, (effect, control, treated) in uplift_learners(
+                task.config.backend
+            ).items():
                 branch_state[learner] = {}
                 for arm, arm_name, column in (
                     (0, "control", control),
@@ -173,7 +171,7 @@ def execute_calibration(
                     (pl.col(treated) - pl.col(control)).alias(effect)
                 )
             task._validate_score_matrix(
-                output.select(UPLIFT_SCORE_COLUMNS).to_numpy(), require_x_effect=True
+                output.select(score_columns).to_numpy(), require_x_effect=True
             )
             result_parts.append(output)
             states[layout] = branch_state
