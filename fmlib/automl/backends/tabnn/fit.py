@@ -15,7 +15,6 @@ from typing import Any
 
 from fmlib.automl.backends.search import plan_trials
 from fmlib.automl.data import CanonicalColumnMapper
-from fmlib.automl.exceptions import UnsupportedBackendError
 from fmlib.automl.progress import log_progress
 from fmlib.automl.tasks.preparation import DataPreparation
 from fmlib.automl.tasks.state import ModelEntry, TrainingInput
@@ -72,16 +71,8 @@ def fit_model_part(
         The fitted model part, carrying a number and a set of weights.
 
     Raises:
-        UnsupportedBackendError: For a layout TabNN does not implement yet.
         RuntimeError: If the trial failed; the traceback travels with it.
     """
-    if layout != "global":
-        msg = (
-            f"backend='tabnn' does not support model_layout={layout!r} yet; "
-            "only a global model is implemented"
-        )
-        raise UnsupportedBackendError(msg)
-
     started = perf_counter()
     config = task.config
     internal = task._internal_config
@@ -97,6 +88,9 @@ def fit_model_part(
         mapper.to_external,
         categorical_role_columns=categorical_roles,
     )
+    # A per-group model reads one partition of the encoded data; a global model
+    # reads the flat layout. Both are cut out of the *same* encoding, so every
+    # part shares one vocabulary and one scaling.
     processed = prepare_processed_data(
         config=internal,
         schema=schema,
@@ -106,6 +100,7 @@ def fit_model_part(
         valid_manifest=DataPreparation.source_manifest(valid.source),
         to_external=mapper.to_external,
         num_workers=1,
+        partition_by=internal.group_column if layout == "per_group" else None,
     )
 
     part = task._model_name(layout, group_value)
@@ -127,6 +122,7 @@ def fit_model_part(
                 processed=processed,
                 params=dict(trial_params),
                 trial_dir=root / name,
+                group_value=group_value,
                 backend_options=task._backend_options(),
                 class_order=class_order,
             )

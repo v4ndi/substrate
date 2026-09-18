@@ -182,6 +182,7 @@ def build_train_config(
     processed: ProcessedData,
     params: Mapping[str, Any],
     trial_dir: str | Path,
+    group_value: Any | None = None,
     backend_options: Mapping[str, Any] | None = None,
     device: str | None = None,
     class_order: tuple[Any, ...] | None = None,
@@ -196,6 +197,8 @@ def build_train_config(
         processed: The encoded data this trial reads.
         params: This trial's hyperparameters, flat names as in the search space.
         trial_dir: Where checkpoints and the result of this trial go.
+        group_value: Under a partitioned layout, the group this model part
+            reads. ``None`` is the flat layout a global model needs.
         backend_options: Task-specific values, such as ``num_classes``.
         device: ``cpu`` or ``gpu``; defaults to the configuration's.
         class_order: Multiclass labels in training id order, for the metric.
@@ -283,7 +286,7 @@ def build_train_config(
         "ddp": {"find_unused_parameters": False},
         "model": model,
         "train_dataloader": _dataloader(
-            processed.train.path,
+            processed.split_path("train", group_value),
             processed=processed,
             batch_size=batch_size,
             shuffle=True,
@@ -292,7 +295,7 @@ def build_train_config(
             device=device,
         ),
         "valid_dataloader": _dataloader(
-            processed.valid.path,
+            processed.split_path("valid", group_value),
             processed=processed,
             batch_size=batch_size,
             shuffle=False,

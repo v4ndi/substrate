@@ -49,6 +49,7 @@ from pathlib import Path
 from typing import Any
 
 import polars as pl
+import pyarrow as pa
 import yaml
 
 from fmlib.automl.data import FeatureSchema, ParquetSource
@@ -98,6 +99,8 @@ class ProcessedData:
         num_numerical: How many numeric features a record carries.
         hidden_states: ``{column: width}`` of the pass-through embeddings.
         identity_columns: Columns written through untouched, physical names.
+        partition_by: Column the rows were fanned out by, or ``None`` for the
+            flat layout.
         target_column: Physical name of the target inside the encoded files.
         reused: Whether this run found the directory already complete.
     """
@@ -112,7 +115,23 @@ class ProcessedData:
     hidden_states: Mapping[str, int]
     identity_columns: tuple[str, ...]
     target_column: str
+    partition_by: str | None = None
     reused: bool = False
+
+    def split_path(self, split: str, group_value: Any | None = None) -> Path:
+        """Where one model part reads a split from.
+
+        Args:
+            split: ``train`` or ``valid``.
+            group_value: The group, under a partitioned layout.
+
+        Returns:
+            The flat split directory, or the one partition of it.
+        """
+        base = self.train.path if split == "train" else self.valid.path
+        if self.partition_by is None or group_value is None:
+            return base
+        return base / f"{self.partition_by}={group_value}"
 
     def preprocessor(self) -> TabularPreprocessor:
         """Load the fitted preprocessor that produced these files."""
@@ -322,12 +341,59 @@ def _split_from_manifest(root: Path, manifest: Mapping[str, Any], split: str):
 
 
 def _written_parts(directory: Path) -> tuple[tuple[str, ...], int]:
-    parts = sorted(path.name for path in directory.glob("*.parquet"))
+    """Every parquet file under a split, relative to it, plus the row count."""
+    parts = sorted(
+        path.relative_to(directory).as_posix() for path in directory.rglob("*.parquet")
+    )
     rows = sum(
         pl.scan_parquet(directory / name).select(pl.len()).collect().item()
         for name in parts
     )
     return tuple(parts), int(rows)
+
+
+def _partition_by_group(flat: Path, column: str) -> None:
+    """Rewrite an encoded split into one directory per group value, in place.
+
+    Why a partitioned layout at all: a batch comes from one file and there is
+    no shuffle buffer across files, so a per-group model reads its own
+    subdirectory and a batch is homogeneous by group *on purpose* -- that model
+    is only about that group. The same property is why a global model must not
+    read this layout, and why the two cannot be produced at once.
+
+    This is a second streaming pass rather than a smarter first one, because
+    ``write_dataset`` already knows how to fan rows out by a column value
+    without holding them.
+    """
+    import pyarrow.dataset as ds
+
+    staged = flat.with_name(f"{flat.name}.flat")
+    flat.rename(staged)
+    flat.mkdir(parents=True, exist_ok=True)
+    try:
+        ds.write_dataset(
+            ds.dataset(str(staged), format="parquet"),
+            str(flat),
+            format="parquet",
+            partitioning=ds.partitioning(
+                pa.schema([staged_field(staged, column)]), flavor="hive"
+            ),
+            existing_data_behavior="overwrite_or_ignore",
+            basename_template="part-{i}.parquet",
+        )
+    finally:
+        shutil.rmtree(staged, ignore_errors=True)
+
+
+def staged_field(directory: Path, column: str) -> pa.Field:
+    """The arrow field of ``column`` in an already-written split."""
+    import pyarrow.dataset as ds
+
+    schema = ds.dataset(str(directory), format="parquet").schema
+    if column not in schema.names:
+        msg = f"Cannot partition processed data by {column!r}: the column is not in it"
+        raise SchemaError(msg)
+    return schema.field(column)
 
 
 def _update_index(processed_root: Path, key: str, entry: Mapping[str, Any]) -> None:
@@ -363,6 +429,7 @@ def prepare_processed_data(
     to_external: Mapping[str, str] | None = None,
     num_workers: int = 1,
     preprocessor_kwargs: Mapping[str, Any] | None = None,
+    partition_by: str | None = None,
 ) -> ProcessedData:
     """Encode both splits once, publish atomically, and reuse when possible.
 
@@ -380,6 +447,8 @@ def prepare_processed_data(
         to_external: Canonical-to-physical role names.
         num_workers: Processes for the fit and the transform.
         preprocessor_kwargs: Extra arguments for :class:`TabularPreprocessor`.
+        partition_by: Column to fan the encoded rows out by, for a per-group
+            layout. ``None`` writes the flat layout a global model needs.
 
     Returns:
         The published directory, with ``reused`` saying whether this call
@@ -412,6 +481,9 @@ def prepare_processed_data(
         "categorical_columns": [external(name) for name in schema.categorical],
         "numeric_columns": [external(name) for name in schema.numerical],
         "identity_cols": list(identity),
+        # Part of the key: the same rows in a different physical layout are a
+        # different directory, not a reusable one.
+        "partition_by": external(partition_by) if partition_by else None,
         **dict(preprocessor_kwargs or {}),
     }
 
@@ -438,6 +510,7 @@ def prepare_processed_data(
             num_numerical=int(manifest["num_numerical"]),
             hidden_states=dict(manifest["hidden_states"]),
             identity_columns=tuple(manifest["identity_columns"]),
+            partition_by=manifest.get("partition_by"),
             target_column=manifest["target_column"],
             reused=True,
         )
@@ -483,6 +556,8 @@ def prepare_processed_data(
                 output="packed",
                 num_workers=num_workers,
             )
+            if partition_by:
+                _partition_by_group(directory, external(partition_by))
             parts, rows = _written_parts(directory)
             splits[name] = ProcessedSplit(path=root / name, rows=rows, parts=parts)
 
@@ -498,6 +573,7 @@ def prepare_processed_data(
             "num_numerical": len(schema.numerical),
             "hidden_states": dict(schema.hidden_states),
             "identity_columns": list(identity),
+            "partition_by": external(partition_by) if partition_by else None,
             "target_column": external(config.target_column),
             "preprocessing": preprocessing,
             "schema": schema.to_dict(),
@@ -574,6 +650,7 @@ def prepare_processed_data(
         num_numerical=len(schema.numerical),
         hidden_states=dict(schema.hidden_states),
         identity_columns=identity,
+        partition_by=external(partition_by) if partition_by else None,
         target_column=external(config.target_column),
     )
 
