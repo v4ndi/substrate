@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import sys
+import time
 import uuid
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
@@ -73,7 +74,8 @@ def _local_cuda_visibility(config: BaseTaskConfig) -> str | None:
     return "0" if config.backend == "boosting" else None
 
 
-_TERMINAL_STATES = {"failed", "succeeded"}
+#: A job in one of these states will never change again.
+_TERMINAL_STATES = {"failed", "succeeded", "lost"}
 _STATE_ALIASES = {
     "created": "queued",
     "pending": "queued",
@@ -86,6 +88,70 @@ _STATE_ALIASES = {
     "success": "succeeded",
     "completed": "succeeded",
 }
+
+#: Substrings the scheduler puts in a state when a job is still starting. This
+#: is a normal start, not a failure, and the job must never be resubmitted for
+#: it. Matched as text because it arrives as an error string, not a state.
+_STARTING_MARKERS = ("is not available", "containercreating", "podinitializing")
+
+#: Substrings that mean the scheduler does not know this job. After a grace
+#: period that becomes terminal; before it, a listing can simply lag.
+_MISSING_MARKERS = ("notfound", "not found", "no such")
+
+#: How long a job may be missing or unrecognised before it is declared lost.
+#: Module constants with an environment override, because this is an
+#: operational property of the scheduler, not of the training task.
+MISSING_GRACE_SECONDS = float(os.environ.get("FMLIB_AUTOML_MISSING_GRACE", 300.0))
+UNKNOWN_GRACE_SECONDS = float(os.environ.get("FMLIB_AUTOML_UNKNOWN_GRACE", 900.0))
+
+
+def classify_scheduler_state(row: Mapping[str, Any] | None) -> str:
+    """Map one scheduler listing row onto the states the driver reasons about.
+
+    Args:
+        row: The scheduler's entry for a job, or ``None`` when it has none.
+
+    Returns:
+        ``submitting``, ``queued``, ``running``, ``succeeded``, ``failed``,
+        ``missing`` (the scheduler does not know this job) or ``unknown`` (the
+        answer was not recognised at all). ``missing`` and ``unknown`` both get
+        a finite deadline from :func:`apply_grace`; neither is silently active
+        forever.
+    """
+    if row is None:
+        return "missing"
+    raw = str(row.get("state", "unknown"))
+    lowered = raw.lower()
+    if any(marker in lowered for marker in _STARTING_MARKERS):
+        return "submitting"
+    if any(marker in lowered for marker in _MISSING_MARKERS):
+        return "missing"
+    return _STATE_ALIASES.get(lowered, "unknown")
+
+
+def apply_grace(
+    state: str, since: float | None, now: float
+) -> tuple[str, float | None]:
+    """Give ``missing`` and ``unknown`` a deadline instead of an open end.
+
+    Args:
+        state: The state :func:`classify_scheduler_state` produced.
+        since: When this job first entered that state, or ``None``.
+        now: Current time.
+
+    Returns:
+        The state to record, and the timestamp to carry forward. A job that has
+        been missing or unrecognised past its grace becomes ``lost``: terminal,
+        diagnosable, and never resubmitted automatically -- recreating it is a
+        decision for a person.
+    """
+    if state not in {"missing", "unknown"}:
+        return state, None
+    grace = MISSING_GRACE_SECONDS if state == "missing" else UNKNOWN_GRACE_SECONDS
+    first_seen = now if since is None else float(since)
+    if now - first_seen >= grace:
+        return "lost", first_seen
+    return state, first_seen
 
 
 def _json_default(value: Any) -> Any:
@@ -264,6 +330,7 @@ class EnvironmentRunner:
         action: Literal["train", "predict", "calibrate", "evaluate"],
         payload: Mapping[str, Any],
         run_dir: Path,
+        job_suffix: str | None = None,
     ) -> dict[str, Any]:
         """Persist one run specification and submit it to Osiris.
 
@@ -272,6 +339,8 @@ class EnvironmentRunner:
             action: Operation executed by the remote process.
             payload: JSON-serializable paths and operation-specific values.
             run_dir: Directory the run specification is written to.
+            job_suffix: Appended to the scheduler job name, so one job of a
+                fan-out can be told from another without reading its spec.
 
         Returns:
             A persistent handle containing the exact scheduler job ID.
@@ -316,7 +385,11 @@ class EnvironmentRunner:
             encoding="utf-8",
         )
 
+        # The part index is in the name so a job orphaned between submit and
+        # persistence is findable rather than anonymous.
         job_name = f"fmlib-{action}-{run_id[:8]}"
+        if job_suffix:
+            job_name = f"{job_name}-{job_suffix}"
         envs = dict(config.environment.env)
         if (
             config.environment.resource_profile == "supercomp"
@@ -393,14 +466,17 @@ class EnvironmentRunner:
             for row in rows
         }
         details: list[dict[str, Any]] = []
+        now = time.time()
         for job in jobs:
             row = by_id.get(str(job["job_id"]))
-            raw = "unknown" if row is None else str(row.get("state", "unknown")).lower()
-            state = _STATE_ALIASES.get(raw, "unknown")
+            observed = classify_scheduler_state(row)
+            state, since = apply_grace(observed, job.get("unseen_since"), now)
             details.append(
                 dict(job)
                 | {
                     "state": state,
+                    "observed_state": observed,
+                    "unseen_since": since,
                     "scheduler": row,
                     "submitted_time": None
                     if row is None
@@ -413,15 +489,19 @@ class EnvironmentRunner:
         states = {item["state"] for item in details}
         if states == {"succeeded"}:
             aggregate = "succeeded"
-        elif states and states <= {"failed"}:
+        elif states and states <= {"failed", "lost"}:
             aggregate = "failed"
-        elif states and states <= _TERMINAL_STATES and "failed" in states:
+        elif states and states <= _TERMINAL_STATES:
             aggregate = "partial_failed"
         elif "running" in states:
             aggregate = "running"
         elif "queued" in states:
             aggregate = "queued"
+        elif "submitting" in states:
+            aggregate = "submitting"
         else:
+            # Only `missing` and `unknown` are left, and both are inside their
+            # grace: still worth waiting for, but not forever.
             aggregate = "unknown"
         return aggregate, details
 

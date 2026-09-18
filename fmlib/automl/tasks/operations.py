@@ -177,6 +177,9 @@ class OperationRunner:
                 return result
 
             jobs: list[dict[str, Any]] = []
+            operation = self.store.update_operation(
+                operation, state="submitting", artifact_path=str(artifact_path)
+            )
             for index, (layout, group_value) in enumerate(
                 execution._remote_training_parts(train_path)
             ):
@@ -200,7 +203,14 @@ class OperationRunner:
                         },
                         run_dir=self.store.operation_dir("train", operation["run_id"])
                         / f"job-{index:04d}",
+                        job_suffix=f"part-{index:04d}",
                     )
+                )
+                # Persisted after *every* submit, before the next one. A crash
+                # here leaves a job that is running and holding cards; losing
+                # its id would leave nobody able to find it.
+                operation = self.store.update_operation(
+                    operation, state="submitting", jobs=list(jobs)
                 )
             self.store.update_operation(
                 operation,
@@ -211,8 +221,12 @@ class OperationRunner:
             return None
         except Exception as exc:
             self.hooks.rollback_training(artifact_path)
+            # The jobs already submitted stay on the record: they are running,
+            # and an id nobody kept is an orphan nobody can stop.
             self.store.update_operation(
-                operation, state="failed", error=f"{type(exc).__name__}: {exc}"
+                operation,
+                state="failed",
+                error=f"{type(exc).__name__}: {exc}",
             )
             raise
 
@@ -378,48 +392,21 @@ class OperationRunner:
                     "partial_failed",
                 }:
                     continue
+                if operation.get("state") == "finalizing":
+                    # Left mid-finalization by a driver that died. status() is
+                    # a reflection of job state, not a recovery mechanism, so
+                    # it reports this and leaves the decision to finalize().
+                    active = True
+                    continue
                 aggregate, jobs = self.environment.poll_jobs(operation["jobs"])
                 operation = self.store.update_operation(
                     operation, state=aggregate, jobs=jobs
                 )
                 if aggregate == "succeeded":
                     try:
-                        if operation["action"] == "train":
-                            self._finalize_remote_train(operation)
-                            result_path = self.path / "training_result.json"
-                        elif operation["action"] == "predict":
-                            self._finalize_remote_prediction(operation)
-                            result_path = (
-                                self.store.prediction_dir(str(operation["dataset_key"]))
-                                / "scores.parquet"
-                            )
-                        elif operation["action"] == "evaluate":
-                            self._finalize_remote_evaluation(operation)
-                            result_path = (
-                                self.store.evaluation_dir(str(operation["dataset_key"]))
-                                / "evaluation_result.json"
-                            )
-                        else:
-                            self._finalize_remote_calibration(operation)
-                            result_path = (
-                                self.store.calibration_dir(
-                                    str(operation["dataset_key"])
-                                )
-                                / "scores.parquet"
-                            )
-                        self.store.update_operation(
-                            operation, state="succeeded", result_path=str(result_path)
-                        )
+                        self._finalize(operation)
                     except Exception as exc:
-                        if operation["action"] == "train":
-                            self.hooks.rollback_training(
-                                Path(str(operation["artifact_path"]))
-                            )
-                        self.store.update_operation(
-                            operation,
-                            state="failed",
-                            error=f"Finalization failed: {type(exc).__name__}: {exc}",
-                        )
+                        self._record_finalization_failure(operation, exc)
                         failure_messages.append(self.environment.failure_logs(jobs))
                 elif aggregate in {"failed", "partial_failed"}:
                     diagnostics = self.environment.failure_logs(jobs)
@@ -439,6 +426,98 @@ class OperationRunner:
             if not wait or not active:
                 return table
             time.sleep(self.config.environment.poll_interval_seconds)
+
+    def _finalize(self, operation: Mapping[str, Any]) -> dict[str, Any]:
+        """Assemble a finished remote operation and publish it, in that order.
+
+        ``finalizing`` is written first and is **not** terminal, so a driver
+        that dies between the jobs finishing and the result being assembled
+        leaves an operation that can be picked up again. ``succeeded`` is
+        written only once the result exists.
+
+        Args:
+            operation: The operation whose jobs have all finished.
+
+        Returns:
+            The published operation record.
+        """
+        operation = self.store.update_operation(operation, state="finalizing")
+        action = operation["action"]
+        if action == "train":
+            self._finalize_remote_train(operation)
+            result_path = self.path / "training_result.json"
+        elif action == "predict":
+            self._finalize_remote_prediction(operation)
+            result_path = (
+                self.store.prediction_dir(str(operation["dataset_key"]))
+                / "scores.parquet"
+            )
+        elif action == "evaluate":
+            self._finalize_remote_evaluation(operation)
+            result_path = (
+                self.store.evaluation_dir(str(operation["dataset_key"]))
+                / "evaluation_result.json"
+            )
+        else:
+            self._finalize_remote_calibration(operation)
+            result_path = (
+                self.store.calibration_dir(str(operation["dataset_key"]))
+                / "scores.parquet"
+            )
+        return self.store.update_operation(
+            operation, state="succeeded", result_path=str(result_path)
+        )
+
+    def _record_finalization_failure(
+        self, operation: Mapping[str, Any], error: Exception
+    ) -> None:
+        if operation["action"] == "train":
+            self.hooks.rollback_training(Path(str(operation["artifact_path"])))
+        self.store.update_operation(
+            operation,
+            state="failed",
+            error=f"Finalization failed: {type(error).__name__}: {error}",
+        )
+
+    def finalize(self, *, force: bool = False) -> pl.DataFrame:
+        """Finish remote operations whose jobs are done but whose result is not.
+
+        Idempotent: running it when there is nothing to finish does nothing,
+        and running it twice on the same operation produces the same published
+        result rather than two of anything. The happy path never needs it --
+        a live driver finalizes inside ``status()`` -- it exists for the case
+        where that driver is gone.
+
+        Args:
+            force: Take over an operation another process still owns.
+
+        Returns:
+            The status table, as ``status()`` would report it.
+
+        Raises:
+            RemoteExecutionError: If an operation could not be finalized.
+        """
+        failures: list[str] = []
+        for operation in self.store.operations():
+            if not operation.get("jobs"):
+                continue
+            if operation.get("state") in {"succeeded", "failed", "partial_failed"}:
+                continue
+            aggregate, jobs = self.environment.poll_jobs(operation["jobs"])
+            if operation.get("state") != "finalizing" and aggregate != "succeeded":
+                continue
+            claimed = self.store.claim_operation(operation, force=force)
+            claimed = self.store.update_operation(claimed, jobs=jobs)
+            try:
+                self._finalize(claimed)
+            except Exception as exc:
+                self._record_finalization_failure(claimed, exc)
+                failures.append(f"{type(exc).__name__}: {exc}")
+        if failures:
+            diagnostics = "\n".join(failures)
+            logger.error("Finalization failed:\n%s", diagnostics)
+            raise RemoteExecutionError(diagnostics)
+        return self._status_table()
 
     def _status_table(self) -> pl.DataFrame:
         """Build a compact status table without exposing internal record objects."""

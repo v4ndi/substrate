@@ -393,6 +393,24 @@ class BaseTask(ABC, Generic[_BackendT]):
         """
         return self._operation_runner().status(wait=wait)
 
+    def finalize(self, *, force: bool = False) -> pl.DataFrame:
+        """Finish remote operations whose jobs are done but whose result is not.
+
+        In normal use this is never needed: a live driver finalizes inside
+        ``status()``. It exists for the case where that driver is gone -- the
+        notebook container died between the jobs finishing and the result being
+        assembled -- and it is idempotent, so calling it when there is nothing
+        to finish does nothing.
+
+        Args:
+            force: Take over an operation that another process still claims to
+                own. Only when you know that process is gone.
+
+        Returns:
+            The same table ``status()`` returns.
+        """
+        return self._operation_runner().finalize(force=force)
+
     def _require_fitted(self) -> None:
         """Raise when an operation requires a fitted model."""
         if not self.is_fitted:

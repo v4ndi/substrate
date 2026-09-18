@@ -27,7 +27,18 @@ from fmlib.automl.types import (
     TrainingResult,
 )
 
-_ACTIVE_STATES = {"created", "queued", "running", "unknown"}
+#: States an operation can still move out of. ``submitting`` and
+#: ``finalizing`` are here because they are the two windows a driver can die
+#: in: a terminal record written before the work was done is exactly the bug
+#: P1 and P2 are about.
+_ACTIVE_STATES = {
+    "created",
+    "submitting",
+    "queued",
+    "running",
+    "unknown",
+    "finalizing",
+}
 _LOCAL_HEARTBEAT_TIMEOUT_SECONDS = 120.0
 
 
@@ -43,9 +54,16 @@ def json_default(value: Any) -> Any:
 
 
 def write_json(path: Path, payload: Mapping[str, Any]) -> None:
-    """Atomically write one human-readable JSON record."""
+    """Atomically write one human-readable JSON record.
+
+    The temporary name carries the pid and a random suffix: with a fixed name
+    two writers would be writing the same file before renaming it, and the
+    rename would publish whichever half-written one lost.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(f"{path.suffix}.tmp")
+    temporary = path.with_suffix(
+        f"{path.suffix}.tmp-{os.getpid()}-{uuid.uuid4().hex[:8]}"
+    )
     temporary.write_text(
         json.dumps(payload, default=json_default, ensure_ascii=False, indent=2),
         encoding="utf-8",
@@ -192,6 +210,59 @@ class AutoMLStore:
         updated = current | updates
         write_json(path, updated)
         return updated
+
+    def claim_operation(
+        self, record: Mapping[str, Any], *, force: bool = False
+    ) -> dict[str, Any]:
+        """Take ownership of an operation, or refuse to fight over it.
+
+        The driver is the only writer of ``operation.json`` -- jobs write their
+        own ``result.json`` in their own run directory -- so parallel jobs
+        cannot corrupt this record. The way two writers appear is the recovery
+        story: "the container died, I will run finalize() again" can put a
+        second driver on an operation whose first driver is still alive. That
+        is a question of ownership, not of locking, and the record already
+        carries an owner.
+
+        Args:
+            record: The operation to claim.
+            force: Take ownership even from a live owner. For the case where a
+                person knows better than the liveness check.
+
+        Returns:
+            The operation, owned by this process.
+
+        Raises:
+            RuntimeError: If another *live* process owns it.
+        """
+        path = (
+            self.operation_dir(str(record["action"]), str(record["run_id"]))
+            / "operation.json"
+        )
+        current = read_json(path) if path.is_file() else dict(record)
+        owner = current.get("owner")
+        if isinstance(owner, Mapping) and not force:
+            mine = (
+                owner.get("hostname") == socket.gethostname()
+                and owner.get("pid") == os.getpid()
+            )
+            if not mine and self._local_owner_is_alive(owner) is not False:
+                where = f"{owner.get('hostname')}:{owner.get('pid')}"
+                msg = (
+                    f"Operation {record['run_id']} is owned by {where}, which is "
+                    "still running or on another host. Wait for it, or pass "
+                    "force=True if you know it is gone."
+                )
+                raise RuntimeError(msg)
+        return self.update_operation(
+            current,
+            owner={
+                "hostname": socket.gethostname(),
+                "pid": os.getpid(),
+                "token": uuid.uuid4().hex,
+            },
+            claimed_at=time.time(),
+        )
 
     @staticmethod
     def _local_owner_is_alive(owner: Mapping[str, Any]) -> bool | None:

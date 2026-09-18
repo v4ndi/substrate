@@ -144,8 +144,7 @@ def test_a_vanished_job_stops_appearing_in_the_listing(tmp_path):
     assert scheduler.list()["jobs"]
     scheduler.vanish = [name]
     assert scheduler.list()["jobs"] == []
-    # Today an absent job reads as `unknown`; giving that a finite outcome is P4.
-    assert task.status()["state"].to_list() == ["unknown"]
+    assert task.status()["state"].to_list() == ["missing"]
 
 
 def test_the_transient_container_error_is_served_once(tmp_path):
