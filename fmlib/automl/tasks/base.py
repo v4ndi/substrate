@@ -216,8 +216,24 @@ class BaseTask(ABC, Generic[_BackendT]):
         *,
         remote_layout: str | None = None,
         remote_group_value: Any | None = None,
+        trial: Mapping[str, Any] | None = None,
     ) -> TrainingResult:
-        """Execute global/per-group training synchronously in the current process."""
+        """Execute global/per-group training synchronously in the current process.
+
+        Args:
+            train_path: Training parquet.
+            valid_path: Validation parquet.
+            remote_layout: The one layout this process is responsible for.
+            remote_group_value: The one group, under ``per_group``.
+            trial: One trial of a fanned-out search -- ``{"trial_id", "params"}``
+                -- when this process is a single job of that fan-out. ``None``
+                means "decide the trials yourself", which is what a local run
+                and every boosting run do.
+
+        Returns:
+            The training result of whatever this process was responsible for.
+        """
+        self._forced_trial = dict(trial) if trial else None
         outcome = TrainingCoordinator(
             self._context(),
             self._task_name,
@@ -232,6 +248,47 @@ class BaseTask(ABC, Generic[_BackendT]):
         self._models = list(outcome.models)
         self._source_manifests = dict(outcome.source_manifests)
         return outcome.result
+
+    def _remote_job_plan(self, train_path: ParquetPath) -> list[dict[str, Any]]:
+        """One entry per remote job: which part, and which trial of it.
+
+        Boosting submits one job per model part and decides its own trials
+        inside that job: a boosting trial costs minutes, and a job per trial
+        would cost more in scheduling than it saves. TabNN fans out, because a
+        network trial costs hours and the whole plan is known before the first
+        submit.
+
+        Args:
+            train_path: Training parquet, read only for its group values.
+
+        Returns:
+            Job descriptors, in submission order.
+        """
+        parts = self._remote_training_parts(train_path)
+        if self.config.backend == "boosting" or not self.config.hyperopt:
+            return [
+                {"layout": layout, "group_value": group_value, "trial": None}
+                for layout, group_value in parts
+            ]
+        from fmlib.automl.backends.search import plan_trials
+
+        plan = plan_trials(
+            backend=self.config.backend,
+            engine=self.config.engine,
+            model_params=self.config.model_params,
+            search_space=self.config.search_space,
+            n_trials=int(self.config.n_trials),
+            random_state=int(self.config.random_state),
+        )
+        return [
+            {
+                "layout": layout,
+                "group_value": group_value,
+                "trial": {"trial_id": f"trial-{index:04d}", "params": dict(params)},
+            }
+            for layout, group_value in parts
+            for index, params in enumerate(plan.params)
+        ]
 
     def _remote_training_parts(
         self, train_path: ParquetPath

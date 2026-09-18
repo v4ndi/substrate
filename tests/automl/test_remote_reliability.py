@@ -142,7 +142,13 @@ def test_a_failed_submit_keeps_the_jobs_already_created(tmp_path):
         task.train(train, train)
 
     operation = task._store.latest("train")
-    assert [job["job_id"] for job in operation["jobs"]] == ["job-1"]
+    submitted = [job["job_id"] for job in operation["jobs"] if job["job_id"]]
+    planned = [job for job in operation["jobs"] if job["job_id"] is None]
+    assert submitted == ["job-1"]
+    # The rest are still on the record as planned, with their parameters, which
+    # is what makes the submit resumable instead of replanned.
+    assert len(planned) == 2
+    assert all(job["state"] == "planned" for job in planned)
     assert operation["state"] == "failed"
 
 
@@ -155,10 +161,13 @@ def test_each_job_is_persisted_before_the_next_one_is_submitted(tmp_path):
 
     def record(_request):
         operation = task._store.latest("train")
-        seen.append(len(operation.get("jobs") or []))
+        seen.append(
+            len([job for job in operation.get("jobs") or () if job.get("job_id")])
+        )
 
     scheduler.on_create = record
     task.train(train, train)
+    # Every submit sees the previous one already on the record.
     assert seen == [0, 1, 2]
 
 

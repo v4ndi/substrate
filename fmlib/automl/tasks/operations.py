@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
@@ -23,6 +23,7 @@ from fmlib.automl.exceptions import (
 )
 from fmlib.automl.execution import ExecutionContext
 from fmlib.automl.lifecycle import AutoMLStore, normalize_dataset_path, read_json
+from fmlib.automl.metrics import resolve_metric
 from fmlib.automl.result_io import evaluation_from_payload
 from fmlib.automl.types import (
     CalibrationResult,
@@ -176,48 +177,46 @@ class OperationRunner:
                 )
                 return result
 
-            jobs: list[dict[str, Any]] = []
-            operation = self.store.update_operation(
-                operation, state="submitting", artifact_path=str(artifact_path)
-            )
-            for index, (layout, group_value) in enumerate(
-                execution._remote_training_parts(train_path)
-            ):
+            plan = execution._remote_job_plan(train_path)
+            planned: list[dict[str, Any]] = []
+            for index, entry in enumerate(plan):
                 part_artifact = (
                     self.path
                     / ".remote_parts"
                     / operation["run_id"]
                     / f"part-{index:04d}"
                 )
-                jobs.append(
-                    execution._runner().submit(
-                        config=execution.config,
-                        action="train",
-                        payload={
-                            "train_path": normalize_dataset_path(train_path),
-                            "valid_path": normalize_dataset_path(valid_path),
-                            "entity_config": _jsonable(asdict(self.config)),
-                            "artifact_path": str(part_artifact),
-                            "remote_layout": layout,
-                            "remote_group_value": group_value,
-                        },
-                        run_dir=self.store.operation_dir("train", operation["run_id"])
-                        / f"job-{index:04d}",
-                        job_suffix=f"part-{index:04d}",
-                    )
-                )
-                # Persisted after *every* submit, before the next one. A crash
-                # here leaves a job that is running and holding cards; losing
-                # its id would leave nobody able to find it.
-                operation = self.store.update_operation(
-                    operation, state="submitting", jobs=list(jobs)
-                )
-            self.store.update_operation(
+                planned.append({
+                    "state": "planned",
+                    "job_id": None,
+                    "index": index,
+                    "layout": entry["layout"],
+                    "group_value": entry["group_value"],
+                    "trial": entry["trial"],
+                    "run_dir": str(
+                        self.store.operation_dir("train", operation["run_id"])
+                        / f"job-{index:04d}"
+                    ),
+                    "payload": {
+                        "train_path": normalize_dataset_path(train_path),
+                        "valid_path": normalize_dataset_path(valid_path),
+                        "entity_config": _jsonable(asdict(self.config)),
+                        "artifact_path": str(part_artifact),
+                        "remote_layout": entry["layout"],
+                        "remote_group_value": entry["group_value"],
+                        **({"trial": entry["trial"]} if entry["trial"] else {}),
+                    },
+                })
+            # Parameters are written before anything is submitted, so a search
+            # that is interrupted mid-submit can be resumed from the record
+            # rather than replanned -- replanning would renumber the trials.
+            operation = self.store.update_operation(
                 operation,
-                state="queued",
-                jobs=jobs,
+                state="submitting",
+                jobs=planned,
                 artifact_path=str(artifact_path),
             )
+            operation = self._submit_planned_jobs(operation, execution)
             return None
         except Exception as exc:
             self.hooks.rollback_training(artifact_path)
@@ -230,15 +229,103 @@ class OperationRunner:
             )
             raise
 
+    def _poll(self, operation: Mapping[str, Any]) -> tuple[str, list[dict[str, Any]]]:
+        """Poll the submitted jobs, leaving the planned ones alone.
+
+        A planned job has no scheduler id, so asking about it would read as a
+        job the scheduler has lost. It is simply not submitted yet.
+        """
+        jobs = list(operation.get("jobs") or ())
+        submitted = [job for job in jobs if job.get("job_id") is not None]
+        planned = [job for job in jobs if job.get("job_id") is None]
+        if not submitted:
+            return "submitting", jobs
+        aggregate, polled = self.environment.poll_jobs(submitted)
+        merged = sorted(
+            [*polled, *planned],
+            key=lambda job: job.get("index", 0),
+        )
+        if planned and aggregate in {"succeeded", "failed", "partial_failed"}:
+            # Some of the plan has not been submitted yet, so nothing about it
+            # is finished, whatever the submitted part says.
+            aggregate = "submitting"
+        return aggregate, merged
+
+    def _submit_planned_jobs(
+        self, operation: Mapping[str, Any], execution: Any | None = None
+    ) -> dict[str, Any]:
+        """Submit jobs still ``planned``, up to ``max_parallel_jobs`` in flight.
+
+        Resumable by construction: the plan lives on the record, so a driver
+        that died mid-submit leaves entries a later ``status()`` picks up, and
+        an entry that already has a ``job_id`` is never submitted twice.
+
+        Args:
+            operation: The operation whose plan to advance.
+            execution: The execution view to submit through; built if omitted.
+
+        Returns:
+            The updated operation.
+        """
+        jobs = [dict(job) for job in operation.get("jobs") or ()]
+        pending = [job for job in jobs if job.get("job_id") is None]
+        if not pending:
+            return self.store.update_operation(
+                operation, state=operation.get("state", "queued"), jobs=jobs
+            )
+        if execution is None:
+            execution = self.hooks.execution_view(
+                ExecutionContext.from_config(self.config), prepare_backends=False
+            )
+        limit = self.config.max_parallel_jobs
+        in_flight = sum(
+            1
+            for job in jobs
+            if job.get("job_id") is not None
+            and job.get("state") not in {"succeeded", "failed", "lost"}
+        )
+        for job in pending:
+            if limit is not None and in_flight >= limit:
+                break
+            suffix = f"part-{job['index']:04d}"
+            if job.get("trial"):
+                suffix = f"{suffix}-{job['trial']['trial_id']}"
+            handle = execution._runner().submit(
+                config=execution.config,
+                action="train",
+                payload=job["payload"],
+                run_dir=Path(job["run_dir"]),
+                job_suffix=suffix,
+            )
+            job.update(handle)
+            job["state"] = handle.get("state", "queued")
+            in_flight += 1
+            # Persisted after *every* submit, before the next one. A crash here
+            # leaves a job that is running and holding cards; losing its id
+            # would leave nobody able to find it.
+            operation = self.store.update_operation(
+                operation, state="submitting", jobs=jobs
+            )
+        remaining = any(job.get("job_id") is None for job in jobs)
+        return self.store.update_operation(
+            operation, state="submitting" if remaining else "queued", jobs=jobs
+        )
+
     def _finalize_remote_train(self, operation: Mapping[str, Any]) -> None:
-        """Publish training only after all worker artifacts have been assembled."""
+        """Publish training only after all worker artifacts have been assembled.
+
+        With one job per model part -- which is every boosting run -- every
+        successful job contributes. With one job per *trial*, the jobs of one
+        part are competitors, and only the winner's artifact is assembled.
+        """
         artifact_path = Path(str(operation["artifact_path"]))
+        winners = self._winning_jobs(operation)
         part_paths = (
             ()
             if artifact_path.exists()
             else tuple(
                 Path(read_json(Path(job["spec_path"]))["payload"]["artifact_path"])
-                for job in operation["jobs"]
+                for job in winners
             )
         )
         feature_names = self.hooks.assemble_training(
@@ -247,7 +334,7 @@ class OperationRunner:
         self.hooks.set_artifact(artifact_path)
         best_params: dict[str, Any] = {}
         validation_metrics: dict[str, float] = {}
-        for job in operation["jobs"]:
+        for job in winners:
             result = read_json(Path(job["result_path"]))
             best_params.update(result.get("best_params", {}))
             validation_metrics.update(result.get("validation_metrics", {}))
@@ -261,6 +348,54 @@ class OperationRunner:
                 task_name=self.store.entity["task"],
             )
         )
+
+    def _winning_jobs(self, operation: Mapping[str, Any]) -> list[dict[str, Any]]:
+        """One job per model part: the best trial of it, or the only one.
+
+        Failed trials are dropped rather than fatal: a search survives losing
+        some of its trials, and an operation is successful when every part
+        ended up with a model.
+
+        Returns:
+            The contributing jobs, in plan order.
+        """
+        jobs = list(operation.get("jobs") or ())
+        if not any(job.get("trial") for job in jobs):
+            # One job per model part: every one of them contributes, which is
+            # what this has always done and what boosting still does.
+            return [dict(job) for job in jobs]
+        metric = resolve_metric(
+            self.config.optimization_metric, self.config.task_name, "optimization"
+        )
+        maximize = metric.optimization_direction == "maximize"
+        best: dict[tuple[Any, ...], tuple[float, dict[str, Any]]] = {}
+        for job in jobs:
+            if job.get("state") != "succeeded":
+                continue
+            result = read_json(Path(job["result_path"]))
+            values = [
+                float(value)
+                for value in (result.get("validation_metrics") or {}).values()
+            ]
+            score = (max if maximize else min)(values) if values else None
+            key = (job.get("layout"), job.get("group_value"), job.get("index", 0))
+            part = key[:2] if job.get("trial") else key
+            if score is None:
+                best.setdefault(
+                    part, (float("-inf") if maximize else float("inf"), job)
+                )
+                continue
+            current = best.get(part)
+            better = (
+                current is None
+                or (maximize and score > current[0])
+                or (not maximize and score < current[0])
+            )
+            if better:
+                best[part] = (score, job)
+        return [
+            job for _, (_, job) in sorted(best.items(), key=lambda item: str(item[0]))
+        ]
 
     def _finalize_remote_prediction(self, operation: Mapping[str, Any]) -> None:
         """Merge ordered global/per-group job scores and publish one prediction."""
@@ -398,11 +533,21 @@ class OperationRunner:
                     # it reports this and leaves the decision to finalize().
                     active = True
                     continue
-                aggregate, jobs = self.environment.poll_jobs(operation["jobs"])
+                aggregate, jobs = self._poll(operation)
                 operation = self.store.update_operation(
                     operation, state=aggregate, jobs=jobs
                 )
-                if aggregate == "succeeded":
+                if any(job.get("job_id") is None for job in jobs):
+                    # Poll first: how many jobs are in flight is what decides
+                    # whether the next chunk of the plan may be submitted.
+                    operation = self._submit_planned_jobs(operation)
+                    aggregate, jobs = self._poll(operation)
+                    operation = self.store.update_operation(
+                        operation, state=aggregate, jobs=jobs
+                    )
+                if aggregate == "succeeded" or (
+                    aggregate == "partial_failed" and _every_part_has_a_model(jobs)
+                ):
                     try:
                         self._finalize(operation)
                     except Exception as exc:
@@ -829,3 +974,18 @@ class OperationRunner:
                 operation, state="failed", error=f"{type(exc).__name__}: {exc}"
             )
             raise
+
+
+def _every_part_has_a_model(jobs: Sequence[Mapping[str, Any]]) -> bool:
+    """Whether each model part of a fan-out ended with at least one success.
+
+    Only meaningful for a fan-out: with one job per part, a failure means that
+    part has no model and the operation genuinely failed.
+    """
+    parts: dict[tuple[Any, ...], bool] = {}
+    for job in jobs:
+        if not job.get("trial"):
+            return False
+        key = (job.get("layout"), job.get("group_value"))
+        parts[key] = parts.get(key, False) or job.get("state") == "succeeded"
+    return bool(parts) and all(parts.values())

@@ -200,6 +200,10 @@ class BaseTaskConfig:
         processed_data_path: Where preprocessed TabNN data is written and reused.
             ``None`` resolves to ``<output_dir>/processed``. Boosting ignores it;
             it prepares its matrices in memory.
+        max_parallel_jobs: Cap on remote jobs in flight at once. ``None`` submits
+            every planned job immediately. With a cap, submission happens in
+            chunks and is resumable: jobs still ``planned`` are submitted by a
+            later ``status()``.
         environment: Optional execution environment configuration. When omitted,
             remote execution uses the documented shared fmlib environment.
 
@@ -240,6 +244,7 @@ class BaseTaskConfig:
     hyperopt: bool
     output_dir: str | Path
     processed_data_path: str | Path | None = None
+    max_parallel_jobs: int | None = None
     environment: EnvironmentConfig = field(default_factory=EnvironmentConfig)
     optimization_metric: str | None = None
     verbose: bool | int = True
@@ -286,6 +291,13 @@ class BaseTaskConfig:
             or not str(self.processed_data_path)
         ):
             msg = f"processed_data_path={self.processed_data_path!r}: expected a non-empty path or None"
+            raise ConfigError(msg)
+        if self.max_parallel_jobs is not None and (
+            isinstance(self.max_parallel_jobs, bool)
+            or not isinstance(self.max_parallel_jobs, int)
+            or self.max_parallel_jobs < 1
+        ):
+            msg = f"max_parallel_jobs={self.max_parallel_jobs!r}: expected an integer >= 1 or None"
             raise ConfigError(msg)
         for name in ("categorical_columns", "numerical_columns"):
             object.__setattr__(

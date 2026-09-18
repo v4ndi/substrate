@@ -112,6 +112,9 @@ def fit_model_part(
     class_order = getattr(task, "_class_order", None)
     root = Path(config.output_dir) / "tabnn" / part
     candidates = _trial_params(task, params)
+    forced = getattr(task, "_forced_trial", None)
+    if forced:
+        trial_id = str(forced["trial_id"])
     runner = InProcessRunner()
 
     results: list[tuple[TrialResult, Mapping[str, Any], Any]] = []
@@ -232,6 +235,12 @@ def _trial_params(
     config = task.config
     if params is not None:
         return [dict(params)]
+    forced = getattr(task, "_forced_trial", None)
+    if forced:
+        # One job of a fan-out: the driver already chose this trial's
+        # parameters, and choosing again here would mean K jobs each running
+        # the whole search.
+        return [dict(forced["params"])]
     if not config.hyperopt:
         return [dict(config.model_params)]
     plan = plan_trials(

@@ -97,6 +97,7 @@ def execute_spec(spec_path: str | Path) -> dict[str, Any]:
                 arguments["valid_path"],
                 remote_layout=arguments.get("remote_layout"),
                 remote_group_value=arguments.get("remote_group_value"),
+                trial=arguments.get("trial"),
             )
             task._adopt(execution)
             artifact = task.save(artifact_root)
@@ -106,6 +107,8 @@ def execute_spec(spec_path: str | Path) -> dict[str, Any]:
                 "best_params": dict(training.best_params),
                 "validation_metrics": dict(training.validation_metrics),
             }
+            if arguments.get("trial"):
+                result["trial"] = dict(arguments["trial"])
         elif action == "predict":
             artifact_root = Path(arguments["artifact_path"])
             parent_layout = config.resolved_model_layout
