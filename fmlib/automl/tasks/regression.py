@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -42,8 +42,8 @@ class RegressionTask(SupervisedTask[RegressionBoostingBackend]):
         config: Validated regression-task configuration.
     """
 
-    _backend_classes: ClassVar[Mapping[str, type]] = {
-        "boosting": RegressionBoostingBackend
+    _backend_loaders: ClassVar[Mapping[str, Callable[[], type]]] = {
+        "boosting": lambda: RegressionBoostingBackend,
     }
     _config_class = RegressionTaskConfig
     _task_name = "regression"

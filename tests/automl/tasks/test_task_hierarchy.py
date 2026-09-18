@@ -160,9 +160,9 @@ def test_every_task_resolves_its_backend_family_through_one_dictionary():
         ResponseTask,
         UpliftTask,
     ):
-        assert set(task_class._backend_classes) == {"boosting"}
+        assert set(task_class._backend_loaders) == {"boosting"}
         adapter = task_class._backend_class_for("boosting")
-        assert adapter is task_class._backend_classes["boosting"]
+        assert adapter is task_class._backend_loaders["boosting"]()
 
 
 def test_unknown_backend_family_names_the_task_and_what_is_supported():

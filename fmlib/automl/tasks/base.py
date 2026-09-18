@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import shutil
 from abc import ABC, abstractmethod
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from copy import copy
 from dataclasses import asdict, replace
 from pathlib import Path
@@ -68,9 +68,12 @@ class BaseTask(ABC, Generic[_BackendT]):
         config: Public configuration supplied by the caller.
     """
 
-    #: Adapter per backend family. The dict *is* the dispatch: adding a
-    #: family is an entry here, not a new branch in the task layer.
-    _backend_classes: ClassVar[Mapping[str, type]]
+    #: Loader per backend family. The dict *is* the dispatch: adding a family
+    #: is an entry here, not a new branch in the task layer. The values are
+    #: callables rather than classes so that a family whose import is
+    #: expensive -- TabNN pulls in torch -- is loaded only when it is asked
+    #: for, and ``import fmlib.automl`` stays light for the boosting path.
+    _backend_loaders: ClassVar[Mapping[str, Callable[[], type]]]
     _config_class: type[BaseTaskConfig]
     _task_name: str
     _artifact_directory: str
@@ -861,14 +864,15 @@ class BaseTask(ABC, Generic[_BackendT]):
             UnsupportedBackendError: If the task has no adapter for it.
         """
         try:
-            return cls._backend_classes[backend]
+            loader = cls._backend_loaders[backend]
         except KeyError:
-            supported = ", ".join(sorted(cls._backend_classes))
+            supported = ", ".join(sorted(cls._backend_loaders))
             msg = (
                 f"Task {cls._task_name!r} does not support backend {backend!r}; "
                 f"supported: {supported}"
             )
             raise UnsupportedBackendError(msg) from None
+        return loader()
 
     @classmethod
     def _repository(cls) -> ArtifactRepository:

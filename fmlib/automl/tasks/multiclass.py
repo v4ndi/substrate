@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -46,8 +46,8 @@ class MulticlassTask(SupervisedTask[MulticlassBoostingBackend]):
         config: Validated multiclass-task configuration.
     """
 
-    _backend_classes: ClassVar[Mapping[str, type]] = {
-        "boosting": MulticlassBoostingBackend
+    _backend_loaders: ClassVar[Mapping[str, Callable[[], type]]] = {
+        "boosting": lambda: MulticlassBoostingBackend,
     }
     _config_class = MulticlassTaskConfig
     _task_name = "multiclass"

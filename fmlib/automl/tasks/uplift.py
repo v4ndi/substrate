@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from time import perf_counter
 from typing import Any, ClassVar
@@ -61,7 +61,9 @@ class UpliftTask(CalibratableTask, BaseTask[UpliftBoostingBackend]):
         config: Validated uplift-task configuration.
     """
 
-    _backend_classes: ClassVar[Mapping[str, type]] = {"boosting": UpliftBoostingBackend}
+    _backend_loaders: ClassVar[Mapping[str, Callable[[], type]]] = {
+        "boosting": lambda: UpliftBoostingBackend,
+    }
     _config_class = UpliftTaskConfig
     _task_name = "uplift"
     _artifact_directory = "uplift_model"

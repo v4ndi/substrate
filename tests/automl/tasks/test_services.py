@@ -407,7 +407,9 @@ def test_artifact_repository_rejects_backend_engine_before_native_restore(
 
 
 def test_failed_standalone_load_does_not_leave_entity(context, tmp_path, monkeypatch):
-    monkeypatch.setattr(BinaryTask, "_backend_classes", {"boosting": NativeStub})
+    monkeypatch.setattr(
+        BinaryTask, "_backend_loaders", {"boosting": lambda: NativeStub}
+    )
     task = BinaryTask(context.config)
     task._models = [model(), model("per_group", "a")]
     artifact = task.save(tmp_path / "standalone")
@@ -421,7 +423,9 @@ def test_failed_standalone_load_does_not_leave_entity(context, tmp_path, monkeyp
 
 
 def test_standalone_load_reads_its_config_once(context, tmp_path, monkeypatch):
-    monkeypatch.setattr(BinaryTask, "_backend_classes", {"boosting": NativeStub})
+    monkeypatch.setattr(
+        BinaryTask, "_backend_loaders", {"boosting": lambda: NativeStub}
+    )
     task = BinaryTask(context.config)
     task._models = [model(), model("per_group", "a")]
     artifact = task.save(tmp_path / "standalone")
@@ -447,7 +451,9 @@ def test_standalone_load_reads_its_config_once(context, tmp_path, monkeypatch):
 def test_entity_load_compares_entity_and_artifact_configs(
     context, tmp_path, monkeypatch
 ):
-    monkeypatch.setattr(BinaryTask, "_backend_classes", {"boosting": NativeStub})
+    monkeypatch.setattr(
+        BinaryTask, "_backend_loaders", {"boosting": lambda: NativeStub}
+    )
     task = BinaryTask(context.config)
     task._models = [model(), model("per_group", "a")]
     artifact = task.save(task.path / "artifact")
@@ -478,7 +484,9 @@ def test_entity_load_compares_entity_and_artifact_configs(
 def test_entity_load_allows_non_model_artifact_config_to_differ(
     context, tmp_path, monkeypatch, updates
 ):
-    monkeypatch.setattr(BinaryTask, "_backend_classes", {"boosting": NativeStub})
+    monkeypatch.setattr(
+        BinaryTask, "_backend_loaders", {"boosting": lambda: NativeStub}
+    )
     task = BinaryTask(context.config)
     task._models = [model(), model("per_group", "a")]
     artifact = task.save(task.path / "artifact")
@@ -508,7 +516,9 @@ def test_internal_artifact_restore_separates_runtime_device_and_scope(
             loaded_devices.append(device)
             return cls()
 
-    monkeypatch.setattr(BinaryTask, "_backend_classes", {"boosting": DeviceStub})
+    monkeypatch.setattr(
+        BinaryTask, "_backend_loaders", {"boosting": lambda: DeviceStub}
+    )
     source = BinaryTask(context.config)
     source._models = [model(), model("per_group", "a")]
     artifact = source.save(tmp_path / "standalone")
@@ -526,7 +536,9 @@ def test_internal_artifact_restore_separates_runtime_device_and_scope(
 def test_entity_load_uses_same_artifact_prevalidation_and_preserves_identity(
     context, tmp_path, monkeypatch
 ):
-    monkeypatch.setattr(BinaryTask, "_backend_classes", {"boosting": NativeStub})
+    monkeypatch.setattr(
+        BinaryTask, "_backend_loaders", {"boosting": lambda: NativeStub}
+    )
     task = BinaryTask(context.config)
     task._models = [model(), model("per_group", "a")]
     artifact = task.save(task.path / "artifact")
@@ -601,7 +613,9 @@ def test_operation_failure_rolls_back_and_stops_heartbeat(
 def test_remote_training_finalization_commits_only_complete_artifacts(
     context, tmp_path, monkeypatch, fail_assembly
 ):
-    monkeypatch.setattr(BinaryTask, "_backend_classes", {"boosting": NativeStub})
+    monkeypatch.setattr(
+        BinaryTask, "_backend_loaders", {"boosting": lambda: NativeStub}
+    )
     task = BinaryTask(context.config)
     identity = task.id
     repository = task._artifact_repository()

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -47,7 +47,9 @@ class BinaryTask(SupervisedTask[BinaryBoostingBackend]):
         config: Validated binary-task configuration.
     """
 
-    _backend_classes: ClassVar[Mapping[str, type]] = {"boosting": BinaryBoostingBackend}
+    _backend_loaders: ClassVar[Mapping[str, Callable[[], type]]] = {
+        "boosting": lambda: BinaryBoostingBackend,
+    }
     _config_class = BinaryTaskConfig
     _task_name = "binary"
     _artifact_directory = "binary_model"
