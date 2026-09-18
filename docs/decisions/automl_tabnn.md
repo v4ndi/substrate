@@ -297,7 +297,7 @@ fmlib/automl/backends/
     __init__.py
     data.py           один контракт кэша в обе стороны: fit препроцессора,
                       запись packed-parquet, чтение TabularDataset + TabularCollateFn
-    assembly.py       модель/оптимизатор/шедулер/лоадеры/EarlyStopping из параметров
+    assembly.py       AutoML-конфиг + параметры трейла -> DictConfig для fmlib.train
     metric.py         AutoMLMetric(ScalarMetric) — мост метрик (§6.4)
     runner.py         трейл-раннеры: in-process / torchrun subprocess / Osiris job
     base.py           BaseTabNNBackend (prepare_fit_data / fit_prepared / save / load)
@@ -305,6 +305,155 @@ fmlib/automl/backends/
     uplift.py         UpliftTabNNBackend (SLearner)
     spaces.py         default_search_space(engine)
 ```
+
+### 4.2. Что внутри каждого модуля
+
+#### `assembly.py` — генератор конфига, а не второй сборщик объектов
+
+**Слой «конфиг → объекты» в fmlib уже написан, и второй писать нельзя.** Ручной
+путь обучения (`avatar/train/__main__.py`) выглядит так:
+
+```python
+model      = hydra.utils.instantiate(config["model"])
+train, valid, test = init_dataloaders(config)      # instantiate внутри
+optimizer  = init_optimizer(config, model)
+scheduler  = init_scheduler(config, optimizer, train)
+metrics    = init_metrics(config)
+stopping   = init_early_stopping(config["train"])
+callbacks  = build_callbacks(config)
+Trainer(...)
+```
+
+`avatar/utils/init_modules.py` и `avatar/train/factory.py` — это и есть сборка, а
+`examples/uplift_modeling/s_learner/configs/train.yaml` показывает готовую форму
+конфига с `_target_` для `SLearner`, `TabularEmbedding`, `TabularTransformer`,
+`TabularDataset` и коллейта.
+
+Поэтому `assembly.py` **строит конфиг**, а трейл исполняется теми же
+`instantiate`/`init_*`, что и ручной запуск:
+
+```python
+build_train_config(task_config, model_part, trial_params, processed, schema) -> DictConfig
+```
+
+Четыре следствия, ради которых это и делается:
+
+1. **Критерий приёмки 21** (AutoML ≡ ручной fmlib с точностью 1e-6) становится
+   почти верным по построению: это один и тот же код сборки, а не две
+   параллельные реализации, которые пришлось бы сверять.
+2. **Спека трейла — это и есть конфиг.** `run_spec.json` = сериализованный
+   `DictConfig` плюс метаданные AutoML: одна форма на все три раннера, а
+   entrypoint Osiris-джобы почти совпадает с существующим `python -m fmlib.train`.
+3. **Новая архитектура — это конфиг, а не код:** `mlp`, `ft_transformer` —
+   другой `_target_`, без строчки в бэкенде.
+4. **Трейл воспроизводится руками:** конфиг лежит в артефакте, берётся и
+   запускается `python -m fmlib.train --config-dir=… --config-name=…`.
+
+Что генератор решает сам, потому что Hydra этого решить не может:
+
+- **`steps_before_evaluation`** — из числа строк и `batch_size`, то есть конфиг
+  собирается после того, как известен размер обработанного датасета;
+- **`amp`** — по железу (`bf16` при Ampere+, иначе `no`, на CPU всегда `no`);
+- **`callbacks:` перечисляются явно** — три штуки в фиксированном порядке (§6.5);
+- **метрика** — `_target_` на адаптер из `metric.py` с именем метрики AutoML и
+  направлением;
+- **пути и колонки** — из `data.py`: каталог обработанных данных,
+  `hidden_state_columns`, `identity_cols`, `target_column`;
+- **перевод плоских имён поиска в пути конфига.** `hidden_size` из пространства
+  (7.2) ложится **в два места** — `model.embedding.hidden_size` и
+  `model.tabular_encoder.hidden_size`. Это довод в пользу плоских имён: с
+  точечными ключами пользователь был бы обязан знать, что параметр задаётся
+  дважды.
+
+Две оговорки:
+
+- **`_target_` — это строки, и они попадают в артефакт.** После переименования
+  `avatar → fmlib` (S1) сохранённые конфиги понесут устаревшие пути. Лечится
+  версией контракта в `backend.json` и нормализацией `_target_` при загрузке —
+  но это надо предусмотреть, а не обнаружить.
+- **`init_optimizer` умеет `scale_lr_multigpu`** — флаг, молча меняющий `lr` при
+  нескольких картах. Выставляется осознанно и записывается в артефакт, иначе
+  трейлы на одной и на нескольких картах перестают быть сравнимыми.
+
+#### `runner.py` — где исполняется один трейл
+
+Спека и результат, сериализуемые в JSON:
+
+```python
+@dataclass TrialSpec:    trial_id, config (DictConfig), processed_paths,
+                         metric_name, direction, trial_dir, seed, num_gpus, mlflow
+@dataclass TrialResult:  trial_id, objective | None, checkpoint_dir,
+                         state: COMPLETE | FAIL | LOST, error, duration
+```
+
+Интерфейс асинхронный по форме, потому что иначе Osiris в него не ложится:
+`submit(spec) -> handle` и `collect(handle) -> TrialResult`; синхронные раннеры
+выполняют работу прямо в `submit`.
+
+- **`InProcessRunner`** — `instantiate`/`init_*` по конфигу, `Trainer(...).train()`,
+  `trainer.state.best_metric`, запись `result.json` (для единообразия), затем
+  `del model` и `torch.cuda.empty_cache()`. Сегодня единственный исполняемый.
+- **`TorchrunRunner`** — пишет спеку, поднимает
+  `python -m torch.distributed.run --nproc_per_node=<num_gpus> …`, ждёт, читает
+  `result.json`; ненулевой код возврата → `FAIL`. Здесь же ранговая сторона:
+  `main()`, который читает спеку, собирает, обучает и на ранге 0 пишет результат.
+- **`OsirisRunner`** — `submit` отдаёт спеку в `EnvironmentRunner.submit` и **не
+  ждёт**; `collect` читает `result.json` из `run_dir`. Детерминированный
+  `run_dir` и `trial_id` в имени джобы (P2) — его ответственность.
+
+**Чего здесь нет:** цикла поиска. Кто сэмплирует наборы, кто зовёт `tell(FAIL)`,
+кто досабмичивает `planned` — это `backends/search.py`. `runner.py` умеет только
+«исполни вот эту одну спеку».
+
+#### `base.py` — бэкенд и четыре адаптера
+
+```python
+prepare_fit_data(part, *, reuse) -> Prepared
+    зовёт data.py: фит препроцессора или переиспользование по content-key;
+    возвращает пути, схему, dims, препроцессор
+fit_prepared(prepared)              один фит без поиска: конфиг -> InProcessRunner ->
+                                    загрузка весов победившего чекпоинта в self
+predict_prepared_score(features)    скоринг подготовленного
+predict_score(frame, schema)        transform фитнутым препроцессором + fmlib.train.predict
+                                    + нормализация к контракту AutoML
+save(path) / load(path, device)     backend.json + preprocessor.yaml + model.safetensors
+set_runtime_device / for_execution
+feature_importance(schema) -> None  у сети её нет; отчёт это терпит (reporting.py:48)
+can_reuse_prepared(space) -> True   кроме случая, когда пространство трогает кодирование
+```
+
+Адаптеры по 10–20 строк, различаются четырьмя вещами — `task_name`,
+`num_classes`, `task_type`, лосс и постобработка скора:
+
+```text
+BinaryTabNNBackend        num_classes=1,  classification, sigmoid
+ResponseTabNNBackend      то же; treatment — обычный признак
+RegressionTabNNBackend    num_classes=1,  regression, identity
+MulticlassTabNNBackend    num_classes=K,  softmax; плюс class_order и его проверка
+```
+
+#### `uplift.py` — S-Learner
+
+```python
+UpliftTabNNBackend(BaseTabNNBackend)
+    конфиг строит SLearner (separate_heads, treatment_interaction, loss_fn)
+    вместо SupervisedLearner; за образец берётся
+    examples/uplift_modeling/s_learner/configs/train.yaml
+    treatment не обычный признак: обучение прогоняет батч один раз с реальным
+    значением, скоринг делает два прохода (treated / control)
+    predict_score -> матрица (N, k) в колонках, которые ждёт общий слой задач
+    конфиг с метаобучателем T или X -> UnsupportedBackendError
+```
+
+Здесь же живёт третье изменение общего кода: `UPLIFT_SCORE_COLUMNS` — десять
+колонок под S/T/X, а `_validate_score_matrix` (`tasks/uplift.py:296`) требует
+ровно их и все конечные. S-Learner столько выдать не может, поэтому константа и
+проверка формы переезжают в нейтральный модуль и становятся backend-зависимыми.
+
+Отдельный файл потому, что это другая модель, другая семантика колонки
+treatment, другая волна реализации (S14) — и именно это место вырастет, если
+понадобится паритет по T/X: у бустинга `uplift.py` это 649 строк против 69 у
+`binary.py`.
 
 ---
 
@@ -547,9 +696,13 @@ T/X-метаобучатели в scope не входят; неподдержи�
 Интеграционный слой покрывает **оба** backend-специфичных пути. Бустинговые
 `prepare_data()`/нативный предикт для сети не используются.
 
+Оба живут в `assembly.py` (4.2) и возвращают **`DictConfig` для fmlib**, который
+затем разворачивается существующими `instantiate` / `init_*`; своей сборки
+объектов у AutoML нет:
+
 ```python
-build_tabnn_train_config(task_config, model_part, trial_params, processed_data)
-build_tabnn_predict_config(task_config, model_artifact, processed_input, runtime)
+build_train_config(task_config, model_part, trial_params, processed, schema)   -> DictConfig
+build_predict_config(task_config, model_artifact, processed_input, runtime)    -> DictConfig
 ```
 
 Train переводит: тип задачи → `SupervisedLearner`/`SLearner`; роли колонок →
@@ -650,9 +803,11 @@ objective = trainer.state.best_metric
   Дефолт: каждые `ceil(rows / batch_size / 8)` шагов, но не реже раза в эпоху.
 - **Трейл возвращает путь и число, а не модель** (P8). Между трейлами в памяти
   не остаётся ни одного torch-объекта.
-- **Больше ничего не включено.** `build_default_callbacks` требует Hydra-конфиг и
-  тащит профайлер, прогресс-бары и логирование пропускной способности; AutoML
-  строит колбэки сам и сохраняет своё `progress.py`-логирование. MLflow — в
+- **Больше ничего не включено.** `build_callbacks` (`avatar/train/factory.py`)
+  берёт дефолтный список с профайлером, прогресс-барами и логированием
+  пропускной способности **только когда ключ `callbacks` в конфиге
+  отсутствует**; генератор из 4.2 перечисляет три колбэка явно, и приходит ровно
+  то, что попрошено. Своё `progress.py`-логирование AutoML сохраняет. MLflow — в
   дополнение к нему: один run на трейл с именем
   `<run_id>/<part>/trial-<trial_id>`; если tracking URI не настроен, колбэк не
   создаётся.
