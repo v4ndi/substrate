@@ -122,16 +122,24 @@ def resolve_amp(device: str) -> str:
     return "no"
 
 
-def _steps_before_evaluation(rows: int, batch_size: int, per_epoch: int) -> int:
+def _steps_before_evaluation(
+    rows: int, batch_size: int, per_epoch: int, world_size: int = 1
+) -> int:
     """How often to validate, so patience means hours rather than weeks.
 
     On three million rows one epoch is minutes and validating once an epoch is
     right. On a hundred million it is hours, and ``patience=5`` would mean
     "stop in a week". The cadence therefore follows the data: roughly
-    ``per_epoch`` validations per epoch, and never less than one step.
+    ``per_epoch`` validations per epoch.
+
+    The count is **per rank**, because that is what the loop counts. A cadence
+    computed from the whole corpus would, on several ranks, be longer than the
+    epoch itself -- and then a short run would finish having never validated,
+    with no best metric and a trial that looks like a failure.
     """
-    steps_per_epoch = max(1, math.ceil(rows / max(1, batch_size)))
-    return max(1, math.ceil(steps_per_epoch / max(1, per_epoch)))
+    per_rank = max(1, math.ceil(rows / max(1, world_size)))
+    steps_per_epoch = max(1, math.ceil(per_rank / max(1, batch_size)))
+    return max(1, min(steps_per_epoch, math.ceil(steps_per_epoch / max(1, per_epoch))))
 
 
 def _dataloader(
@@ -178,6 +186,7 @@ def build_train_config(
     device: str | None = None,
     class_order: tuple[Any, ...] | None = None,
     mlflow: Mapping[str, Any] | None = None,
+    world_size: int = 1,
 ) -> DictConfig:
     """Compose the fmlib config one trial is trained from.
 
@@ -191,6 +200,9 @@ def build_train_config(
         device: ``cpu`` or ``gpu``; defaults to the configuration's.
         class_order: Multiclass labels in training id order, for the metric.
         mlflow: Tracking settings; omitted entirely when not configured.
+        world_size: Ranks this trial will run on. Only the validation cadence
+            depends on it, and getting it wrong is what makes a multi-rank
+            trial finish without ever validating.
 
     Returns:
         A ``DictConfig`` the existing ``instantiate`` / ``init_*`` layer expands.
@@ -308,7 +320,10 @@ def build_train_config(
             "seed": int(config.random_state),
             "clip_grad_norm": settings.get("clip_grad_norm"),
             "steps_before_evaluation": _steps_before_evaluation(
-                processed.train.rows, batch_size, int(settings["evaluations_per_epoch"])
+                processed.train.rows,
+                batch_size,
+                int(settings["evaluations_per_epoch"]),
+                world_size,
             ),
         },
         "metrics": {

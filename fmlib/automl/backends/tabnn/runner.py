@@ -19,6 +19,9 @@ from __future__ import annotations
 
 import gc
 import json
+import os
+import subprocess
+import sys
 import traceback
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field
@@ -34,6 +37,7 @@ __all__ = [
     "RESULT_NAME",
     "SPEC_NAME",
     "InProcessRunner",
+    "TorchrunRunner",
     "TrialResult",
     "TrialSpec",
     "run_trial",
@@ -159,6 +163,7 @@ def run_trial(spec: TrialSpec) -> TrialResult:
     )
     spec.write()
     env = None
+    is_main = True
     model = trainer = train_dataloader = valid_dataloader = None
     optimizer = scheduler = callbacks = valid_metrics = None
     try:
@@ -167,6 +172,7 @@ def run_trial(spec: TrialSpec) -> TrialResult:
             backend=run_config.distributed.backend,
             timeout_sec=run_config.distributed.timeout_sec,
         )
+        is_main = env.is_main
         train_config = OmegaConf.to_container(config["train"])
         early_stopping = init_early_stopping(train_config)
         training_arguments = TrainingArguments(**train_config)
@@ -209,16 +215,28 @@ def run_trial(spec: TrialSpec) -> TrialResult:
         # AutoML scores with its own evaluate(). The number that ranks trials is
         # what early stopping recorded on the best validation pass.
         objective = trainer.state.best_metric
-        result = TrialResult(
-            trial_id=spec.trial_id,
-            state="COMPLETE" if objective is not None else "FAIL",
-            objective=None if objective is None else float(objective),
-            checkpoint_dir=spec.trial_dir,
-            error=None
-            if objective is not None
-            else "no validation metric was recorded",
-            duration=perf_counter() - started,
-        )
+        if not is_main:
+            # Only rank 0 holds the scores -- early stopping records the best
+            # metric there and nowhere else -- so only rank 0 has a number to
+            # report, and only rank 0 writes the result. The other ranks
+            # finished their work, which is what their state says.
+            result = TrialResult(
+                trial_id=spec.trial_id,
+                state="COMPLETE",
+                checkpoint_dir=spec.trial_dir,
+                duration=perf_counter() - started,
+            )
+        else:
+            result = TrialResult(
+                trial_id=spec.trial_id,
+                state="COMPLETE" if objective is not None else "FAIL",
+                objective=None if objective is None else float(objective),
+                checkpoint_dir=spec.trial_dir,
+                error=None
+                if objective is not None
+                else "no validation metric was recorded",
+                duration=perf_counter() - started,
+            )
     except Exception as error:
         log_progress(
             "[tabnn trial %s] failed: %s: %s",
@@ -245,7 +263,8 @@ def run_trial(spec: TrialSpec) -> TrialResult:
             env.destroy()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
-    result.write(spec.trial_dir)
+    if is_main:
+        result.write(spec.trial_dir)
     return result
 
 
@@ -270,3 +289,81 @@ class InProcessRunner:
             return results[handle]
         msg = f"Unknown trial handle {handle!r}"
         raise KeyError(msg)
+
+
+class TorchrunRunner:
+    """Run each trial in its own ``torch.distributed.run`` group.
+
+    One trial, ``num_gpus`` ranks, one node. The driver never joins the group:
+    it writes a spec, waits for the launcher, and reads ``result.json``, which
+    is the same collection path an Osiris job uses. A non-zero exit code is a
+    failed trial, not an exception in the driver -- a failing trial must not
+    end a search.
+
+    Args:
+        timeout: Seconds to wait for one trial before giving up on it.
+        env: Extra environment for the worker processes.
+    """
+
+    def __init__(
+        self, *, timeout: float = 24 * 3600.0, env: Mapping[str, str] | None = None
+    ):
+        self.timeout = timeout
+        self.env = dict(env or {})
+        self._handles: dict[str, subprocess.Popen] = {}
+        self._specs: dict[str, TrialSpec] = {}
+
+    def submit(self, spec: TrialSpec) -> str:
+        """Launch the trial and return its id; does not wait."""
+        spec.write()
+        command = [
+            sys.executable,
+            "-m",
+            "torch.distributed.run",
+            f"--nproc_per_node={max(1, int(spec.num_gpus))}",
+            "--nnodes=1",
+            "--standalone",
+            "-m",
+            "fmlib.automl.backends.tabnn.worker",
+            "--spec",
+            str(Path(spec.trial_dir) / SPEC_NAME),
+        ]
+        log_progress(
+            "[tabnn trial %s] launching %d rank(s) under torchrun",
+            spec.trial_id,
+            max(1, int(spec.num_gpus)),
+        )
+        self._specs[spec.trial_id] = spec
+        self._handles[spec.trial_id] = subprocess.Popen(
+            command,
+            env={**os.environ, **self.env},
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        return spec.trial_id
+
+    def collect(self, handle: str) -> TrialResult:
+        """Wait for a launched trial and read back what rank 0 wrote."""
+        process = self._handles.pop(handle)
+        spec = self._specs.pop(handle)
+        try:
+            output, _ = process.communicate(timeout=self.timeout)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            output, _ = process.communicate()
+            return TrialResult(
+                trial_id=handle,
+                state="LOST",
+                error=f"trial exceeded {self.timeout:g}s and was killed\n{output}",
+            )
+        result = TrialResult.read(spec.trial_dir)
+        if result is not None and process.returncode == 0:
+            return result
+        if result is not None:
+            return result
+        return TrialResult(
+            trial_id=handle,
+            state="FAIL",
+            error=f"torchrun exited with {process.returncode} and wrote no result\n{output}",
+        )
