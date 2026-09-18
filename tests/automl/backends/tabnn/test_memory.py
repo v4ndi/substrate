@@ -19,7 +19,7 @@ import pytest
 
 pytestmark = pytest.mark.slow
 
-CHILD = '''
+CHILD = """
 import json, resource, sys
 import numpy as np
 from fmlib.automl import BinaryTask, BinaryTaskConfig
@@ -55,7 +55,7 @@ task = BinaryTask(config)
 task.train(train_dir, valid_dir)
 peak_kib = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
 print(json.dumps({"rows": int(rows), "peak_mib": peak_kib / 1024}))
-'''
+"""
 
 
 def _write(directory, rows: int, seed: int):
