@@ -8,6 +8,7 @@ that order -- matching Spark ``NumCatPipeline.transform``).
 from __future__ import annotations
 
 from collections.abc import Sequence
+from concurrent.futures import ProcessPoolExecutor
 from copy import deepcopy
 from typing import Any
 
@@ -19,10 +20,44 @@ from fmlib.preprocessing.base.accumulators import (
     ValueCountAccumulator,
 )
 from fmlib.preprocessing.base.encode import EPS, signed_log1p
-from fmlib.preprocessing.base.io import Source, iter_record_batches
+from fmlib.preprocessing.base.io import (
+    Source,
+    iter_record_batches,
+    shard_files,
+    spawn_context,
+)
 
 from ..label_encoder import LabelEncoder, _run_batches
 from ..standard_scaler import StandardScaler
+
+
+def _fit_shard(
+    source: Source,
+    read_cols: list[str],
+    batch_rows: int,
+    num_cols: list[str] | None,
+    to_log_columns: list[str],
+    cat_cols: list[str] | None,
+    max_cardinality: int,
+    on_overflow: str,
+) -> tuple[MeanStdAccumulator | None, ValueCountAccumulator | None]:
+    """Fold one group of files into accumulators. Runs in a worker process.
+
+    Both accumulators are fed from the same pass: they update from the same
+    batches, so splitting them would mean reading the source twice.
+    """
+    ms = MeanStdAccumulator(num_cols, to_log_columns) if num_cols else None
+    vc = (
+        ValueCountAccumulator(cat_cols, max_cardinality, on_overflow)
+        if cat_cols
+        else None
+    )
+    for batch in iter_record_batches(source, columns=read_cols, batch_rows=batch_rows):
+        if ms is not None:
+            ms.update(batch)
+        if vc is not None:
+            vc.update(batch)
+    return ms, vc
 
 
 class NumCatPipeline:
@@ -68,7 +103,22 @@ class NumCatPipeline:
             self.standard_scaler = None
 
     # -- fit -------------------------------------------------------------
-    def fit(self, source: Source) -> NumCatPipeline:
+    def fit(self, source: Source, num_workers: int = 1) -> NumCatPipeline:
+        """Learn the vocabulary and the numeric statistics in one pass.
+
+        Args:
+            source: Anything the io helpers accept.
+            num_workers: Processes folding disjoint groups of files. Above one,
+                the parent merges worker states in file order.
+
+        Returns:
+            ``self``, fitted.
+
+        Raises:
+            ValueError: If ``num_workers > 1`` with ``LabelEncoder.order`` set
+                to ``"first_seen"``, the one order that depends on how the data
+                was traversed.
+        """
         if self.num_cols is not None:
             assert sorted(self.num_cols) == sorted(self.standard_scaler.columns), (
                 "numeric_columns differ from StandardScaler.columns"
@@ -78,28 +128,48 @@ class NumCatPipeline:
                 "categorical_columns differ from LabelEncoder.columns"
             )
 
-        read_cols = (self.cat_cols or []) + (self.num_cols or [])
-        ms = (
-            MeanStdAccumulator(self.num_cols, self.standard_scaler.to_log_columns)
-            if self.num_cols
-            else None
-        )
-        vc = (
-            ValueCountAccumulator(
-                self.cat_cols,
-                self.label_encoder.max_cardinality,
-                self.label_encoder.on_overflow,
-            )
-            if self.cat_cols
-            else None
-        )
-        for batch in iter_record_batches(
-            source, columns=read_cols, batch_rows=self.batch_rows
+        if (
+            num_workers > 1
+            and self.cat_cols
+            and self.label_encoder.order == "first_seen"
         ):
-            if ms is not None:
-                ms.update(batch)
-            if vc is not None:
-                vc.update(batch)
+            msg = (
+                "label encoder order='first_seen' cannot be fitted with "
+                "num_workers > 1: it is the one order that depends on the "
+                "traversal, which a process pool does not preserve. Use "
+                "'sorted' (the default) or 'count_desc'."
+            )
+            raise ValueError(msg)
+
+        read_cols = (self.cat_cols or []) + (self.num_cols or [])
+        shard_args = (
+            read_cols,
+            self.batch_rows,
+            self.num_cols,
+            sorted(self.standard_scaler.to_log_columns) if self.num_cols else [],
+            self.cat_cols,
+            self.label_encoder.max_cardinality if self.cat_cols else 0,
+            self.label_encoder.on_overflow if self.cat_cols else "raise",
+        )
+        groups: list[Source] = (
+            list(shard_files(source, num_workers)) if num_workers > 1 else [source]
+        )
+        ms = vc = None
+        if len(groups) == 1:
+            ms, vc = _fit_shard(groups[0], *shard_args)
+        else:
+            with ProcessPoolExecutor(
+                max_workers=len(groups), mp_context=spawn_context()
+            ) as pool:
+                futures = [
+                    pool.submit(_fit_shard, group, *shard_args) for group in groups
+                ]
+                # Merge in submission order: the arithmetic is deterministic
+                # only if the order the states are folded in is.
+                for future in futures:
+                    shard_ms, shard_vc = future.result()
+                    ms = shard_ms if ms is None else ms.merge(shard_ms)
+                    vc = shard_vc if vc is None else vc.merge(shard_vc)
         if ms is not None:
             self.standard_scaler.mean_std = ms.finalize()
         if vc is not None:

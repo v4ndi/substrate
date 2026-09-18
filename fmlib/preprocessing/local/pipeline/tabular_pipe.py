@@ -10,16 +10,40 @@ of packing (for dataset-level / GPU preprocessing).
 from __future__ import annotations
 
 from collections.abc import Sequence
+from concurrent.futures import ProcessPoolExecutor
 from copy import deepcopy
+from pathlib import Path
 
 import numpy as np
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from fmlib.preprocessing.base.io import Source, iter_record_batches
+from fmlib.preprocessing.base.io import (
+    Source,
+    iter_record_batches,
+    shard_files,
+    spawn_context,
+)
 from fmlib.preprocessing.base.offsets import build_offset_map
 
 from .base_pipe import NumCatPipeline
+
+
+def _transform_shard(
+    state: dict,
+    source: Source,
+    output_path: str,
+    identity_cols: list[str] | None,
+    output: str,
+) -> str:
+    """Encode one group of files into one parquet part. Runs in a worker process.
+
+    The fitted state travels as the artifact dict rather than as a live object,
+    so a worker reconstructs exactly what ``load`` would give a separate run.
+    """
+    return TabularPreprocessor.load(state)._transform_to_file(
+        source, output_path, identity_cols, output
+    )
 
 
 def _pack_list(arr_2d: np.ndarray, arrow_type: pa.DataType) -> pa.ListArray:
@@ -68,10 +92,13 @@ class TabularPreprocessor(NumCatPipeline):
 
     # -- fit -------------------------------------------------------------
     def fit(
-        self, source: Source, create_offset_only: bool = False
+        self,
+        source: Source,
+        create_offset_only: bool = False,
+        num_workers: int = 1,
     ) -> TabularPreprocessor:
         if not create_offset_only:
-            super().fit(source)
+            super().fit(source, num_workers=num_workers)
         self.offset_map, self.vocab_size = build_offset_map(
             self.cat_cols,
             self.label_encoder.values_to_id if self.cat_cols else {},
@@ -80,10 +107,17 @@ class TabularPreprocessor(NumCatPipeline):
         return self
 
     def fit_transform(
-        self, source, output_path=None, identity_cols=None, output="packed"
+        self,
+        source,
+        output_path=None,
+        identity_cols=None,
+        output="packed",
+        num_workers: int = 1,
     ):
-        self.fit(source)
-        return self.transform(source, output_path, identity_cols, output)
+        self.fit(source, num_workers=num_workers)
+        return self.transform(
+            source, output_path, identity_cols, output, num_workers=num_workers
+        )
 
     # -- transform -----------------------------------------------------------
     def _transform_batch(self, batch, identity_cols, output):
@@ -136,28 +170,82 @@ class TabularPreprocessor(NumCatPipeline):
 
         return pa.table(out)
 
-    def transform(
-        self, source: Source, output_path=None, identity_cols=None, output="packed"
-    ):
-        if output not in ("packed", "wide"):
-            raise ValueError("output must be 'packed' or 'wide'")
+    def _transform_to_file(self, source, output_path, identity_cols, output):
+        """Stream one source into one parquet file, batch by batch."""
         writer = None
-        tables = []
         for batch in iter_record_batches(
             source, columns=None, batch_rows=self.batch_rows
         ):
             tbl = self._transform_batch(batch, identity_cols, output)
-            if output_path is None:
-                tables.append(tbl)
-            else:
-                if writer is None:
-                    writer = pq.ParquetWriter(output_path, tbl.schema)
-                writer.write_table(tbl)
-        if output_path is None:
-            return pa.concat_tables(tables) if tables else pa.table({})
+            if writer is None:
+                writer = pq.ParquetWriter(output_path, tbl.schema)
+            writer.write_table(tbl)
         if writer is not None:
             writer.close()
         return output_path
+
+    def transform(
+        self,
+        source: Source,
+        output_path=None,
+        identity_cols=None,
+        output="packed",
+        num_workers: int = 1,
+    ):
+        """Encode ``source``, in memory or into parquet.
+
+        Args:
+            source: Anything the io helpers accept.
+            output_path: Target file, or -- with ``num_workers > 1`` -- the
+                directory the parts are written into.
+            identity_cols: Columns passed through untouched.
+            output: ``"packed"`` list columns or ``"wide"`` one column each.
+            num_workers: Processes encoding disjoint groups of files, one part
+                file each. Above one, several output files are the point, not a
+                side effect: they are what lets K readers stream in parallel,
+                and what gives shuffling more than one file to interleave.
+
+        Returns:
+            An in-memory table when ``output_path`` is ``None``, the file path
+            for one worker, or the sorted list of part paths for several.
+
+        Raises:
+            ValueError: If ``output`` is not a known packing, or if a parallel
+                transform is asked for without somewhere to write it.
+        """
+        if output not in ("packed", "wide"):
+            raise ValueError("output must be 'packed' or 'wide'")
+        if num_workers > 1 and output_path is None:
+            msg = "num_workers > 1 needs an output directory; an in-memory table cannot be written by several processes"
+            raise ValueError(msg)
+        if output_path is None:
+            tables = [
+                self._transform_batch(batch, identity_cols, output)
+                for batch in iter_record_batches(
+                    source, columns=None, batch_rows=self.batch_rows
+                )
+            ]
+            return pa.concat_tables(tables) if tables else pa.table({})
+        if num_workers == 1:
+            return self._transform_to_file(source, output_path, identity_cols, output)
+
+        groups = shard_files(source, num_workers)
+        directory = Path(output_path)
+        directory.mkdir(parents=True, exist_ok=True)
+        state = self.dump()
+        parts = [
+            str(directory / f"part-{index:05d}.parquet") for index in range(len(groups))
+        ]
+        with ProcessPoolExecutor(
+            max_workers=len(groups), mp_context=spawn_context()
+        ) as pool:
+            futures = [
+                pool.submit(_transform_shard, state, group, part, identity_cols, output)
+                for group, part in zip(groups, parts, strict=True)
+            ]
+            for future in futures:
+                future.result()
+        return parts
 
     # -- (de)serialization -------------------------------------------------
     def dump(self) -> dict:

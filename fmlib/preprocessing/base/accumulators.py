@@ -66,6 +66,47 @@ class MeanStdAccumulator:
             self._m2[col] = m2_a + m2_b + delta * delta * n_a * n_b / n
             self._n[col] = n
 
+    def merge(self, other: MeanStdAccumulator) -> MeanStdAccumulator:
+        """Absorb the state of an accumulator fed a disjoint part of the data.
+
+        This is the same Chan step :meth:`update` performs, with another
+        accumulator's state in place of a batch's, which is what makes a
+        process pool possible: every worker folds its own shards, the parent
+        folds the workers.
+
+        Floating-point addition is not associative, so combining in a different
+        grouping than one sequential pass gives the same statistics to within
+        rounding, not bit for bit. The categorical vocabulary, which is counted
+        in integers, does combine exactly.
+
+        Args:
+            other: Accumulator over a disjoint part of the same columns.
+
+        Returns:
+            ``self``, for chaining.
+
+        Raises:
+            ValueError: If the two accumulators were configured differently.
+        """
+        if self.columns != other.columns:
+            msg = f"Cannot merge accumulators over different columns: {self.columns} vs {other.columns}"
+            raise ValueError(msg)
+        if self.to_log_columns != other.to_log_columns:
+            msg = "Cannot merge accumulators with different to_log_columns"
+            raise ValueError(msg)
+        for col in self.columns:
+            n_b = other._n[col]
+            if n_b == 0:
+                continue
+            n_a, mean_a, m2_a = self._n[col], self._mean[col], self._m2[col]
+            mean_b, m2_b = other._mean[col], other._m2[col]
+            n = n_a + n_b
+            delta = mean_b - mean_a
+            self._mean[col] = mean_a + delta * n_b / n
+            self._m2[col] = m2_a + m2_b + delta * delta * n_a * n_b / n
+            self._n[col] = n
+        return self
+
     def finalize(self) -> dict[str, dict[str, float]]:
         out: dict[str, dict[str, float]] = {}
         for col in self.columns:
@@ -133,6 +174,46 @@ class ValueCountAccumulator:
                     "or pass on_overflow='topk'."
                 )
 
+    def merge(self, other: ValueCountAccumulator) -> ValueCountAccumulator:
+        """Absorb the counts of an accumulator fed a disjoint part of the data.
+
+        Counts are integers, so this is exact: a parallel fit produces the same
+        vocabulary as a sequential one, not an approximation of it. Order is
+        another matter -- see the ``first_seen`` note in :meth:`finalize`.
+
+        Args:
+            other: Accumulator over a disjoint part of the same columns.
+
+        Returns:
+            ``self``, for chaining.
+
+        Raises:
+            ValueError: If the two accumulators were configured differently.
+            CardinalityError: If the combined vocabulary exceeds
+                ``max_cardinality`` under ``on_overflow='raise'``.
+        """
+        if self.columns != other.columns:
+            msg = f"Cannot merge accumulators over different columns: {self.columns} vs {other.columns}"
+            raise ValueError(msg)
+        if (
+            self.max_cardinality != other.max_cardinality
+            or self.on_overflow != other.on_overflow
+        ):
+            msg = "Cannot merge accumulators with different cardinality policies"
+            raise ValueError(msg)
+        for col in self.columns:
+            bucket = self._counts[col]
+            for value, count in other._counts[col].items():
+                bucket[value] = bucket.get(value, 0) + int(count)
+            if self.on_overflow == "raise" and len(bucket) > self.max_cardinality:
+                raise CardinalityError(
+                    f"Categorical column {col!r} exceeded max_cardinality="
+                    f"{self.max_cardinality} while merging parallel fit states "
+                    f"(seen {len(bucket)} distinct values). Use a hash embedding "
+                    "for id-like columns, or pass on_overflow='topk'."
+                )
+        return self
+
     def finalize(
         self,
         spec_tokens: Mapping[str, int],
@@ -145,6 +226,9 @@ class ValueCountAccumulator:
         count-descending): ``"sorted"`` by value, ``"count_desc"`` by frequency,
         ``"first_seen"`` by first appearance in the stream. Ties in the
         count-descending orders are broken by value for determinism.
+
+        ``"first_seen"`` is the only order that depends on how the data was
+        traversed, which is why a parallel fit refuses it.
         """
         start = len(spec_tokens)
         result: dict[str, dict] = {}

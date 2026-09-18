@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import glob
+import multiprocessing
 import os
 from collections.abc import Iterator, Sequence
 
@@ -84,3 +85,55 @@ def iter_record_batches(
         if batch.num_rows == 0:
             continue
         yield batch
+
+
+def shard_files(source: Source, shards: int) -> list[list[str]]:
+    """Split ``source`` into at most ``shards`` contiguous groups of whole files.
+
+    A parquet file is the unit: splitting inside one would mean re-reading its
+    footers per worker for nothing. Groups keep the sorted file order, so a run
+    with ``shards=1`` reads exactly what a sequential pass reads, in the same
+    order.
+
+    Args:
+        source: Anything :func:`as_dataset` accepts, except a built dataset.
+        shards: Upper bound on the number of groups.
+
+    Returns:
+        Non-empty file groups, at most ``shards`` of them, in file order.
+
+    Raises:
+        TypeError: If ``source`` is an already-built dataset, whose fragments
+            this function deliberately does not reach into.
+        ValueError: If ``shards`` is not positive.
+    """
+    if isinstance(source, ds.Dataset):
+        msg = (
+            "Parallel preprocessing needs file paths; pass a path, glob, directory "
+            "or list of them instead of a built pyarrow Dataset"
+        )
+        raise TypeError(msg)
+    if shards < 1:
+        msg = f"shards must be >= 1; got {shards}"
+        raise ValueError(msg)
+    files = _resolve_files(source)
+    shards = min(shards, len(files))
+    size, remainder = divmod(len(files), shards)
+    groups: list[list[str]] = []
+    start = 0
+    for index in range(shards):
+        stop = start + size + (1 if index < remainder else 0)
+        groups.append(files[start:stop])
+        start = stop
+    return groups
+
+
+def spawn_context() -> multiprocessing.context.BaseContext:
+    """Return a ``spawn`` multiprocessing context for preprocessing pools.
+
+    Not ``fork``: pyarrow keeps a thread pool alive, and forking a
+    multi-threaded process is a documented way to deadlock in the child. Spawn
+    costs an interpreter start per worker, which is nothing against a pass over
+    the data.
+    """
+    return multiprocessing.get_context("spawn")
