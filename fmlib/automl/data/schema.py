@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from typing import Any
 
 import polars as pl
@@ -25,6 +25,9 @@ class FeatureSchema:
         client_id_column: Canonical identifier-column name.
         treatment_column: Canonical optional treatment-column name.
         group_column: Canonical optional group-column name.
+        hidden_states: Width of every hidden-state column kept as a vector,
+            ``{column: width}``. Empty when hidden states were expanded into
+            scalar features instead, which is what boosting does.
     """
 
     categorical: tuple[str, ...]
@@ -35,6 +38,7 @@ class FeatureSchema:
     client_id_column: str
     treatment_column: str | None
     group_column: str | None
+    hidden_states: Mapping[str, int] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize the schema into JSON-compatible values.
@@ -57,6 +61,9 @@ class FeatureSchema:
         payload = dict(value)
         for name in ("categorical", "numerical", "feature_order"):
             payload[name] = tuple(payload[name])
+        # Artifacts written before hidden states could stay vectors have no
+        # such key, and for them the empty default is the correct answer.
+        payload["hidden_states"] = dict(payload.get("hidden_states") or {})
         return cls(**payload)
 
 
@@ -159,19 +166,22 @@ def normalize_optional_binary_treatment(
     return frame.with_columns(expression.alias(column))
 
 
-def _expand_hidden_states(
+def _normalize_hidden_states(
     frame: pl.DataFrame,
     columns: tuple[str, ...],
     expected: Mapping[str, int] | None,
-) -> tuple[pl.DataFrame, tuple[str, ...], dict[str, int]]:
-    """Normalize numeric embedding containers and expand them into scalar features.
+) -> tuple[pl.DataFrame, dict[str, int]]:
+    """Validate numeric embedding containers and resolve their widths.
 
     Hidden states may be represented by Polars ``Array`` or ``List`` columns
     with ``Float32`` or ``Float64`` elements. Lists must have one fixed length
-    across the frame. Expanded values are always normalized to ``Float32`` so
-    training and inference use the same estimator schema.
+    across the frame. Values are always normalized to ``Float32`` so training
+    and inference use the same estimator schema.
+
+    Returns:
+        The frame with every hidden-state column cast to ``List(Float32)``,
+        and the observed width of each one.
     """
-    expanded: list[str] = []
     dimensions: dict[str, int] = {}
     for column in columns:
         if column not in frame.columns:
@@ -210,13 +220,31 @@ def _expand_hidden_states(
         if expected is not None and expected.get(column) != dimension:
             msg = f"Hidden-state dimension mismatch for {column!r}: expected {expected.get(column)}, got {dimension}"
             raise SchemaError(msg)
+        dimensions[column] = dimension
+    return frame, dimensions
+
+
+def _expand_hidden_states(
+    frame: pl.DataFrame,
+    columns: tuple[str, ...],
+    expected: Mapping[str, int] | None,
+) -> tuple[pl.DataFrame, tuple[str, ...], dict[str, int]]:
+    """Expand validated embedding columns into one scalar feature per coordinate.
+
+    This is the only shape a gradient-boosted tree can consume. It is the wrong
+    shape for a network -- the embedding would dominate attention by column
+    count, each coordinate would be standardized on its own, destroying the
+    geometry the producing model made, and each would get its own input
+    projection -- so the TabNN path keeps the vector instead.
+    """
+    frame, dimensions = _normalize_hidden_states(frame, columns, expected)
+    expanded: list[str] = []
+    for column, dimension in dimensions.items():
         names = tuple(f"{column}__{index}" for index in range(dimension))
-        expanded_expressions = [
+        frame = frame.with_columns([
             pl.col(column).list.get(index).alias(name)
             for index, name in enumerate(names)
-        ]
-        frame = frame.with_columns(expanded_expressions).drop(column)
-        dimensions[column] = dimension
+        ]).drop(column)
         expanded.extend(names)
     return frame, tuple(expanded), dimensions
 
@@ -231,6 +259,7 @@ def prepare_data(
     categorical_role_columns: Sequence[str | None] = (),
     excluded_feature_columns: Sequence[str] = (),
     public_column_names: Mapping[str, str] | None = None,
+    expand_hidden_states: bool = True,
 ) -> tuple[PreparedData, dict[str, int]]:
     """Validate and normalize a frame for training, inference or evaluation.
 
@@ -248,6 +277,10 @@ def prepare_data(
             categorical features.
         excluded_feature_columns: Feature names excluded for the current model scope.
         public_column_names: Optional internal-to-public names used in schema errors.
+        expand_hidden_states: Expand every embedding into one scalar feature per
+            coordinate, as boosting requires. When ``False`` the column stays a
+            ``List(Float32)`` vector, is not a feature at all, and its width is
+            recorded in :attr:`FeatureSchema.hidden_states` instead.
 
     Returns:
         Prepared frame/schema and observed hidden-state dimensions.
@@ -303,9 +336,17 @@ def prepare_data(
 
     if config.date_column is not None:
         frame = normalize_date(frame, config.date_column)
-    frame, expanded, dimensions = _expand_hidden_states(
-        frame, tuple(config.hidden_state_columns), hidden_dimensions
-    )
+    if expand_hidden_states:
+        frame, expanded, dimensions = _expand_hidden_states(
+            frame, tuple(config.hidden_state_columns), hidden_dimensions
+        )
+        hidden_states: dict[str, int] = {}
+    else:
+        frame, dimensions = _normalize_hidden_states(
+            frame, tuple(config.hidden_state_columns), hidden_dimensions
+        )
+        expanded = ()
+        hidden_states = dict(dimensions)
 
     categorical = list(config.categorical_columns)
     for column in categorical_role_columns:
@@ -361,5 +402,6 @@ def prepare_data(
         client_id_column=config.client_id_column,
         treatment_column=treatment_column,
         group_column=config.group_column,
+        hidden_states=hidden_states,
     )
     return PreparedData(frame=frame, schema=schema), dimensions
