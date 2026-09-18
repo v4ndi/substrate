@@ -7,14 +7,15 @@ from typing import Any
 
 import polars as pl
 
+from fmlib.automl.backends import MATERIALIZED_BACKENDS
 from fmlib.automl.data import CanonicalColumnMapper, ParquetSource
 from fmlib.automl.execution import ExecutionContext, _freeze
 from fmlib.automl.progress import log_progress
 from fmlib.automl.types import ParquetPath, TrainingResult
 
-from .planning import ModelPlan
+from .planning import FrameGroupView, ModelPlan, SourceGroupView
 from .preparation import DataPreparation
-from .state import ModelEntry
+from .state import ModelEntry, TrainingInput
 
 
 def part_name(layout: str, group_value: Any | None = None) -> str:
@@ -42,6 +43,11 @@ class TrainingCoordinator:
     task_name: str
     prepare_state: Callable[[pl.DataFrame, pl.DataFrame], None]
     fit_one: Callable[..., ModelEntry]
+
+    @property
+    def materializes(self) -> bool:
+        """Whether this backend family wants the splits read into memory."""
+        return self.context.config.backend in MATERIALIZED_BACKENDS
 
     def execute(
         self,
@@ -79,17 +85,35 @@ class TrainingCoordinator:
         )
 
         stage_started = perf_counter()
-        log_progress("[train 2/5] loading train and validation parquet")
-        train_frame = DataPreparation(self.context).read_source(train_source)
-        valid_frame = DataPreparation(self.context).read_source(valid_source)
-        log_progress(
-            "[train 2/5] completed duration_seconds=%.3f train_rows=%d valid_rows=%d train_columns=%d valid_columns=%d",
-            perf_counter() - stage_started,
-            train_frame.height,
-            valid_frame.height,
-            train_frame.width,
-            valid_frame.width,
-        )
+        if self.materializes:
+            log_progress("[train 2/5] loading train and validation parquet")
+            train_frame = DataPreparation(self.context).read_source(train_source)
+            valid_frame = DataPreparation(self.context).read_source(valid_source)
+            train_view = FrameGroupView(train_frame)
+            valid_view = FrameGroupView(valid_frame)
+            log_progress(
+                "[train 2/5] completed duration_seconds=%.3f train_rows=%d valid_rows=%d train_columns=%d valid_columns=%d",
+                perf_counter() - stage_started,
+                train_frame.height,
+                valid_frame.height,
+                train_frame.width,
+                valid_frame.width,
+            )
+        else:
+            log_progress(
+                "[train 2/5] backend=%s reads its own data; splits are not materialized",
+                self.context.config.backend,
+            )
+            train_frame = valid_frame = None
+            to_external = CanonicalColumnMapper.from_config(
+                self.context.config
+            ).to_external
+            train_view = SourceGroupView(train_source, to_external)
+            valid_view = SourceGroupView(valid_source, to_external)
+            log_progress(
+                "[train 2/5] completed duration_seconds=%.3f",
+                perf_counter() - stage_started,
+            )
 
         stage_started = perf_counter()
         log_progress(
@@ -99,8 +123,8 @@ class TrainingCoordinator:
         models = []
         plan = ModelPlan.training(
             self.context,
-            train_frame,
-            valid_frame,
+            train_view,
+            valid_view,
             remote_layout=remote_layout,
             remote_group_value=remote_group_value,
         )
@@ -110,10 +134,10 @@ class TrainingCoordinator:
         single_group_global = (
             self.context.internal_config.resolved_model_layout == "global_and_per_group"
             and group_column is not None
-            and train_frame[group_column].n_unique() == 1
+            and len(train_view.unique_values(group_column)[0]) == 1
         )
         if single_group_global:
-            group_value = train_frame[group_column].unique(maintain_order=True).item()
+            group_value = train_view.unique_values(group_column)[0][0]
             log_progress(
                 "Requested model_layout='global_and_per_group' resolved for single group value %r: "
                 "effective model_layout='global'; per-group branch is not created",
@@ -138,7 +162,10 @@ class TrainingCoordinator:
                 len(model_parts),
                 model_name,
             )
-            if layout == "per_group":
+            if not self.materializes:
+                model_train = TrainingInput(train_source, group_value=group_value)
+                model_valid = TrainingInput(valid_source, group_value=group_value)
+            elif layout == "per_group":
                 if train_parts is None:
                     train_parts = train_frame.partition_by(
                         group_column, as_dict=True, maintain_order=True
@@ -148,10 +175,15 @@ class TrainingCoordinator:
                         group_column, as_dict=True, maintain_order=True
                     )
                     del valid_frame
-                model_train = train_parts.pop((group_value,))
-                model_valid = valid_parts.pop((group_value,))
+                model_train = TrainingInput(
+                    train_source, train_parts.pop((group_value,)), group_value
+                )
+                model_valid = TrainingInput(
+                    valid_source, valid_parts.pop((group_value,)), group_value
+                )
             else:
-                model_train, model_valid = train_frame, valid_frame
+                model_train = TrainingInput(train_source, train_frame)
+                model_valid = TrainingInput(valid_source, valid_frame)
             models.append(
                 self.fit_one(
                     model_train,
@@ -161,9 +193,7 @@ class TrainingCoordinator:
                 )
             )
             if layout == "global" and single_group_global:
-                group_value = (
-                    model_train[group_column].unique(maintain_order=True).item()
-                )
+                group_value = train_view.unique_values(group_column)[0][0]
                 models[-1] = replace(
                     models[-1], single_group_global=True, single_group_value=group_value
                 )

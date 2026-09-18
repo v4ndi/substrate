@@ -16,6 +16,7 @@ from fmlib.automl.progress import log_progress
 from fmlib.automl.types import PredictionResult
 
 from .base import BaseTask, _ModelEntry
+from .state import TrainingInput
 
 _SingleBackendT = TypeVar("_SingleBackendT", bound=ModelBackend)
 
@@ -64,8 +65,8 @@ class SupervisedTask(BaseTask[_SingleBackendT]):
 
     def _fit_one(
         self,
-        train_frame: pl.DataFrame,
-        valid_frame: pl.DataFrame,
+        train: TrainingInput,
+        valid: TrainingInput,
         *,
         layout: str,
         group_value: Any | None = None,
@@ -78,6 +79,8 @@ class SupervisedTask(BaseTask[_SingleBackendT]):
         training and validation metrics; their validation split never refers to
         the path later passed to :meth:`predict` or :meth:`evaluate`.
         """
+        train_frame = train.require_frame()
+        valid_frame = valid.require_frame()
         preparation_started = perf_counter()
         model_name = self._model_name(layout, group_value)
         log_progress(

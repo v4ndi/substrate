@@ -24,6 +24,7 @@ from fmlib.automl.tasks.evaluation import (
     metric_slices,
     prepare_evaluation_truth,
 )
+from fmlib.automl.tasks.state import TrainingInput
 from fmlib.automl.tasks.supervised import SupervisedTask
 from fmlib.automl.types import (
     EvaluationKind,
@@ -158,21 +159,21 @@ class MulticlassTask(SupervisedTask[MulticlassBoostingBackend]):
 
     def _fit_one(
         self,
-        train_frame: pl.DataFrame,
-        valid_frame: pl.DataFrame,
+        train: TrainingInput,
+        valid: TrainingInput,
         *,
         layout: str,
         group_value: Any | None = None,
     ) -> _ModelEntry:
         part = self._model_name(layout, group_value)
-        train_codes = self._target(train_frame)
+        train_codes = self._target(train.require_frame())
         present = set(np.unique(train_codes).tolist())
         expected = set(range(len(self._class_order or ())))
         if present != expected:
             missing = [self._class_order[index] for index in sorted(expected - present)]
             msg = f"Multiclass model part {part!r} cannot be trained because target classes are missing: {missing!r}"
             raise SchemaError(msg)
-        valid_codes = self._target(valid_frame)
+        valid_codes = self._target(valid.require_frame())
         if np.unique(valid_codes).size < 2:
             msg = f"Multiclass validation for model part {part!r} must contain at least two classes"
             raise SchemaError(msg)
@@ -186,9 +187,7 @@ class MulticlassTask(SupervisedTask[MulticlassBoostingBackend]):
             ]
             msg = f"roc_auc_ovr_macro is undefined for validation model part {part!r}; missing classes: {missing!r}"
             raise SchemaError(msg)
-        return super()._fit_one(
-            train_frame, valid_frame, layout=layout, group_value=group_value
-        )
+        return super()._fit_one(train, valid, layout=layout, group_value=group_value)
 
     def _backend_options(self) -> Mapping[str, Any]:
         return {"num_classes": len(self._class_order or ())}

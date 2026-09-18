@@ -39,6 +39,7 @@ from fmlib.automl.tasks.prediction import execute_prediction
 from fmlib.automl.tasks.preparation import DataPreparation
 from fmlib.automl.tasks.routing import PredictionRouter
 from fmlib.automl.tasks.state import ModelEntry as _ModelEntry
+from fmlib.automl.tasks.state import TrainingInput
 from fmlib.automl.tasks.training import TrainingCoordinator
 from fmlib.automl.types import (
     CalibrationResult,
@@ -188,8 +189,8 @@ class BaseTask(ABC, Generic[_BackendT]):
     @abstractmethod
     def _fit_one(
         self,
-        train_frame: pl.DataFrame,
-        valid_frame: pl.DataFrame,
+        train: TrainingInput,
+        valid: TrainingInput,
         *,
         layout: str,
         group_value: Any | None = None,

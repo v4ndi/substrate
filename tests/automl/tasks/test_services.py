@@ -22,7 +22,7 @@ from fmlib.automl.execution import ExecutionContext
 from fmlib.automl.lifecycle import AutoMLStore, write_json
 from fmlib.automl.tasks.artifacts import ArtifactRepository, ArtifactState
 from fmlib.automl.tasks.operations import OperationHooks, OperationRunner
-from fmlib.automl.tasks.planning import ModelPlan
+from fmlib.automl.tasks.planning import FrameGroupView, ModelPlan
 from fmlib.automl.tasks.preparation import DataPreparation
 from fmlib.automl.tasks.routing import PredictionRouter
 from fmlib.automl.tasks.state import ModelEntry
@@ -64,6 +64,11 @@ class NativeStub:
         assert (path / "model").read_text() == "native state"
         assert device == "cpu"
         return cls()
+
+
+def _view(frame):
+    """Planning takes a group view; in memory that is a frame."""
+    return FrameGroupView(frame)
 
 
 def model(layout="global", group=None):
@@ -136,8 +141,9 @@ def test_training_partitions_once_and_preserves_slice_order(
         return original(frame, *args, **kwargs)
 
     def fit(train, valid, *, layout, group_value):
-        calls.append((layout, group_value, train["epk_id"].to_list()))
-        assert train.equals(valid)
+        calls.append((layout, group_value, train.require_frame()["epk_id"].to_list()))
+        assert train.require_frame().equals(valid.require_frame())
+        assert train.group_value == group_value
         return model(layout, group_value)
 
     monkeypatch.setattr(pl.DataFrame, "partition_by", partition)
@@ -201,7 +207,7 @@ def test_one_training_group_resolves_both_to_global_in_local_and_remote_plans(
     context = context.derive(model_layout=layout)
     train = pl.DataFrame({"group": ["a", "a"]})
     valid = pl.DataFrame({"group": ["a"]})
-    plan = ModelPlan.training(context, train, valid)
+    plan = ModelPlan.training(context, _view(train), _view(valid))
     assert plan == ModelPlan.remote_training(context, train)
     assert plan.parts == (
         (("per_group", "a"),) if layout == "per_group" else (("global", None),)
@@ -214,7 +220,7 @@ def test_model_plan_preserves_local_remote_order_and_validates_slices(context, l
     context = context.derive(model_layout=layout)
     train = pl.DataFrame({"group": ["b", "a", "b"]})
     valid = pl.DataFrame({"group": ["a", "b"]})
-    plan = ModelPlan.training(context, train, valid)
+    plan = ModelPlan.training(context, _view(train), _view(valid))
     assert plan == ModelPlan.remote_training(context, train)
     expected = (
         (("global", None),)
@@ -228,18 +234,22 @@ def test_model_plan_preserves_local_remote_order_and_validates_slices(context, l
         plan.layout = "global"
     if layout != "global":
         with pytest.raises(SchemaError, match="Validation data has no rows"):
-            ModelPlan.training(context, train, valid.head(1))
+            ModelPlan.training(context, _view(train), _view(valid.head(1)))
         with pytest.raises(SchemaError, match="channel"):
-            ModelPlan.training(context, train, valid.drop("group"))
+            ModelPlan.training(context, _view(train), _view(valid.drop("group")))
         part = ModelPlan.training(
-            context, train, valid, remote_layout="per_group", remote_group_value="b"
+            context,
+            _view(train),
+            _view(valid),
+            remote_layout="per_group",
+            remote_group_value="b",
         )
         assert part.parts == (("per_group", "b"),)
         with pytest.raises(SchemaError, match="Training data has no rows"):
             ModelPlan.training(
                 context,
-                train,
-                valid,
+                _view(train),
+                _view(valid),
                 remote_layout="per_group",
                 remote_group_value="absent",
             )
@@ -651,3 +661,72 @@ def test_remote_training_finalization_commits_only_complete_artifacts(
         }
         assert BinaryTask.load(task.path).id == identity
     assert list((tmp_path / "automl").iterdir()) == [task.path]
+
+
+@pytest.mark.parametrize("layout", ["global", "per_group"])
+def test_a_streaming_backend_never_has_its_splits_read(
+    context, tmp_path, monkeypatch, layout
+):
+    """The seam TabNN needs: a source descriptor, and no frame anywhere."""
+    context = context.derive(
+        backend="tabnn", engine="tabular_transformer", model_layout=layout
+    )
+    path = tmp_path / "data.parquet"
+    pl.DataFrame({
+        "client": [3, 1, 2],
+        "month": ["2026-01"] * 3,
+        "channel": ["b", "a", "b"],
+        "x": [3, 1, 2],
+        "target": [0, 1, 0],
+    }).write_parquet(path)
+
+    def no_full_read(*args, **kwargs):
+        pytest.fail("A streaming backend must not have its splits materialized")
+
+    monkeypatch.setattr(ParquetSource, "read", no_full_read)
+    monkeypatch.setattr(
+        pl.DataFrame,
+        "partition_by",
+        lambda *args, **kwargs: pytest.fail("Group routing must not partition a frame"),
+    )
+
+    seen = []
+
+    def fit(train, valid, *, layout, group_value):
+        seen.append((layout, group_value))
+        assert train.frame is None
+        assert valid.frame is None
+        assert train.group_value == group_value
+        assert train.source.files == (path,)
+        with pytest.raises(RuntimeError, match="not materialized"):
+            train.require_frame()
+        return model(layout, group_value)
+
+    TrainingCoordinator(context, "binary", lambda *_: None, fit).execute(path, path)
+    assert seen == (
+        [("global", None)]
+        if layout == "global"
+        else [("per_group", "a"), ("per_group", "b")]
+    )
+
+
+def test_a_materializing_backend_still_gets_its_frame(context, tmp_path):
+    path = tmp_path / "data.parquet"
+    pl.DataFrame({
+        "client": [1, 2],
+        "month": ["2026-01"] * 2,
+        "channel": ["a", "a"],
+        "x": [1, 2],
+    }).write_parquet(path)
+
+    seen = []
+
+    def fit(train, valid, *, layout, group_value):
+        seen.append(train.require_frame().height)
+        assert train.source.files == (path,)
+        return model(layout, group_value)
+
+    TrainingCoordinator(
+        context.derive(model_layout="global"), "binary", lambda *_: None, fit
+    ).execute(path, path)
+    assert seen == [2]

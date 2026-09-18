@@ -39,6 +39,7 @@ from fmlib.automl.types import (
 from .base import BaseTask, _ModelEntry
 from .calibration import CalibratableTask
 from .evaluation import align_prediction_scores, combine_metric_slices, metric_slices
+from .state import TrainingInput
 
 logger = logging.getLogger(__name__)
 
@@ -132,12 +133,14 @@ class UpliftTask(CalibratableTask, BaseTask[UpliftBoostingBackend]):
 
     def _fit_one(
         self,
-        train_frame: pl.DataFrame,
-        valid_frame: pl.DataFrame,
+        train: TrainingInput,
+        valid: TrainingInput,
         *,
         layout: str,
         group_value: Any | None = None,
     ) -> _ModelEntry[UpliftBoostingBackend]:
+        train_frame = train.require_frame()
+        valid_frame = valid.require_frame()
         preparation_started = perf_counter()
         part_name = self._model_name(layout, group_value)
         log_progress(
