@@ -156,13 +156,11 @@ def test_local_runner_writes_success_and_error_logs(tmp_path):
     assert "AutoML action failed duration_seconds=" in predict_log
 
 
-@pytest.mark.parametrize("device", ["cpu", "gpu"])
-def test_local_always_exposes_only_cuda_device_zero(tmp_path, monkeypatch, device):
-    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "2,3")
-    config = BinaryTaskConfig(
+def _local_config(tmp_path, *, backend="boosting", engine="catboost", device="cpu"):
+    return BinaryTaskConfig(
         env_type="local",
-        backend="boosting",
-        engine="catboost",
+        backend=backend,
+        engine=engine,
         device=device,
         target_column="target",
         client_id_column="epk_id",
@@ -175,12 +173,71 @@ def test_local_always_exposes_only_cuda_device_zero(tmp_path, monkeypatch, devic
         output_dir=tmp_path / "outputs",
         environment={},
     )
+
+
+@pytest.mark.parametrize("device", ["cpu", "gpu"])
+def test_local_boosting_still_sees_only_cuda_device_zero(tmp_path, monkeypatch, device):
+    """CatBoost with task_type='GPU' and no explicit devices spreads over all cards."""
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "2,3")
+    observed = EnvironmentRunner(_FakeOsiris()).run_local(
+        config=_local_config(tmp_path, device=device),
+        action="train",
+        callback=lambda: os.environ["CUDA_VISIBLE_DEVICES"],
+    )
+    assert observed == "0"
+
+
+def test_local_run_restores_the_callers_cuda_visibility(tmp_path, monkeypatch):
+    """One AutoML call must not narrow the notebook kernel for everything after it."""
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "2,3")
+    EnvironmentRunner(_FakeOsiris()).run_local(
+        config=_local_config(tmp_path),
+        action="train",
+        callback=lambda: None,
+    )
+    assert os.environ["CUDA_VISIBLE_DEVICES"] == "2,3"
+
+
+def test_local_run_restores_cuda_visibility_after_a_failure(tmp_path, monkeypatch):
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "2,3")
+
+    def fail():
+        msg = "diagnostic failure"
+        raise RuntimeError(msg)
+
+    with pytest.raises(RuntimeError, match="diagnostic failure"):
+        EnvironmentRunner(_FakeOsiris()).run_local(
+            config=_local_config(tmp_path), action="train", callback=fail
+        )
+    assert os.environ["CUDA_VISIBLE_DEVICES"] == "2,3"
+
+
+def test_local_run_leaves_cuda_unset_when_the_caller_had_it_unset(
+    tmp_path, monkeypatch
+):
+    monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
+    EnvironmentRunner(_FakeOsiris()).run_local(
+        config=_local_config(tmp_path),
+        action="train",
+        callback=lambda: None,
+    )
+    assert "CUDA_VISIBLE_DEVICES" not in os.environ
+
+
+@pytest.mark.parametrize("device", ["cpu", "gpu"])
+def test_local_tabnn_keeps_every_card_the_caller_exposed(tmp_path, monkeypatch, device):
+    """num_gpus decides how many cards a trial uses; a pin would hide the rest."""
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "2,3")
+    config = _local_config(
+        tmp_path, backend="tabnn", engine="tabular_transformer", device=device
+    )
     observed = EnvironmentRunner(_FakeOsiris()).run_local(
         config=config,
         action="train",
         callback=lambda: os.environ["CUDA_VISIBLE_DEVICES"],
     )
-    assert observed == "0"
+    assert observed == "2,3"
+    assert os.environ["CUDA_VISIBLE_DEVICES"] == "2,3"
 
 
 @pytest.mark.parametrize("action", ["train", "predict", "calibrate", "evaluate"])

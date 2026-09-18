@@ -130,6 +130,7 @@ class SupervisedTask(BaseTask[_SingleBackendT]):
         )
         fit_result = fit_model(
             backend_class=self._backend_class_for(self.config.backend),
+            backend=self.config.backend,
             engine=self.config.engine,
             model_params=self.config.model_params,
             search_space=self.config.search_space,

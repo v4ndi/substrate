@@ -7,7 +7,8 @@ import logging
 import os
 import sys
 import uuid
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import asdict
 from pathlib import Path, PurePosixPath
 from time import perf_counter
@@ -23,6 +24,54 @@ from fmlib.automl.progress import use_progress_logger
 
 logger = logging.getLogger(__name__)
 _ResultT = TypeVar("_ResultT")
+
+
+@contextmanager
+def _cuda_visible_devices(value: str | None) -> Iterator[None]:
+    """Scope ``CUDA_VISIBLE_DEVICES`` to one operation.
+
+    ``value=None`` leaves the variable exactly as the caller set it. Otherwise
+    the previous value -- including its absence -- is restored on the way out,
+    so running AutoML in a notebook does not permanently narrow that kernel to
+    one card.
+
+    Args:
+        value: Value to expose for the duration, or ``None`` to change nothing.
+
+    Yields:
+        ``None``.
+    """
+    if value is None:
+        yield
+        return
+    missing = object()
+    previous: Any = os.environ.get("CUDA_VISIBLE_DEVICES", missing)
+    os.environ["CUDA_VISIBLE_DEVICES"] = value
+    try:
+        yield
+    finally:
+        if previous is missing:
+            os.environ.pop("CUDA_VISIBLE_DEVICES", None)
+        else:
+            os.environ["CUDA_VISIBLE_DEVICES"] = previous
+
+
+def _local_cuda_visibility(config: BaseTaskConfig) -> str | None:
+    """Return the ``CUDA_VISIBLE_DEVICES`` value one local run should impose.
+
+    Boosting is pinned to card 0 on purpose: CatBoost with ``task_type='GPU'``
+    and no explicit ``devices`` spreads over every visible card. TabNN must not
+    be pinned -- its device count comes from ``environment.num_gpus``, and a pin
+    would both hide the other cards and make that field a lie.
+
+    Args:
+        config: Task configuration of the operation being run.
+
+    Returns:
+        ``"0"`` for boosting, ``None`` for any other backend family.
+    """
+    return "0" if config.backend == "boosting" else None
+
 
 _TERMINAL_STATES = {"failed", "succeeded"}
 _STATE_ALIASES = {
@@ -101,7 +150,9 @@ class EnvironmentRunner:
     ) -> _ResultT:
         """Run one local action with run-scoped console and file logs.
 
-        The launcher sets ``CUDA_VISIBLE_DEVICES=0`` before invoking the callback.
+        For ``backend='boosting'`` the launcher exposes card 0 for the duration
+        of the callback and restores the caller's value afterwards; TabNN runs
+        with the visibility it was given.
 
         Args:
             config: Local task configuration.
@@ -139,7 +190,6 @@ class EnvironmentRunner:
         for handler in handlers:
             handler.setFormatter(formatter)
             run_logger.addHandler(handler)
-        os.environ["CUDA_VISIBLE_DEVICES"] = "0"
         try:
             run_logger.info(
                 "Starting action=%s task_config=%s backend=%s engine=%s env_type=local device=%s",
@@ -149,7 +199,10 @@ class EnvironmentRunner:
                 config.engine,
                 config.resolved_device,
             )
-            with use_progress_logger(run_logger):
+            with (
+                _cuda_visible_devices(_local_cuda_visibility(config)),
+                use_progress_logger(run_logger),
+            ):
                 result = callback()
             run_logger.info(
                 "Finished action=%s duration_seconds=%.3f",

@@ -114,6 +114,7 @@ def test_multiclass_custom_search_space_supports_all_range_types_and_float_step(
     trial = _Trial()
     params = suggest_params(
         trial,
+        backend="boosting",
         engine="catboost",
         model_params={"iterations": 5},
         search_space={
@@ -146,7 +147,12 @@ def test_default_search_space_suggests_integer_parameters_as_integers(
     engine, n_trials, integer_parameters
 ):
     params = suggest_params(
-        _Trial(), engine=engine, model_params={}, search_space=None, n_trials=n_trials
+        _Trial(),
+        backend="boosting",
+        engine=engine,
+        model_params={},
+        search_space=None,
+        n_trials=n_trials,
     )
 
     assert all(isinstance(params[name], int) for name in integer_parameters)
@@ -156,6 +162,7 @@ def test_multiclass_log_and_step_validation_is_diagnostic():
     with pytest.raises(ConfigError, match="cannot combine"):
         suggest_params(
             _Trial(),
+            backend="boosting",
             engine="catboost",
             model_params={},
             search_space={

@@ -6,9 +6,8 @@ result container. :func:`fit_model` drives one search through the
 :class:`~fmlib.automl.backends.interface.TrainableBackend` surface, so no
 adapter is named here and nothing is imported from ``backends.boosting``.
 
-One thing is still family-specific: the default space comes from
-``config.boosting``. Resolving it becomes backend-aware when TabNN brings a
-second default space.
+Defaults are the one thing that is family-specific, so the family name is
+passed in and :func:`resolve_default_search_space` branches on it once.
 """
 
 from __future__ import annotations
@@ -22,9 +21,18 @@ import numpy as np
 import polars as pl
 
 from fmlib.automl.backends.interface import TrainableBackend
-from fmlib.automl.config.boosting import default_search_space
+from fmlib.automl.backends.tabnn.spaces import (
+    default_search_space as tabnn_default_search_space,
+)
+from fmlib.automl.config.boosting import (
+    default_search_space as boosting_default_search_space,
+)
 from fmlib.automl.data import FeatureSchema
-from fmlib.automl.exceptions import ConfigError, MissingDependencyError
+from fmlib.automl.exceptions import (
+    ConfigError,
+    MissingDependencyError,
+    UnsupportedBackendError,
+)
 from fmlib.automl.progress import log_progress
 
 _BackendT = TypeVar("_BackendT", bound=TrainableBackend)
@@ -48,6 +56,7 @@ class FitResult(Generic[_BackendT]):
 def suggest_params(
     trial: Any,
     *,
+    backend: str,
     engine: str,
     model_params: Mapping[str, Any],
     search_space: Mapping[str, Any] | None,
@@ -59,6 +68,7 @@ def suggest_params(
 
     Args:
         trial: Optuna trial implementing ``suggest_*`` methods.
+        backend: Backend family, used to select the default space.
         engine: Engine name used to select the default space.
         model_params: Fixed estimator parameters.
         search_space: Explicit search definitions, or ``None`` for defaults.
@@ -74,7 +84,11 @@ def suggest_params(
     """
     space = (
         resolve_default_search_space(
-            engine, n_trials=n_trials, train_frame=train_frame, schema=schema
+            backend,
+            engine,
+            n_trials=n_trials,
+            train_frame=train_frame,
+            schema=schema,
         )
         if search_space is None
         else search_space
@@ -160,13 +174,38 @@ def suggest_params(
 
 
 def resolve_default_search_space(
+    backend: str,
     engine: str,
     *,
     n_trials: int,
     train_frame: pl.DataFrame | None,
     schema: FeatureSchema | None,
 ) -> dict[str, dict[str, Any]]:
-    """Resolve default dimensions from the actual model-part training matrix."""
+    """Resolve the packaged default space of one backend family.
+
+    The boosting space is sized from the actual model-part training matrix --
+    whether it has nulls, whether it has categorical features, how many
+    trials there are to spend. The TabNN space is a fixed categorical grid
+    (see :mod:`fmlib.automl.backends.tabnn.spaces`) and ignores all three.
+
+    Args:
+        backend: Backend family name.
+        engine: Native engine within that family.
+        n_trials: Trial budget, used to size the boosting space.
+        train_frame: Training frame, used to size the boosting space.
+        schema: Feature schema of ``train_frame``.
+
+    Returns:
+        The default search space for that backend and engine.
+
+    Raises:
+        UnsupportedBackendError: If the backend family is unknown.
+    """
+    if backend == "tabnn":
+        return tabnn_default_search_space(engine)
+    if backend != "boosting":
+        msg = f"No default search space for backend={backend!r}"
+        raise UnsupportedBackendError(msg)
     has_categorical = bool(schema and schema.categorical)
     has_nan = False
     if train_frame is not None and schema is not None:
@@ -178,7 +217,7 @@ def resolve_default_search_space(
             )
             for column in schema.numerical
         )
-    return default_search_space(
+    return boosting_default_search_space(
         engine,
         n_trials=n_trials,
         has_nan=has_nan,
@@ -189,6 +228,7 @@ def resolve_default_search_space(
 def fit_model(
     *,
     backend_class: type[_BackendT],
+    backend: str,
     engine: str,
     model_params: Mapping[str, Any],
     search_space: Mapping[str, Any] | None,
@@ -210,6 +250,7 @@ def fit_model(
 
     Args:
         backend_class: Concrete task-specific backend adapter.
+        backend: Backend family, used to resolve the default search space.
         engine: Native engine of the backend family.
         model_params: Fixed estimator parameters.
         search_space: Search-space overrides, or ``None`` for defaults.
@@ -247,6 +288,7 @@ def fit_model(
 
     effective_space = (
         resolve_default_search_space(
+            backend,
             engine,
             n_trials=n_trials or 0,
             train_frame=train_frame,
@@ -278,11 +320,11 @@ def fit_model(
     if not hyperopt:
         fit_started = perf_counter()
         log_progress("[boosting fit 1/1] engine=%s started", engine)
-        backend = make_backend(model_params)
-        backend.fit_prepared(prepared)
+        fitted = make_backend(model_params)
+        fitted.fit_prepared(prepared)
         value = objective_metric(
             valid_target,
-            backend.predict_prepared_score(prepared.valid_prediction_features),
+            fitted.predict_prepared_score(prepared.valid_prediction_features),
         )
         log_progress(
             "[boosting fit 1/1] engine=%s completed duration_seconds=%.3f objective_value=%.12g",
@@ -290,7 +332,7 @@ def fit_model(
             perf_counter() - fit_started,
             value,
         )
-        return FitResult(backend, dict(model_params), value)
+        return FitResult(fitted, dict(model_params), value)
 
     if n_trials is None:
         msg = "hyperopt=True requires a resolved n_trials value"
@@ -311,19 +353,20 @@ def fit_model(
         trial_started = perf_counter()
         params = suggest_params(
             trial,
+            backend=backend,
             engine=engine,
             model_params=model_params,
             search_space=effective_space,
         )
-        backend = make_backend(params)
-        backend.fit_prepared(prepared)
+        candidate = make_backend(params)
+        candidate.fit_prepared(prepared)
         value = objective_metric(
             valid_target,
-            backend.predict_prepared_score(prepared.valid_prediction_features),
+            candidate.predict_prepared_score(prepared.valid_prediction_features),
         )
         improved = value > best_value if direction == "maximize" else value < best_value
         if best_backend is None or improved:
-            best_backend = backend
+            best_backend = candidate
             best_params = params
             best_value = value
         log_progress(

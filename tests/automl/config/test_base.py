@@ -333,7 +333,7 @@ def test_legacy_per_action_resources_are_rejected_without_alias():
 
 @pytest.mark.parametrize(
     ("backend", "engine"),
-    [("boosting", "ste"), ("tabnn", "catboost"), ("tabnn", "dcn")],
+    [("boosting", "ste"), ("tabnn", "ste"), ("tabnn", "catboost"), ("tabnn", "dcn")],
 )
 def test_invalid_backend_engine_pair_is_rejected(backend, engine):
     with pytest.raises(UnsupportedBackendError):
@@ -520,8 +520,6 @@ def test_legacy_remote_environment_values_are_rejected_explicitly(env_type):
         ConfigError, match=rf"Incompatible legacy env_type={env_type!r}"
     ):
         _config(env_type=env_type, device="gpu")
-    with pytest.raises(ConfigError, match="does not support"):
-        _config(backend="tabnn", engine="ste", device="cpu")
 
 
 def test_unknown_environment_is_rejected():
@@ -529,9 +527,70 @@ def test_unknown_environment_is_rejected():
         _config(env_type="other")
 
 
-def test_tabnn_hyperopt_is_rejected():
-    with pytest.raises(ConfigError, match="only for boosting"):
-        _config(backend="tabnn", engine="ste", device="gpu", hyperopt=True)
+def _tabnn(**overrides):
+    return _config(backend="tabnn", engine="tabular_transformer", **overrides)
+
+
+def test_renamed_tabnn_engine_names_its_replacement():
+    with pytest.raises(UnsupportedBackendError) as error:
+        _config(backend="tabnn", engine="ste", device="gpu")
+    message = str(error.value)
+    assert "tabular_transformer" in message
+    assert "STEv2" in message
+
+
+def test_tabnn_runs_hyperopt_and_on_cpu():
+    config = _tabnn(device="cpu", hyperopt=True)
+    assert config.hyperopt is True
+    assert config.device == "cpu"
+
+
+@pytest.mark.parametrize(
+    ("backend", "engine", "expected"),
+    [("boosting", "catboost", 50), ("tabnn", "tabular_transformer", 10)],
+)
+def test_default_trial_budget_follows_the_backend_family(backend, engine, expected):
+    """A boosting trial costs minutes; a network trial costs hours."""
+    config = _config(backend=backend, engine=engine, hyperopt=True)
+    assert config.n_trials == expected
+
+
+@pytest.mark.parametrize("backend", ["boosting", "tabnn"])
+def test_explicit_trial_budget_is_never_capped(backend):
+    engine = "catboost" if backend == "boosting" else "tabular_transformer"
+    config = _config(backend=backend, engine=engine, hyperopt=True, n_trials=97)
+    assert config.n_trials == 97
+
+
+def test_tabnn_rejects_both_layouts_at_once_and_says_why():
+    with pytest.raises(ConfigError) as error:
+        _tabnn(model_layout="global_and_per_group")
+    message = str(error.value)
+    assert "global_and_per_group" in message
+    assert "separate tasks" in message
+
+    assert _tabnn(model_layout="global").model_layout == "global"
+    assert _tabnn(model_layout="per_group").model_layout == "per_group"
+
+
+def test_boosting_still_accepts_both_layouts_at_once():
+    assert _config(model_layout="global_and_per_group").model_layout == (
+        "global_and_per_group"
+    )
+
+
+def test_processed_data_path_defaults_under_the_output_directory():
+    from pathlib import Path
+
+    assert _config().resolved_processed_data_path == Path("outputs") / "processed"
+    explicit = _config(processed_data_path="/data/shared/processed")
+    assert explicit.resolved_processed_data_path == Path("/data/shared/processed")
+
+
+@pytest.mark.parametrize("value", ["", 7])
+def test_processed_data_path_rejects_values_that_are_not_paths(value):
+    with pytest.raises(ConfigError, match="processed_data_path="):
+        _config(processed_data_path=value)
 
 
 @pytest.mark.parametrize("field_name", BinaryTaskConfig.required_explicit_fields)

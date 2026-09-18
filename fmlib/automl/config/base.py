@@ -14,6 +14,11 @@ FeatureColumns = Sequence[str] | str | Path
 
 _DEFAULT_REMOTE_IMAGE = "registry.ca.sbrf.ru/ci02684173/ci02697916/notebooks/python3.12/cuda12.4/d-03.000.00:d-03.000.00-gigachat"
 _DEFAULT_SHARED_FMLIB_VENV = "/home/datalab/nfs/sber-amazme-fmlib/env"
+_TABNN_ENGINE = "tabular_transformer"
+#: Trial budget when hyperopt is on and n_trials is omitted. A boosting
+#: trial costs minutes and a network trial costs hours, so the two families
+#: cannot share one number.
+_DEFAULT_N_TRIALS = {"boosting": 50, "tabnn": 10}
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -29,8 +34,9 @@ class EnvironmentConfig:
             ``CUDA_VISIBLE_DEVICES`` are controlled by the launcher.
         poll_interval_seconds: Delay between scheduler status requests.
         log_dir: Optional local directory for job metadata and logs.
-        num_gpus: GPUs allocated to the complete operation.
-        num_nodes: Nodes allocated to the complete operation.
+        num_gpus: GPUs allocated to one job -- that is, to one trial of a
+            search, not to the operation as a whole.
+        num_nodes: Nodes allocated to one job.
 
     Raises:
         ConfigError: If an environment value or resource request is invalid.
@@ -163,10 +169,9 @@ class BaseTaskConfig:
 
     Attributes:
         env_type: Execution environment: ``local`` or ``osiris``.
-        backend: Model family. Boosting tasks use ``boosting``; ``tabnn`` is
-            reserved for neural-network implementations.
+        backend: Model family: ``boosting`` or ``tabnn``.
         engine: Estimator implementation. Boosting supports ``catboost`` and
-            ``xgboost``; the currently supported TabNN engine is ``ste``.
+            ``xgboost``; TabNN supports ``tabular_transformer``.
         device: Explicit ``cpu`` or ``gpu`` choice; remote environments support
             only ``gpu``.
         target_column: Dataset column containing the target.
@@ -186,10 +191,15 @@ class BaseTaskConfig:
         model_params: Explicit estimator parameters used only without hyperopt.
         search_space: Optuna search-space overrides used only with hyperopt;
             ``None`` uses task defaults.
-        n_trials: Number of Optuna trials. It must be omitted without hyperopt;
-            with hyperopt, omission resolves to 50.
+        n_trials: Trial budget of the search. It must be omitted without
+            hyperopt; with hyperopt, omission resolves per backend family --
+            50 for boosting, 10 for TabNN, where one trial costs hours rather
+            than minutes. An explicit value is never capped.
         random_state: Reproducibility seed passed to supported components.
         output_dir: Root directory for artifacts, reports, logs, and remote handles.
+        processed_data_path: Where preprocessed TabNN data is written and reused.
+            ``None`` resolves to ``<output_dir>/processed``. Boosting ignores it;
+            it prepares its matrices in memory.
         environment: Optional execution environment configuration. When omitted,
             remote execution uses the documented shared fmlib environment.
 
@@ -229,6 +239,7 @@ class BaseTaskConfig:
     model_layout: Literal["global", "per_group", "global_and_per_group"] | None = None
     hyperopt: bool
     output_dir: str | Path
+    processed_data_path: str | Path | None = None
     environment: EnvironmentConfig = field(default_factory=EnvironmentConfig)
     optimization_metric: str | None = None
     verbose: bool | int = True
@@ -269,6 +280,12 @@ class BaseTaskConfig:
             raise ConfigError(msg)
         if not isinstance(self.output_dir, str | Path) or not str(self.output_dir):
             msg = f"output_dir={self.output_dir!r}: expected a non-empty path"
+            raise ConfigError(msg)
+        if self.processed_data_path is not None and (
+            not isinstance(self.processed_data_path, str | Path)
+            or not str(self.processed_data_path)
+        ):
+            msg = f"processed_data_path={self.processed_data_path!r}: expected a non-empty path or None"
             raise ConfigError(msg)
         for name in ("categorical_columns", "numerical_columns"):
             object.__setattr__(
@@ -318,8 +335,16 @@ class BaseTaskConfig:
         if self.backend == "boosting" and self.engine not in {"catboost", "xgboost"}:
             msg = f"boosting backend does not support engine={self.engine!r}"
             raise UnsupportedBackendError(msg)
-        if self.backend == "tabnn" and self.engine != "ste":
-            msg = f"tabnn backend does not support engine={self.engine!r}"
+        if self.backend == "tabnn" and self.engine != _TABNN_ENGINE:
+            # 'ste' is called out by name: the model class was renamed
+            # STEv2 -> TabularTransformer and no artifact carries the old
+            # engine, so this can only be a config written from memory.
+            hint = (
+                " (the model class was renamed STEv2 -> TabularTransformer)"
+                if self.engine == "ste"
+                else ""
+            )
+            msg = f"tabnn backend does not support engine={self.engine!r}; use {_TABNN_ENGINE!r}{hint}"
             raise UnsupportedBackendError(msg)
         if set(self.categorical_columns) & set(self.numerical_columns):
             overlap = sorted(
@@ -346,7 +371,7 @@ class BaseTaskConfig:
             raise ConfigError(msg)
         if self.hyperopt:
             if self.n_trials is None:
-                object.__setattr__(self, "n_trials", 50)
+                object.__setattr__(self, "n_trials", _DEFAULT_N_TRIALS[self.backend])
             elif (
                 isinstance(self.n_trials, bool)
                 or not isinstance(self.n_trials, int)
@@ -413,12 +438,6 @@ class BaseTaskConfig:
                 f"{overlapping_parameters}"
             )
             raise ConfigError(msg)
-        if self.backend == "tabnn" and self.hyperopt:
-            msg = "Optuna hyperopt is available only for boosting"
-            raise ConfigError(msg)
-        if self.backend == "tabnn" and self.device == "cpu":
-            msg = "TabNN does not support device='cpu'"
-            raise ConfigError(msg)
         if self.group_column is None:
             if self.model_layout is not None:
                 msg = f"model_layout={self.model_layout!r}: must be omitted when group_column=None"
@@ -431,6 +450,17 @@ class BaseTaskConfig:
             raise ConfigError(msg)
         elif self.model_layout not in {"global", "per_group", "global_and_per_group"}:
             msg = f"model_layout={self.model_layout!r}: expected 'global', 'per_group', or 'global_and_per_group'"
+            raise ConfigError(msg)
+        if self.backend == "tabnn" and self.model_layout == "global_and_per_group":
+            # A batch is drawn from one file and there is no shuffle buffer
+            # across files, so a global model trained on group-partitioned
+            # data would see one group per step. Either layout alone is fine:
+            # 'global' reads the flat layout, 'per_group' the partitioned one.
+            msg = (
+                "model_layout='global_and_per_group' is not supported with backend='tabnn': "
+                "the two layouts need different physical layouts of the processed data; "
+                "run 'global' and 'per_group' as separate tasks"
+            )
             raise ConfigError(msg)
         roles = {
             "target_column": self.target_column,
@@ -476,6 +506,17 @@ class BaseTaskConfig:
         if numerical_roles:
             msg = f"group/treatment roles are categorical and cannot be in numerical_columns: {numerical_roles}"
             raise ConfigError(msg)
+
+    @property
+    def resolved_processed_data_path(self) -> Path:
+        """Resolve where preprocessed data is written and looked up.
+
+        Returns:
+            The configured path, or ``<output_dir>/processed`` when omitted.
+        """
+        if self.processed_data_path is None:
+            return Path(self.output_dir).expanduser() / "processed"
+        return Path(self.processed_data_path).expanduser()
 
     @property
     def resolved_device(self) -> Literal["cpu", "gpu"]:

@@ -399,6 +399,7 @@ class UpliftBoostingBackend(ModelBackend):
         }
         effective_space = (
             resolve_default_search_space(
+                "boosting",
                 self.engine,
                 n_trials=n_trials or 0,
                 train_frame=train,
@@ -458,6 +459,7 @@ class UpliftBoostingBackend(ModelBackend):
                 trial_started = perf_counter()
                 params = suggest_params(
                     trial,
+                    backend="boosting",
                     engine=self.engine,
                     model_params=model_params,
                     search_space=effective_space,

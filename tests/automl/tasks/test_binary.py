@@ -1187,6 +1187,7 @@ def test_float_search_space_forwards_step():
 
     assert suggest_params(
         trial,
+        backend="boosting",
         engine=task.config.engine,
         model_params=task.config.model_params,
         search_space=task.config.search_space,
@@ -1244,6 +1245,7 @@ def test_float_search_space_rejects_step_with_log_scale():
     with pytest.raises(ConfigError, match="cannot combine log=True with step=0.1"):
         suggest_params(
             _RecordingTrial(),
+            backend="boosting",
             engine=task.config.engine,
             model_params=task.config.model_params,
             search_space=task.config.search_space,
@@ -1273,6 +1275,7 @@ def test_integer_search_space_rejects_non_unit_step_with_log_scale():
     with pytest.raises(ConfigError, match="cannot combine log=True with step=10"):
         suggest_params(
             _RecordingTrial(),
+            backend="boosting",
             engine=task.config.engine,
             model_params=task.config.model_params,
             search_space=task.config.search_space,

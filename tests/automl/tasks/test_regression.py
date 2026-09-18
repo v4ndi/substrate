@@ -403,6 +403,7 @@ def test_regression_search_space_float_step_and_log_validation(tmp_path):
     trial = _Trial()
     assert suggest_params(
         trial,
+        backend="boosting",
         engine=task.config.engine,
         model_params=task.config.model_params,
         search_space=task.config.search_space,
@@ -426,6 +427,7 @@ def test_regression_search_space_float_step_and_log_validation(tmp_path):
     with pytest.raises(ConfigError, match="cannot combine"):
         suggest_params(
             _Trial(),
+            backend="boosting",
             engine=invalid.config.engine,
             model_params=invalid.config.model_params,
             search_space=invalid.config.search_space,
@@ -433,11 +435,11 @@ def test_regression_search_space_float_step_and_log_validation(tmp_path):
 
 
 def test_regression_uses_packaged_default_search_space(tmp_path, monkeypatch):
-    import fmlib.automl.backends.search as boosting_hyperopt
+    import fmlib.automl.backends.search as search_module
 
     monkeypatch.setattr(
-        boosting_hyperopt,
-        "default_search_space",
+        search_module,
+        "boosting_default_search_space",
         lambda engine, **kwargs: {"depth": [5]},
     )
     task = RegressionTask(
@@ -446,6 +448,7 @@ def test_regression_uses_packaged_default_search_space(tmp_path, monkeypatch):
 
     assert suggest_params(
         _Trial(),
+        backend="boosting",
         engine=task.config.engine,
         model_params=task.config.model_params,
         search_space=task.config.search_space,
@@ -485,6 +488,7 @@ environment: {}
 
     params = suggest_params(
         trial,
+        backend="boosting",
         engine=config.engine,
         model_params=config.model_params,
         search_space=config.search_space,
@@ -507,6 +511,7 @@ def test_regression_search_ranges_have_diagnostic_validation(definition, message
     with pytest.raises(ConfigError, match=message):
         suggest_params(
             _Trial(),
+            backend="boosting",
             engine="catboost",
             model_params={},
             search_space={"parameter": definition},
