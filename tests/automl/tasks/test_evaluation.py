@@ -3,11 +3,11 @@
 import polars as pl
 import pytest
 
-import avatar.automl.tasks.evaluation as evaluation_module
-from avatar.automl import BinaryTaskConfig
-from avatar.automl.data import CanonicalColumnMapper
-from avatar.automl.exceptions import SchemaError
-from avatar.automl.tasks.evaluation import align_prediction_scores, metric_slices
+import fmlib.automl.tasks.evaluation as evaluation_module
+from fmlib.automl import BinaryTaskConfig
+from fmlib.automl.data import CanonicalColumnMapper
+from fmlib.automl.exceptions import SchemaError
+from fmlib.automl.tasks.evaluation import align_prediction_scores, metric_slices
 
 
 def _config(*, date_column="date", group_column="group") -> BinaryTaskConfig:

@@ -1,6 +1,6 @@
 """The campaign sweep, which used to be an entrypoint and had no test.
 
-It moved into the library when ``avatar/cam_inference.py`` was deleted, so the
+It moved into the library when ``fmlib/cam_inference.py`` was deleted, so the
 behaviour the 23 campaign configs depend on is pinned here rather than in a
 script nobody imports.
 """
@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import torch
 
-from avatar.data.campaign import NO_CHANNEL, CampaignTaskChannelBatches
-from avatar.data.tabular.batch import TabularBatch
+from fmlib.data.campaign import NO_CHANNEL, CampaignTaskChannelBatches
+from fmlib.data.tabular.batch import TabularBatch
 
 RECORDS = 4
 

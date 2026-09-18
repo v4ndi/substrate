@@ -2,7 +2,7 @@ import pytest
 import torch
 import torch.nn as nn
 
-from avatar.nn.embedding import BaseEventSequenceEmbedding, EventSequenceEmbedding
+from fmlib.nn.embedding import BaseEventSequenceEmbedding, EventSequenceEmbedding
 
 
 class TestBaseEventSequenceEmbedding:

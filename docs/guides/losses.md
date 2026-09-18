@@ -6,8 +6,8 @@
 ```
 тренер ──вызывает──► pipeline.forward(batch) ──► output (есть .loss)
                           │
-                          ├─ backbone(...)     # avatar/nn — потерь не считает
-                          └─ self.loss(...)    # avatar/losses
+                          ├─ backbone(...)     # fmlib/nn — потерь не считает
+                          └─ self.loss(...)    # fmlib/losses
 ```
 
 Такое разделение решает две задачи. Backbone без потерь можно прогнать на
@@ -58,7 +58,7 @@ loss_head = loss_head_local * world_size / сумма_по_рангам(num_item
 больше соседей.
 
 В таком случае `loss` оставляется `None`: скаляр соберёт тренер
-(`avatar.train.loss_reduce.calculate_output_loss`).
+(`fmlib.train.loss_reduce.calculate_output_loss`).
 
 Если у всех голов одинаковое число элементов или голова одна, `num_items` не
 нужен — заполняйте `loss`, а `components` используйте для логов.
@@ -70,10 +70,10 @@ loss_head = loss_head_local * world_size / сумма_по_рангам(num_item
 
 ```yaml
 model:
-  _target_: avatar.pipeline.tabular.SupervisedLearner
+  _target_: fmlib.pipeline.tabular.SupervisedLearner
   num_classes: 2
   loss:
-    _target_: avatar.losses.ClassificationLoss
+    _target_: fmlib.losses.ClassificationLoss
     num_classes: 2
     task_type: classification
     l1_weight: 0.01
@@ -84,7 +84,7 @@ model:
 
 ```yaml
   loss:
-    _target_: avatar.losses.ClassificationLoss
+    _target_: fmlib.losses.ClassificationLoss
     loss_fn:
       _target_: torch.nn.BCEWithLogitsLoss
       pos_weight: [3.0]
@@ -96,13 +96,13 @@ model:
 
 ```yaml
 loss:
-  _target_: avatar.losses.CompositeLoss
+  _target_: fmlib.losses.CompositeLoss
   losses:
     task:
-      _target_: avatar.losses.ClassificationLoss
+      _target_: fmlib.losses.ClassificationLoss
       num_classes: 2
     kld:
-      _target_: avatar.losses.KLDLoss
+      _target_: fmlib.losses.KLDLoss
       alpha: 0.5
   weights: {task: 1.0, kld: 0.1}
 ```
@@ -121,7 +121,7 @@ loss:
 import torch
 import torch.nn as nn
 
-from avatar.losses import Loss, LossOutput
+from fmlib.losses import Loss, LossOutput
 
 
 class FocalLoss(Loss):
@@ -139,7 +139,7 @@ class FocalLoss(Loss):
 
 ```yaml
 model:
-  _target_: avatar.pipeline.tabular.SupervisedLearner
+  _target_: fmlib.pipeline.tabular.SupervisedLearner
   num_classes: 2
   loss:
     _target_: mypackage.losses.FocalLoss

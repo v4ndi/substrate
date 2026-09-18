@@ -11,23 +11,23 @@ import numpy as np
 import polars as pl
 import pytest
 
-from avatar.automl import BinaryTask, BinaryTaskConfig
-from avatar.automl.data import FeatureSchema, ParquetSource
-from avatar.automl.exceptions import (
+from fmlib.automl import BinaryTask, BinaryTaskConfig
+from fmlib.automl.data import FeatureSchema, ParquetSource
+from fmlib.automl.exceptions import (
     ArtifactIntegrityError,
     RemoteExecutionError,
     SchemaError,
 )
-from avatar.automl.execution import ExecutionContext
-from avatar.automl.lifecycle import AutoMLStore, write_json
-from avatar.automl.tasks.artifacts import ArtifactRepository, ArtifactState
-from avatar.automl.tasks.operations import OperationHooks, OperationRunner
-from avatar.automl.tasks.planning import ModelPlan
-from avatar.automl.tasks.preparation import DataPreparation
-from avatar.automl.tasks.routing import PredictionRouter
-from avatar.automl.tasks.state import ModelEntry
-from avatar.automl.tasks.training import TrainingCoordinator
-from avatar.automl.types import PredictionResult, TrainingResult
+from fmlib.automl.execution import ExecutionContext
+from fmlib.automl.lifecycle import AutoMLStore, write_json
+from fmlib.automl.tasks.artifacts import ArtifactRepository, ArtifactState
+from fmlib.automl.tasks.operations import OperationHooks, OperationRunner
+from fmlib.automl.tasks.planning import ModelPlan
+from fmlib.automl.tasks.preparation import DataPreparation
+from fmlib.automl.tasks.routing import PredictionRouter
+from fmlib.automl.tasks.state import ModelEntry
+from fmlib.automl.tasks.training import TrainingCoordinator
+from fmlib.automl.types import PredictionResult, TrainingResult
 
 
 @pytest.fixture
@@ -164,7 +164,7 @@ def test_training_logs_single_group_combined_layout_resolution(
         "x": [1, 2],
     }).write_parquet(path)
 
-    with caplog.at_level("INFO", logger="avatar.automl.progress"):
+    with caplog.at_level("INFO", logger="fmlib.automl.progress"):
         outcome = TrainingCoordinator(
             context, "binary", lambda *_: None, lambda *_args, **_kwargs: model()
         ).execute(path, path)
@@ -307,7 +307,7 @@ def test_artifact_repository_round_trip_and_failed_overwrite(
     if failure == "native_save":
         monkeypatch.setattr(NativeStub, "save", fail)
     else:
-        import avatar.automl.tasks.artifacts as artifacts
+        import fmlib.automl.tasks.artifacts as artifacts
 
         original = artifacts.os.replace
 
@@ -556,7 +556,7 @@ def test_operation_failure_rolls_back_and_stops_heartbeat(
         return result
 
     monkeypatch.setattr(
-        "avatar.automl.tasks.operations._LOCAL_HEARTBEAT_INTERVAL_SECONDS", 0.001
+        "fmlib.automl.tasks.operations._LOCAL_HEARTBEAT_INTERVAL_SECONDS", 0.001
     )
     monkeypatch.setattr(store, "heartbeat_operation", lambda _: heartbeat.set())
     monkeypatch.setattr(store, "persist_training", lambda _: step("persist"))

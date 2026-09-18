@@ -4,12 +4,12 @@ import numpy as np
 import pyarrow as pa
 import pytest
 
-from avatar.preprocessing.base.accumulators import (
+from fmlib.preprocessing.base.accumulators import (
     CardinalityError,
     MeanStdAccumulator,
     ValueCountAccumulator,
 )
-from avatar.preprocessing.base.encode import CategoricalMapper, signed_log1p
+from fmlib.preprocessing.base.encode import CategoricalMapper, signed_log1p
 
 
 def _feed(acc, table, chunk):

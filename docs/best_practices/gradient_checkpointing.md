@@ -32,7 +32,7 @@ config:
 ### Где это стояло
 
 Обе правки — из конфига обучения на событийных последовательностях: HF-бэкенд
-(`transformers.GPT2Model`) под `avatar.nn.sequential.TransformersWrapper`,
+(`transformers.GPT2Model`) под `fmlib.nn.sequential.TransformersWrapper`,
 батчи по 384–440 последовательностей длиной до 512 событий. Полный конфиг того
 запуска не приводится: пайплайн, который в нём стоял, из репозитория удалён
 (см. `docs/decisions/pipeline_boundaries.md`), а сами три настройки от

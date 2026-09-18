@@ -3,7 +3,7 @@ import json
 import polars as pl
 import pytest
 
-from avatar.automl import (
+from fmlib.automl import (
     BinaryTaskConfig,
     EvaluationResult,
     MulticlassTaskConfig,
@@ -12,7 +12,7 @@ from avatar.automl import (
     ResponseTaskConfig,
     UpliftTaskConfig,
 )
-from avatar.automl.run import execute_spec
+from fmlib.automl.run import execute_spec
 
 
 @pytest.mark.parametrize(
@@ -48,7 +48,7 @@ def test_worker_dispatch_selects_registered_task_identity_without_changing_exist
         def save(self, path):
             return path
 
-    import avatar.automl.run as worker
+    import fmlib.automl.run as worker
 
     config_type, _ = worker._TASK_TYPES[task_name]
     monkeypatch.setitem(worker._TASK_TYPES, task_name, (config_type, FakeTask))
@@ -142,7 +142,7 @@ def test_prediction_worker_runs_only_the_requested_model_part(tmp_path, monkeypa
         def _prediction_storage_frame(prediction):
             return prediction.scores
 
-    import avatar.automl.run as worker
+    import fmlib.automl.run as worker
 
     monkeypatch.setitem(worker._TASK_TYPES, "binary", (BinaryTaskConfig, FakeTask))
     artifact_path = tmp_path / "artifact"
@@ -236,7 +236,7 @@ def test_evaluation_worker_preserves_explicit_score_kind(tmp_path, monkeypatch, 
                 metrics_by_group=pl.DataFrame({"scope": ["group"], "roc_auc": [0.75]}),
             )
 
-    import avatar.automl.run as worker
+    import fmlib.automl.run as worker
 
     monkeypatch.setitem(worker._TASK_TYPES, "response", (ResponseTaskConfig, FakeTask))
     result_path = tmp_path / "result.json"

@@ -2,7 +2,7 @@ import inspect
 
 import pytest
 
-from avatar.automl import (
+from fmlib.automl import (
     BinaryTask,
     BinaryTaskConfig,
     MulticlassTask,
@@ -14,10 +14,10 @@ from avatar.automl import (
     UpliftTask,
     UpliftTaskConfig,
 )
-from avatar.automl.exceptions import ConfigError
-from avatar.automl.tasks.base import BaseBoostingTask
-from avatar.automl.tasks.calibration import CalibratableTask
-from avatar.automl.tasks.supervised import SupervisedBoostingTask
+from fmlib.automl.exceptions import ConfigError
+from fmlib.automl.tasks.base import BaseBoostingTask
+from fmlib.automl.tasks.calibration import CalibratableTask
+from fmlib.automl.tasks.supervised import SupervisedBoostingTask
 
 
 def _config(config_class, tmp_path):

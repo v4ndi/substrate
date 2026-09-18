@@ -46,7 +46,7 @@ import yaml
 
 sys.path.insert(0, os.getcwd())
 
-from avatar.preprocessing.local import TabularPreprocessor
+from fmlib.preprocessing.local import TabularPreprocessor
 
 HERE = pathlib.Path(__file__).resolve().parent
 

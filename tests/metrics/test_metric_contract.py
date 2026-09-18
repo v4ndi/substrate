@@ -13,8 +13,8 @@ import inspect
 
 import pytest
 
-from avatar import metrics as metrics_module
-from avatar.metrics import ArtifactMetric, BaseMetric, ScalarMetric
+from fmlib import metrics as metrics_module
+from fmlib.metrics import ArtifactMetric, BaseMetric, ScalarMetric
 
 PUBLIC_METRICS = [
     getattr(metrics_module, name)

@@ -1,11 +1,11 @@
 # Работа с parquet-файлами
 
-Низкоуровневые примитивы чтения parquet живут в `avatar.data.base.parquet`.
+Низкоуровневые примитивы чтения parquet живут в `fmlib.data.base.parquet`.
 Наиболее ходовые из них — `parquet_num_rows` и `read_parquet_file` —
-реэкспортированы из `avatar.data`, поэтому в прикладном коде обычно достаточно
-`from avatar.data import parquet_num_rows`.
+реэкспортированы из `fmlib.data`, поэтому в прикладном коде обычно достаточно
+`from fmlib.data import parquet_num_rows`.
 
-Это фундамент, на котором построены датасеты (`avatar.data.base.iterable`):
+Это фундамент, на котором построены датасеты (`fmlib.data.base.iterable`):
 сами вы будете вызывать эти функции только при разведке данных или при написании
 собственного датасета. Как читают данные готовые датасеты, описано в
 [руководстве по датасетам](../guides/datasets.md).
@@ -18,7 +18,7 @@
 вели себя до появления поддержки HDFS, поэтому локальный код менять не пришлось.
 
 Получить файловую систему по URI или по конфигу можно через
-`avatar.data.resolve_filesystem`.
+`fmlib.data.resolve_filesystem`.
 
 ## Функции
 
@@ -29,21 +29,21 @@
 бесплатный.
 
 ```python
->>> from avatar.data import parquet_num_rows
+>>> from fmlib.data import parquet_num_rows
 >>> parquet_num_rows("data/part-0.parquet")
 1011
 ```
 
 Функция работает по одному файлу, а не по директории: чтобы посчитать строки в
 партиционированном датасете, сложите значения по всем его файлам. Планировщик
-шардирования (`avatar.data.ShardPlanner`) делает именно это.
+шардирования (`fmlib.data.ShardPlanner`) делает именно это.
 
 ### `read_parquet_file(file, columns=None, shuffle=True, filesystem=None)`
 
 Генератор по строкам файла. Каждая строка — словарь `{имя колонки: numpy-массив}`.
 
 ```python
->>> from avatar.data import read_parquet_file
+>>> from fmlib.data import read_parquet_file
 >>> for record in read_parquet_file("data/part-0.parquet", columns=["id", "value"]):
 ...     print(record["id"].item(), record["value"].item())
 ```

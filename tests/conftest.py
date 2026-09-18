@@ -7,7 +7,7 @@ Two groups:
   session-scoped :class:`~pyspark.sql.SparkSession`. Tests that need Spark are
   **skipped** (not errored) when no such JDK / ``pyspark`` is available.
 * ``synth_sequence_dataset`` — a pure pandas/pyarrow generator for synthetic
-  event-sequence parquet (no Spark), replacing the removed ``avatar.synth``.
+  event-sequence parquet (no Spark), replacing the removed ``fmlib.synth``.
 """
 
 from __future__ import annotations
@@ -69,8 +69,7 @@ def spark_session():
         pytest.skip("pyspark not installed")
     try:
         spark = (
-            SparkSession.builder
-            .appName("avatar-tests")
+            SparkSession.builder.appName("fmlib-tests")
             .master("local[2]")
             .config("spark.ui.enabled", "false")
             .config("spark.sql.session.timeZone", "UTC")

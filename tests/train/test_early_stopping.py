@@ -11,7 +11,7 @@ import logging
 
 import pytest
 
-from avatar.train import EarlyStopping
+from fmlib.train import EarlyStopping
 
 
 def feed(stopper, scores):
@@ -56,7 +56,7 @@ def test_a_missing_metric_is_survivable(caplog):
     """A metric that could not be computed omits its key rather than lying."""
     stopper = EarlyStopping(main_metric="m", patience=2, strategy="max")
     stopper({"m": 0.9})
-    with caplog.at_level(logging.WARNING, logger="avatar.train.early_stopping"):
+    with caplog.at_level(logging.WARNING, logger="fmlib.train.early_stopping"):
         stopper({"other": 0.1})
 
     assert stopper.best_score == pytest.approx(0.9)

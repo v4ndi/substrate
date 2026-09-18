@@ -8,7 +8,7 @@ ddp:
 test_dataloader:
   _target_: torch.utils.data.DataLoader
   dataset:
-    _target_: avatar.data.TabularDataset
+    _target_: fmlib.data.TabularDataset
     drop_tail: false # inference keeps the tail
     path: /home/datalab/nfs/avatar_fm/examples/uplift_modeling/s_learner/data/s_learner/valid
     shuffle_files: False
@@ -19,20 +19,20 @@ test_dataloader:
   drop_last: False
   num_workers: 8
   collate_fn:
-    _target_: avatar.data.UpliftCollateFn
+    _target_: fmlib.data.UpliftCollateFn
     target_column: target_attr_1 # назване колонки факта конверсии
     treatment_column: target_attr_3 # название колонки флага контролько целевой группы (1 - ЦГ, 0 - КГ)
     inverse_treatment: True # если True то в treatment_column 0 заменяется на 1  и наоборот (В данном наборе данных 1 - КГ, 0 - ЦГ, поэтому необходимо сделать 1 - treatment_column)
 model:
-  _target_: avatar.pipeline.tabular.SLearner
+  _target_: fmlib.pipeline.tabular.SLearner
   embedding:
-    _target_: avatar.nn.embedding.TabularEmbedding
+    _target_: fmlib.nn.embedding.TabularEmbedding
     num_numerical_features: 189
     hidden_size: 64
     vocab_size: 172
     std_noise: null
   tabular_encoder:
-    _target_: avatar.nn.tabular.TabularTransformer
+    _target_: fmlib.nn.tabular.TabularTransformer
     hidden_size: ${model.embedding.hidden_size}
     num_heads: 4
     num_layers: 3
@@ -44,6 +44,6 @@ model:
   hidden_state_dim: 128 # Размерность внешнего эмбеддинга (seq_hidden_state)
 metrics:
   test_metrics:
-    _target_: avatar.metrics.UpliftMetrics
+    _target_: fmlib.metrics.UpliftMetrics
     require_calibration: True
     save_submit_path: predict

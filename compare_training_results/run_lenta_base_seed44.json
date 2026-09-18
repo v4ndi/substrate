@@ -1,7 +1,7 @@
 {
   "tag": "lenta_base_seed44",
   "revision_dir": "/home/jovyan/rusakov/repos/avatar_fm/.claude/worktrees/cmp-base",
-  "avatar": "/home/jovyan/rusakov/repos/avatar_fm/.claude/worktrees/cmp-base/avatar/__init__.py",
+  "fmlib": "/home/jovyan/rusakov/repos/avatar_fm/.claude/worktrees/cmp-base/fmlib/__init__.py",
   "overrides": [],
   "exit_code": 0,
   "seconds": 1344.2,

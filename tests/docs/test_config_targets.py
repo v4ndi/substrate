@@ -41,7 +41,7 @@ def test_config_targets_resolve(path):
 
     broken = []
     for target in iter_targets(document):
-        if not target.startswith("avatar."):
+        if not target.startswith("fmlib."):
             continue  # torch / transformers targets are the framework's problem
         try:
             resolve_dotted(target)
@@ -63,5 +63,5 @@ def test_the_scan_actually_finds_targets():
             document = yaml.safe_load(path.read_text())
         except yaml.YAMLError:
             continue
-        total += sum(1 for t in iter_targets(document) if t.startswith("avatar."))
-    assert total > 20, f"only {total} avatar targets found — is the walk broken?"
+        total += sum(1 for t in iter_targets(document) if t.startswith("fmlib."))
+    assert total > 20, f"only {total} fmlib targets found — is the walk broken?"

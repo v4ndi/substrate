@@ -5,8 +5,8 @@
 ### Контекст
 
 Пример `examples/tabular_hidden_states` собирает данные и обучает табличный
-трансформер (`avatar.nn.tabular.STEv2`) с external embedding, используя
-`avatar.preprocessing.spark.TabularPreprocessor` для препроцессинга.
+трансформер (`fmlib.nn.tabular.STEv2`) с external embedding, используя
+`fmlib.preprocessing.spark.TabularPreprocessor` для препроцессинга.
 
 Цель — отказаться от Spark-`transform` и делать препроцессинг на torch, перекладывая
 тензоры на GPU. Дополнительно — не собирать parquet с упакованными колонками
@@ -38,14 +38,14 @@
 2. host->device transfer (payload ~тот же; можно уменьшить: `cat` в int16/int32,
    `num` в fp16);
 3. CUDA в DataLoader-воркерах невозможна -> GPU-препроцессинг живёт в main-процессе
-   после `move_to_device` (`avatar/train/loop.py`, `Trainer._run_epoch`), т.е. в
+   после `move_to_device` (`fmlib/train/loop.py`, `Trainer._run_epoch`), т.е. в
    начале `forward` пайплайна;
 4. строковые категории: маппинг строка->id по батчу на CPU убьёт утилизацию ->
    категории должны приходить integer-кодами (факторизация в fit-шаге).
 
 ### Главный риск широкой таблички
 
-`avatar/data/parquet.py:read_parquet_file` отдаёт Python-dict на строку, по ключу на
+`fmlib/data/parquet.py:read_parquet_file` отдаёт Python-dict на строку, по ключу на
 колонку (`for row in zip(*col_arrays)`). Сейчас это 2 колонки-массива, с широкой
 табличкой — 241 колонка => в ~100x больше словарной возни на строку.
 
@@ -117,7 +117,7 @@
 
 ---
 
-## Категориальный эмбеддинг-слой (`avatar.nn.embedding.TabularEmbedding`)
+## Категориальный эмбеддинг-слой (`fmlib.nn.embedding.TabularEmbedding`)
 
 Категориальная часть — одна общая `nn.Embedding(vocab_size, hidden_size)` на
 глобально смещённых id (`offset_map` даёт каждой колонке непересекающийся диапазон).

@@ -6,7 +6,7 @@ import pyarrow.parquet as pq
 import pytest
 from torch.utils.data import DataLoader
 
-from avatar.data.base import BaseParquetDataset
+from fmlib.data.base import BaseParquetDataset
 
 
 # Fixture to create a temporary directory with multiple parquet files

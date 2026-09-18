@@ -8,13 +8,13 @@ import numpy as np
 import polars as pl
 import pytest
 
-from avatar.automl.reporting import (
+from fmlib.automl.reporting import (
     ConfusionData,
     CurveData,
     EvaluationData,
     export_evaluation,
 )
-from avatar.automl.types import EvaluationResult
+from fmlib.automl.types import EvaluationResult
 
 
 def _workbook_rows(path):

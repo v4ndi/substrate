@@ -12,7 +12,7 @@
 
 ## Два бэкенда, один API
 
-| | `avatar.preprocessing.spark` | `avatar.preprocessing.local` |
+| | `fmlib.preprocessing.spark` | `fmlib.preprocessing.local` |
 |---|---|---|
 | движок | PySpark на кластере | pyarrow + numpy, одна машина |
 | требует | Spark / YARN / JVM (JDK 8/11/17) | ничего сверх базовых зависимостей |
@@ -49,7 +49,7 @@ python examples/tabular_preprocessing/run_both_backends.py
 
 ```python
 import yaml
-from avatar.preprocessing.local import TabularPreprocessor
+from fmlib.preprocessing.local import TabularPreprocessor
 
 pp = TabularPreprocessor(
     categorical_columns=cat_cols,

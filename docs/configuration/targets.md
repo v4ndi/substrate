@@ -16,13 +16,13 @@
 Оба датасета читают parquet, шардируются по записям между рангами и воркерами и
 не требуют `DistributedSampler`.
 
-### `avatar.data.TabularDataset` (21)
+### `fmlib.data.TabularDataset` (21)
 
 Табличные признаки построчно.
 
 ```yaml
 dataset:
-  _target_: avatar.data.TabularDataset
+  _target_: fmlib.data.TabularDataset
   path: /path/to/train           # файл, каталог или список путей
   shuffle_files: True            # перемешивать порядок файлов
   shuffle_pq: True               # перемешивать строки внутри файла
@@ -46,14 +46,14 @@ dataset:
 | `scan_workers` | `4` | параллелизм фазы сканирования |
 | `filter_cache` | `True` | кэшировать результат сканирования с фильтром |
 
-### `avatar.data.EventSequenceDataset` (6)
+### `fmlib.data.EventSequenceDataset` (6)
 
 Событийные последовательности: каждая строка parquet — клиент со списками
 событий.
 
 ```yaml
 dataset:
-  _target_: avatar.data.EventSequenceDataset
+  _target_: fmlib.data.EventSequenceDataset
   path: /path/to/train
   sequence_columns: [mcc, price]
   event_time_column: evt_dttm
@@ -70,9 +70,9 @@ dataset:
 
 Отбирают подмножество записей на фазе сканирования, до чтения полезной нагрузки.
 
-* `avatar.data.sampler.ColumnFilterSampler` — фильтр по колонке:
+* `fmlib.data.sampler.ColumnFilterSampler` — фильтр по колонке:
   `column`, `min_value`, `max_value`, `allowed_values`.
-* `avatar.data.sampler.MultiTaskColumnsFilterSampler` — то же для нескольких
+* `fmlib.data.sampler.MultiTaskColumnsFilterSampler` — то же для нескольких
   колонок в multi-task постановке.
 
 ---
@@ -84,18 +84,18 @@ dataset:
 
 | таргет | использований | для чего |
 |---|---|---|
-| `avatar.data.TabularCollateFn` | 18 | обычная табличная классификация/регрессия |
-| `avatar.data.EventSequenceCollateFn` | 6 | событийные последовательности |
-| `avatar.data.UpliftCollateFn` | 3 | uplift: добавляет флаг воздействия |
-| `avatar.data.SupervisedCollateFn` | — | классификация с дополнительными колонками |
-| `avatar.data.MultiTaskSupervisedCollateFn` | — | multi-task: добавляет идентификатор задачи |
-| `avatar.data.MultiTaskUpliftCollateFn` | — | multi-task + uplift |
+| `fmlib.data.TabularCollateFn` | 18 | обычная табличная классификация/регрессия |
+| `fmlib.data.EventSequenceCollateFn` | 6 | событийные последовательности |
+| `fmlib.data.UpliftCollateFn` | 3 | uplift: добавляет флаг воздействия |
+| `fmlib.data.SupervisedCollateFn` | — | классификация с дополнительными колонками |
+| `fmlib.data.MultiTaskSupervisedCollateFn` | — | multi-task: добавляет идентификатор задачи |
+| `fmlib.data.MultiTaskUpliftCollateFn` | — | multi-task + uplift |
 
 Ходовые аргументы:
 
 ```yaml
 collate_fn:
-  _target_: avatar.data.TabularCollateFn
+  _target_: fmlib.data.TabularCollateFn
   target_column: target_attr_1   # колонка целевой переменной
   is_regression: False           # True -> таргет float, а не long
 ```
@@ -111,13 +111,13 @@ collate_fn:
 
 ## Эмбеддинги
 
-### `avatar.nn.embedding.TabularEmbedding` (10)
+### `fmlib.nn.embedding.TabularEmbedding` (10)
 
 Отображает табличные признаки в `(B, F, D)` — по вектору на признак.
 
 ```yaml
 embedding:
-  _target_: avatar.nn.embedding.TabularEmbedding
+  _target_: fmlib.nn.embedding.TabularEmbedding
   num_numerical_features: 189   # сколько числовых признаков
   vocab_size: 172               # размер словаря категориальных
   hidden_size: 64               # D
@@ -125,7 +125,7 @@ embedding:
   hidden_state_aggregator: ...  # как подмешать внешний эмбеддинг
 ```
 
-### `avatar.nn.embedding.EventSequenceEmbedding` (3)
+### `fmlib.nn.embedding.EventSequenceEmbedding` (3)
 
 То же для событий: `hidden_size`, `columns_meta` (описание колонок — тип и
 размер словаря), `std_noise`.
@@ -134,23 +134,23 @@ embedding:
 
 Оба класса принимают `hidden_state_dim` и `embedding_dim`:
 
-* `avatar.nn.embedding.LayerNormConcatenate` (4) — нормализовать и добавить
+* `fmlib.nn.embedding.LayerNormConcatenate` (4) — нормализовать и добавить
   внешний эмбеддинг **как ещё один признак** (early fusion). Не забудьте
   увеличить `num_features` в `aggregation_config` на единицу.
-* `avatar.nn.embedding.LayerNormSum` — нормализовать и прибавить ко всем
+* `fmlib.nn.embedding.LayerNormSum` — нормализовать и прибавить ко всем
   эмбеддингам признаков.
 
 ---
 
 ## Энкодеры
 
-### `avatar.nn.tabular.TabularTransformer` (10)
+### `fmlib.nn.tabular.TabularTransformer` (10)
 
 Трансформер по токенам-признакам: `(B, F, D) -> (B, F, D)`.
 
 ```yaml
 encoder:
-  _target_: avatar.nn.tabular.TabularTransformer
+  _target_: fmlib.nn.tabular.TabularTransformer
   hidden_size: 64
   num_heads: 4
   num_layers: 3
@@ -158,16 +158,16 @@ encoder:
 ```
 
 Принимает уже посчитанные эмбеддинги и ничего не знает о том, откуда они
-взялись. Наследуется от `avatar.nn.tabular.BaseTabularEncoder` — от него же
+взялись. Наследуется от `fmlib.nn.tabular.BaseTabularEncoder` — от него же
 наследуйте свой энкодер, если пишете собственный.
 
-### `avatar.nn.sequential.EventEncoder` (3)
+### `fmlib.nn.sequential.EventEncoder` (3)
 
 Кодирует событие с вниманием по его атрибутам: `embedding`, `dropout_p`,
 `pos_embedding`, `time_encoding` (`absolute` | `delta`), `id_embedding`,
 `aggregation_mode`.
 
-### `avatar.nn.sequential.TransformersWrapper` (3)
+### `fmlib.nn.sequential.TransformersWrapper` (3)
 
 Обёртка над backbone из HuggingFace `transformers`: `event_encoder`,
 `backbone`, `output_hidden_states`.
@@ -178,16 +178,16 @@ encoder:
 
 Пайплайн — то, что стоит в `model:`. Он связывает блоки и считает функцию потерь.
 
-### `avatar.pipeline.tabular.SupervisedLearner` (6)
+### `fmlib.pipeline.tabular.SupervisedLearner` (6)
 
 Обучение с учителем по табличным данным: бинарная классификация, регрессия и
 многоклассовая — различаются только `num_classes` и `task_type`.
 
 ```yaml
 model:
-  _target_: avatar.pipeline.tabular.SupervisedLearner
-  embedding: ...                # avatar.nn.embedding.TabularEmbedding
-  tabular_encoder: ...          # avatar.nn.tabular.TabularTransformer
+  _target_: fmlib.pipeline.tabular.SupervisedLearner
+  embedding: ...                # fmlib.nn.embedding.TabularEmbedding
+  tabular_encoder: ...          # fmlib.nn.tabular.TabularTransformer
   aggregation_config:
     name: linear                # sum | sum_layernorm | mean | last | linear | conv
     num_features: 243           # столько токенов приходит на агрегацию
@@ -202,7 +202,7 @@ model:
 ```
 
 `aggregation_config` — не `_target_`, а словарь, который разбирает
-`avatar.nn.utils.get_aggregation_layer`. Имя выбирает класс агрегации,
+`fmlib.nn.utils.get_aggregation_layer`. Имя выбирает класс агрегации,
 остальные ключи уходят в его конструктор; `linear` требует `num_features` и
 `emb_dim`, `last` не требует ничего.
 
@@ -215,7 +215,7 @@ model:
 работает только по внешним скрытым состояниям (так устроен MLP-бенчмарк), и
 `hidden_state_dim` обязателен.
 
-### `avatar.pipeline.tabular.SLearner` (48)
+### `fmlib.pipeline.tabular.SLearner` (48)
 
 Uplift в постановке S-Learner: тот же `SupervisedLearner`, но признак
 воздействия подаётся в модель наравне с остальными, голова шириной 2, а на
@@ -223,7 +223,7 @@ Uplift в постановке S-Learner: тот же `SupervisedLearner`, но 
 `separate_heads`, `treatment_interaction`, `calculate_train_uplift`,
 `exchange_treatment_group` и `loss_fn`.
 
-`avatar.pipeline.tabular.IgnoreTreatmentInteraction` — заглушка взаимодействия
+`fmlib.pipeline.tabular.IgnoreTreatmentInteraction` — заглушка взаимодействия
 с воздействием, без параметров.
 
 ---
@@ -234,27 +234,27 @@ Uplift в постановке S-Learner: тот же `SupervisedLearner`, но 
 
 | таргет | что считает |
 |---|---|
-| `avatar.metrics.UpliftMetrics` | uplift@k, qini, калиброванные варианты и диагностика калибровки |
-| `avatar.metrics.ResponseMetrics` | ROC AUC, precision@k и recall@k в кампанейской постановке |
-| `avatar.metrics.RegressionMetrics` | MSE / MAE / MAPE |
-| `avatar.metrics.MultiLossMetric` | компоненты составной функции потерь |
-| `avatar.metrics.UniversalLossesMetric` | все поля `*loss` выхода, найденные рефлексией |
-| `avatar.metrics.CollectEmbeddings` | выгружает эмбеддинги в parquet |
-| `avatar.metrics.InferenceMultiTaskCampaignMetrics` | выгружает вероятности обеих голов при инференсе кампании |
-| `avatar.metrics.InferenceSupervisedMetrics` | выгружает предсказание на запись при инференсе |
+| `fmlib.metrics.UpliftMetrics` | uplift@k, qini, калиброванные варианты и диагностика калибровки |
+| `fmlib.metrics.ResponseMetrics` | ROC AUC, precision@k и recall@k в кампанейской постановке |
+| `fmlib.metrics.RegressionMetrics` | MSE / MAE / MAPE |
+| `fmlib.metrics.MultiLossMetric` | компоненты составной функции потерь |
+| `fmlib.metrics.UniversalLossesMetric` | все поля `*loss` выхода, найденные рефлексией |
+| `fmlib.metrics.CollectEmbeddings` | выгружает эмбеддинги в parquet |
+| `fmlib.metrics.InferenceMultiTaskCampaignMetrics` | выгружает вероятности обеих голов при инференсе кампании |
+| `fmlib.metrics.InferenceSupervisedMetrics` | выгружает предсказание на запись при инференсе |
 
 ### Обёртки
 
 Метрики композируются. Обёртки — самый частый источник непонимания в конфигах,
 поэтому вот что они делают:
 
-* `avatar.metrics.utils.GroupDevidedMetricsWrapper` (4) — считает **одну и ту
+* `fmlib.metrics.utils.GroupDevidedMetricsWrapper` (4) — считает **одну и ту
   же** метрику отдельно по каждому сочетанию значений заданных колонок.
   `columns_to_devide: [target_attr_2, target_attr_3]` и
   `columns_desc: [channel, group]` дадут имена вида
   `channel_0_group_1_roc_auc_score`. Вложенная метрика указывается через
   `metric_class` с `_partial_: true` — по одному экземпляру на группу.
-* `avatar.metrics.utils.GroupAverageMetricWrapper` (8) — усредняет уже
+* `fmlib.metrics.utils.GroupAverageMetricWrapper` (8) — усредняет уже
   посчитанные метрики. `avg_over_regulars` усредняет по регулярному выражению
   над именами, `groups` — по явному списку имён.
 
@@ -263,13 +263,13 @@ Uplift в постановке S-Learner: тот же `SupervisedLearner`, но 
 ```yaml
 metrics:
   valid_metrics:
-    - _target_: avatar.metrics.utils.GroupAverageMetricWrapper
+    - _target_: fmlib.metrics.utils.GroupAverageMetricWrapper
       metric:
-        _target_: avatar.metrics.utils.GroupDevidedMetricsWrapper
+        _target_: fmlib.metrics.utils.GroupDevidedMetricsWrapper
         columns_to_devide: [target_attr_2, target_attr_3]
         columns_desc: [channel, group]
         metric_class:
-          _target_: avatar.metrics.ResponseMetrics
+          _target_: fmlib.metrics.ResponseMetrics
           _partial_: true          # обязательно: по экземпляру на группу
       avg_over_regulars:
         avg_control_roc_auc: ^channel_\d+_group_1_.*roc_auc_score
@@ -285,19 +285,19 @@ metrics:
 
 | таргет | что считает |
 |---|---|
-| `avatar.losses.ClassificationLoss` | MSE / BCE / CrossEntropy по `task_type`, плюс L1-регуляризация |
-| `avatar.losses.CompositeLoss` | взвешенная сумма нескольких функций потерь |
-| `avatar.losses.KLDLoss`, `ContrastiveLoss`, `ResearchLosses` | исследовательские функции потерь |
+| `fmlib.losses.ClassificationLoss` | MSE / BCE / CrossEntropy по `task_type`, плюс L1-регуляризация |
+| `fmlib.losses.CompositeLoss` | взвешенная сумма нескольких функций потерь |
+| `fmlib.losses.KLDLoss`, `ContrastiveLoss`, `ResearchLosses` | исследовательские функции потерь |
 
 ---
 
 ## Обучение
 
-### `avatar.train.EarlyStopping` (7)
+### `fmlib.train.EarlyStopping` (7)
 
 ```yaml
 early_stopping:
-  _target_: avatar.train.EarlyStopping
+  _target_: fmlib.train.EarlyStopping
   main_metric: roc_auc_score
   patience: 10
   delta: 0
@@ -310,11 +310,11 @@ early_stopping:
 `MLflowCallback`, `ProgressBarCallback`, `CheckpointCallback`,
 `EarlyStoppingCallback`, `EMACallback`, `TrainStatsCallback`,
 `TrainMetricsCallback`, `PerfMetricsCallback`, `ThroughputCallback`,
-`ProfilerCallback` — все из `avatar.train`.
+`ProfilerCallback` — все из `fmlib.train`.
 
 ---
 
-## Не из avatar
+## Не из fmlib
 
 В конфигах встречаются и внешние таргеты; они работают так же:
 

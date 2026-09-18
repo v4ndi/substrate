@@ -1,6 +1,6 @@
 # Датасеты и шардирование
 
-Датасеты `avatar.data` — итерируемые (`IterableDataset`) и читают parquet.
+Датасеты `fmlib.data` — итерируемые (`IterableDataset`) и читают parquet.
 Главное, что стоит понять про них: **они делят данные между рангами сами**.
 `DistributedSampler` использовать нельзя — он поделит уже поделённое.
 
@@ -76,7 +76,7 @@ POSIX-хранилище.
 
 ```yaml
 dataset:
-  _target_: avatar.data.TabularDataset
+  _target_: fmlib.data.TabularDataset
   path: hdfs://arnsdpsbx/user/team/team_ai_avatar/dataset
 ```
 
@@ -112,10 +112,10 @@ dataset:
 
 ```yaml
 dataset:
-  _target_: avatar.data.TabularDataset
+  _target_: fmlib.data.TabularDataset
   path: /data/train
   sampler:
-    _target_: avatar.data.sampler.ColumnFilterSampler
+    _target_: fmlib.data.sampler.ColumnFilterSampler
     column: report_month
     min_value: '2025-01-31'
 ```

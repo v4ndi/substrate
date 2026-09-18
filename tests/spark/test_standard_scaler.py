@@ -4,7 +4,7 @@ import pytest
 from pyspark.sql.types import DoubleType, StructField, StructType
 from pyspark.testing.utils import assertDataFrameEqual
 
-from avatar.preprocessing.spark import StandardScaler
+from fmlib.preprocessing.spark import StandardScaler
 
 
 @pytest.fixture

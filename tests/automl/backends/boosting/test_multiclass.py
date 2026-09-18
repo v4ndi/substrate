@@ -4,9 +4,9 @@ import numpy as np
 import polars as pl
 import pytest
 
-from avatar.automl.backends.boosting import MulticlassBoostingBackend, suggest_params
-from avatar.automl.data import FeatureSchema
-from avatar.automl.exceptions import ConfigError, UnsupportedBackendError
+from fmlib.automl.backends.boosting import MulticlassBoostingBackend, suggest_params
+from fmlib.automl.data import FeatureSchema
+from fmlib.automl.exceptions import ConfigError, UnsupportedBackendError
 
 
 def _schema():

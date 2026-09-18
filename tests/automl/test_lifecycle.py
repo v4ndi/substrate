@@ -8,9 +8,9 @@ from pathlib import Path
 import polars as pl
 import pytest
 
-from avatar.automl.exceptions import ArtifactIntegrityError, RemoteExecutionError
-from avatar.automl.lifecycle import AutoMLStore, normalize_dataset_path
-from avatar.automl.types import PredictionResult
+from fmlib.automl.exceptions import ArtifactIntegrityError, RemoteExecutionError
+from fmlib.automl.lifecycle import AutoMLStore, normalize_dataset_path
+from fmlib.automl.types import PredictionResult
 
 
 def _store(tmp_path: Path) -> AutoMLStore:
@@ -126,7 +126,7 @@ def test_expired_cross_host_heartbeat_is_interrupted(tmp_path, monkeypatch):
         },
         heartbeat_at=0.0,
     )
-    monkeypatch.setattr("avatar.automl.lifecycle.time.time", lambda: 121.0)
+    monkeypatch.setattr("fmlib.automl.lifecycle.time.time", lambda: 121.0)
 
     recovered = store.reconcile_local_operations()
     assert recovered[0]["state"] == "interrupted"

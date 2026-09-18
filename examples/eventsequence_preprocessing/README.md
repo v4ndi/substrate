@@ -1,9 +1,9 @@
 # Event-sequence preprocessing: Spark and local backends
 
-`avatar.preprocessing` has two interchangeable implementations of the
+`fmlib.preprocessing` has two interchangeable implementations of the
 event-sequence preprocessor:
 
-| | `avatar.preprocessing.spark.pipeline.EventSequencePreprocessor` | `avatar.preprocessing.local.EventSequencePreprocessor` |
+| | `fmlib.preprocessing.spark.pipeline.EventSequencePreprocessor` | `fmlib.preprocessing.local.EventSequencePreprocessor` |
 |---|---|---|
 | engine | PySpark on a cluster | pyarrow + numpy + pandas, one machine |
 | needs | Spark / YARN / JVM | nothing extra |
@@ -63,7 +63,7 @@ All backends and cross-loaded artifacts produce matching sequences.
 ## Typical usage
 
 ```python
-from avatar.preprocessing.local import EventSequencePreprocessor
+from fmlib.preprocessing.local import EventSequencePreprocessor
 import yaml
 
 pp = EventSequencePreprocessor(

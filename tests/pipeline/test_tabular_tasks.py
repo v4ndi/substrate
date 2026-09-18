@@ -12,16 +12,16 @@ from __future__ import annotations
 import numpy as np
 import torch
 
-from avatar.data import SupervisedCollateFn, UpliftCollateFn
-from avatar.metrics import (
+from fmlib.data import SupervisedCollateFn, UpliftCollateFn
+from fmlib.metrics import (
     MultiClassMetrics,
     RegressionMetrics,
     ResponseMetrics,
     UpliftMetrics,
 )
-from avatar.nn.embedding import TabularEmbedding
-from avatar.nn.tabular import TabularTransformer
-from avatar.pipeline.tabular import SLearner, SupervisedLearner
+from fmlib.nn.embedding import TabularEmbedding
+from fmlib.nn.tabular import TabularTransformer
+from fmlib.pipeline.tabular import SLearner, SupervisedLearner
 
 RECORDS = 64
 N_CAT, N_NUM, WIDTH, VOCAB = 3, 5, 16, 40

@@ -2,7 +2,7 @@
 # from the training run, and a metric whose product is a file rather than a
 # number. Run from the repository root:
 #
-#     python -m avatar.inference --config-dir=examples/tabular_tasks/configs \
+#     python -m fmlib.inference --config-dir=examples/tabular_tasks/configs \
 #         --config-name=multiclass_inference
 #
 load_state: best_models/tabular_tasks/multiclass_smoke/128/model.bin
@@ -16,7 +16,7 @@ ddp:
 test_dataloader:
   _target_: torch.utils.data.DataLoader
   dataset:
-    _target_: avatar.data.TabularDataset
+    _target_: fmlib.data.TabularDataset
     drop_tail: false # inference keeps the tail
     path: examples/tabular_tasks/data/multiclass_smoke/valid
     shuffle_files: False
@@ -26,20 +26,20 @@ test_dataloader:
   drop_last: False
   num_workers: 2
   collate_fn:
-    _target_: avatar.data.SupervisedCollateFn
+    _target_: fmlib.data.SupervisedCollateFn
     target_column: target
     add_extra_columns:
       target_attr_2: group
 
 model:
-  _target_: avatar.pipeline.tabular.SupervisedLearner
+  _target_: fmlib.pipeline.tabular.SupervisedLearner
   embedding:
-    _target_: avatar.nn.embedding.TabularEmbedding
+    _target_: fmlib.nn.embedding.TabularEmbedding
     num_numerical_features: 10
     hidden_size: 64
     vocab_size: 132
   tabular_encoder:
-    _target_: avatar.nn.tabular.TabularTransformer
+    _target_: fmlib.nn.tabular.TabularTransformer
     hidden_size: ${model.embedding.hidden_size}
     num_heads: 4
     num_layers: 2
@@ -55,7 +55,7 @@ model:
 
 metrics:
   test_metrics:
-    _target_: avatar.metrics.InferenceSupervisedMetrics
+    _target_: fmlib.metrics.InferenceSupervisedMetrics
     path_to_save: predict/multiclass
     save_steps: 20
     # Saves the chosen class in `prediction` and the whole distribution in

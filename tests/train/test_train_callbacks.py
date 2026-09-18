@@ -6,7 +6,7 @@ import pytest
 import torch
 from tiny_training import TinyModel
 
-from avatar.train import (
+from fmlib.train import (
     CallbackHandler,
     DistEnv,
     EarlyStopping,
@@ -17,11 +17,11 @@ from avatar.train import (
     TrainerState,
     TrainStatsCallback,
 )
-from avatar.train.callbacks.ema import EMACallback
-from avatar.train.callbacks.mlflow import sanitize_param_key, sanitize_params
-from avatar.train.callbacks.profiler import ProfilerCallback
-from avatar.train.loss_reduce import calculate_output_loss
-from avatar.train.state import CallbackContext
+from fmlib.train.callbacks.ema import EMACallback
+from fmlib.train.callbacks.mlflow import sanitize_param_key, sanitize_params
+from fmlib.train.callbacks.profiler import ProfilerCallback
+from fmlib.train.loss_reduce import calculate_output_loss
+from fmlib.train.state import CallbackContext
 
 
 @pytest.fixture
@@ -63,7 +63,7 @@ def test_handler_rejects_unknown_events(ctx):
 
 def test_base_callback_hooks_are_all_no_ops(ctx):
     handler = CallbackHandler([TrainerCallback()])
-    from avatar.train.callbacks.base import EVENTS
+    from fmlib.train.callbacks.base import EVENTS
 
     for event in EVENTS:
         handler.fire(event, ctx)

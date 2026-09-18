@@ -1,6 +1,6 @@
 # Четыре табличные задачи на avatar_fm: план
 
-Что нужно, чтобы `TabularTransformer` + `avatar/pipeline/{tabular,uplift}` закрывали
+Что нужно, чтобы `TabularTransformer` + `fmlib/pipeline/{tabular,uplift}` закрывали
 четыре типовые постановки — uplift, response (бинарная классификация), регрессия,
 многоклассовая классификация — четырьмя конфигами, и чтобы на этом можно было
 построить примеры.
@@ -13,7 +13,7 @@
 
 Каждая строка проверена запуском, а не чтением кода: собрана модель на игрушечных
 данных, прогнан forward, результат отдан метрике ровно так, как это делает
-`avatar.train.evaluate`.
+`fmlib.train.evaluate`.
 
 | задача | пайплайн | collate | метрика | статус |
 |---|---|---|---|---|
@@ -63,7 +63,7 @@
 Единственный признак — `UserWarning` от torch в логе.
 
 **Multi-class.** Лосс корректен (`CrossEntropyLoss`, `(B, K)` против `(B,)` —
-проверено), но измерить нечем: в `avatar.metrics` есть `ResponseMetrics`,
+проверено), но измерить нечем: в `fmlib.metrics` есть `ResponseMetrics`,
 `RegressionMetrics`, `UpliftMetrics` и два инференс-коллектора, и всё.
 
 ```
@@ -80,7 +80,7 @@
 
 ### 1.1 Источники
 
-Внутренние данные (`/home/datalab/projects/avatar/...`, HDFS) на машине
+Внутренние данные (`/home/datalab/projects/fmlib/...`, HDFS) на машине
 недоступны, поэтому примеры строятся на открытых датасетах. Все три источника
 проверены — скачиваются и читаются:
 
@@ -159,7 +159,7 @@ Hillstrom и Lenta уже лежат в
 
 ### 1.5 Препроцессинг
 
-`avatar.preprocessing.local.TabularPreprocessor`, один проход, **fit только на
+`fmlib.preprocessing.local.TabularPreprocessor`, один проход, **fit только на
 train**. Дальше по книге (`docs/guides/preprocessing.md`):
 
 ```python
@@ -202,7 +202,7 @@ yaml.safe_dump(pp.dump(), open(f"artifacts/{name}_preprocessor.yaml", "w"))
 
 ### F1. Голова на один логит не сходится с таргетом `(B,)` — блокер response
 
-`avatar/losses/classification.py`. Сегодня `ClassificationLoss.forward` отдаёт
+`fmlib/losses/classification.py`. Сегодня `ClassificationLoss.forward` отдаёт
 `logits` и `targets` в критерий как есть. Нужна одна точка согласования формы:
 
 ```python
@@ -238,7 +238,7 @@ def align(self, logits, targets):
 
 ### F3. Метрики многоклассовой классификации — блокер multi-class
 
-Новый класс в `avatar/metrics/supervised.py`, на том же скелете
+Новый класс в `fmlib/metrics/supervised.py`, на том же скелете
 `GroupedPredictionMetric`, что и остальные три:
 
 ```python
@@ -320,7 +320,7 @@ MLflow, а если `main_metric = "mape"` — то и в раннюю оста�
 ### F7. Устаревшие конфиги пилота
 
 `experiments/sbercampaign_pilot/configs/pilot/train/*.yaml` ссылаются на
-`avatar.pipeline.uplift.SLearnerExp`, которого в коде больше нет. Проверка
+`fmlib.pipeline.uplift.SLearnerExp`, которого в коде больше нет. Проверка
 `tests/docs/test_config_targets.py` смотрит только `examples/` и `docs/`,
 поэтому молчит. Это не блокер новых задач, но как шаблон эти файлы брать
 нельзя — и об этом стоит сказать явно, потому что первым делом человек откроет
@@ -340,23 +340,23 @@ MLflow, а если `main_metric = "mape"` — то и в раннюю оста�
 
 ```yaml
 model:
-  _target_: avatar.pipeline.uplift.SLearner
-  embedding: {_target_: avatar.nn.embedding.TabularEmbedding, ...}
-  tabular_encoder: {_target_: avatar.nn.tabular.TabularTransformer, ...}
+  _target_: fmlib.pipeline.uplift.SLearner
+  embedding: {_target_: fmlib.nn.embedding.TabularEmbedding, ...}
+  tabular_encoder: {_target_: fmlib.nn.tabular.TabularTransformer, ...}
   aggregation_config:
     name: linear
     num_features: ${...}   # признаки + 1 за токен воздействия + 1 за токен группы
   n_groups: 4
   exchange_treatment_group: true
 collate_fn:
-  _target_: avatar.data.UpliftCollateFn
+  _target_: fmlib.data.UpliftCollateFn
   target_column: target
   treatment_column: treatment
   group_column: group
   inverse_treatment: True
 metrics:
   valid_metrics:
-    _target_: avatar.metrics.UpliftMetrics
+    _target_: fmlib.metrics.UpliftMetrics
     require_calibration: true
 ```
 
@@ -366,17 +366,17 @@ metrics:
 
 ```yaml
 model:
-  _target_: avatar.pipeline.tabular.TabularClassification
-  tabular_model: {_target_: avatar.pipeline.tabular.TabularWithAggregatedStates, ...}
+  _target_: fmlib.pipeline.tabular.TabularClassification
+  tabular_model: {_target_: fmlib.pipeline.tabular.TabularWithAggregatedStates, ...}
   num_classes: 1          # один логит -> одна вероятность
   task_type: classification
 collate_fn:
-  _target_: avatar.data.SupervisedCollateFn
+  _target_: fmlib.data.SupervisedCollateFn
   target_column: target
   add_extra_columns: {group: group, epk_id: epk_id}
 metrics:
   valid_metrics:
-    _target_: avatar.metrics.ResponseMetrics
+    _target_: fmlib.metrics.ResponseMetrics
     main_metric: roc_auc_score
 ```
 
@@ -389,16 +389,16 @@ model:
   num_classes: 1
   task_type: regression
 collate_fn:
-  _target_: avatar.data.SupervisedCollateFn
+  _target_: fmlib.data.SupervisedCollateFn
   target_column: target
   is_regression: True
   add_extra_columns: {group: group, epk_id: epk_id}
 metrics:
   valid_metrics:
-    _target_: avatar.metrics.RegressionMetrics
+    _target_: fmlib.metrics.RegressionMetrics
     main_metric: mae
 train:
-  early_stopping: {_target_: avatar.train.EarlyStopping, main_metric: mean_mae, strategy: min}
+  early_stopping: {_target_: fmlib.train.EarlyStopping, main_metric: mean_mae, strategy: min}
 ```
 
 Требует **F2** и **F4**.
@@ -410,12 +410,12 @@ model:
   num_classes: 7
   task_type: classification
 collate_fn:
-  _target_: avatar.data.SupervisedCollateFn
+  _target_: fmlib.data.SupervisedCollateFn
   target_column: target
   add_extra_columns: {group: group, epk_id: epk_id}
 metrics:
   valid_metrics:
-    _target_: avatar.metrics.MultiClassMetrics
+    _target_: fmlib.metrics.MultiClassMetrics
     num_classes: 7
     main_metric: balanced_accuracy
 ```
@@ -501,7 +501,7 @@ examples/tabular_tasks/
   на чистых табличных признаках. `hidden_state_column` поддержан пайплайнами, но
   у открытых датасетов нет событийной истории, из которой такой эмбеддинг
   берётся. Это отдельная задача и отдельный пример.
-* **Multi-task.** `avatar/pipeline/multi_task/` (MMoE, multi-task uplift и
+* **Multi-task.** `fmlib/pipeline/multi_task/` (MMoE, multi-task uplift и
   response) остаётся без рабочего конфига — это уже записано в отчёте по
   метрикам как открытый пункт.
 * **Кастомные лоссы под дисбаланс** (focal, веса классов). Точка инъекции есть

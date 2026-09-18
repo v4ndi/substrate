@@ -3,7 +3,7 @@ requires = ["setuptools>=64", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "avatar"
+name = "fmlib"
 dynamic = ["version"]
 description = "Foundation models for tabular and event-sequence customer data"
 readme = "README.md"
@@ -31,7 +31,7 @@ dependencies = [
     "betacal",
     "torchinfo",
     "nvidia-ml-py",
-    # avatar.automl
+    # fmlib.automl
     "polars>=1.43.2,<2",
     "optuna>=4.9.0,<5",
     "scikit-learn>=1.7.2,<2",
@@ -41,12 +41,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Spark preprocessing backend (avatar.preprocessing.spark). Needs a JDK 8/11/17.
+# Spark preprocessing backend (fmlib.preprocessing.spark). Needs a JDK 8/11/17.
 spark = ["pyspark==3.5.0"]
-# CatBoost campaign benchmark (avatar.metrics.campaign, optional import).
+# CatBoost campaign benchmark (fmlib.metrics.campaign, optional import).
 catboost = ["catboost==1.2.10"]
-# Native engines of the avatar.automl boosting backend (optional imports).
-boosting = ["avatar[catboost]", "xgboost==3.2.0"]
+# Native engines of the fmlib.automl boosting backend (optional imports).
+boosting = ["fmlib[catboost]", "xgboost==3.2.0"]
 dev = [
     "pytest==9.1.1",
     "pytest-cov==7.1.0",
@@ -55,10 +55,10 @@ dev = [
 ]
 
 [tool.setuptools.dynamic]
-version = { attr = "avatar._version.__version__" }
+version = { attr = "fmlib._version.__version__" }
 
 [tool.setuptools.packages.find]
-include = ["avatar*"]
+include = ["fmlib*"]
 exclude = ["tests*", "experiments*", "examples*", "docs*"]
 
 [tool.pytest.ini_options]
@@ -108,11 +108,11 @@ ignore = [
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
-# `avatar/**` and `examples/**` are clean under the rule set above; keep them so.
+# `fmlib/**` and `examples/**` are clean under the rule set above; keep them so.
 # Tests are exempt: a test's name is its documentation, and its docstring is
 # prose for whoever is reading the failure — style rules there buy nothing.
 [tool.ruff.lint.per-file-ignores]
-"avatar/_version.py" = ["D"]
+"fmlib/_version.py" = ["D"]
 "tests/**" = ["D"]
 # The migrated AutoML tests match exception text literally; the regex-looking
 # characters in `pytest.raises(match=...)` are intentional. See automl_migration.md.

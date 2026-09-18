@@ -3,8 +3,8 @@ from pathlib import Path
 import polars as pl
 import pytest
 
-from avatar.automl.data import ParquetSource
-from avatar.automl.exceptions import SchemaError
+from fmlib.automl.data import ParquetSource
+from fmlib.automl.exceptions import SchemaError
 
 
 def test_parquet_manifest_is_deterministic(tmp_path):

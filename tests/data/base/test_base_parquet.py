@@ -5,7 +5,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
-from avatar.data.base.parquet import parquet_num_rows, read_parquet_file
+from fmlib.data.base.parquet import parquet_num_rows, read_parquet_file
 
 
 # Fixture to create a temporary parquet file for testing

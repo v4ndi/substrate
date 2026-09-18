@@ -12,8 +12,8 @@ from dataclasses import dataclass
 
 import torch
 
-from avatar.metrics import ScalarMetric
-from avatar.train.utils import metric_field_selection, narrow_for_metrics
+from fmlib.metrics import ScalarMetric
+from fmlib.train.utils import metric_field_selection, narrow_for_metrics
 
 
 @dataclass
@@ -133,7 +133,7 @@ def test_no_selection_passes_the_payload_through_unchanged():
 
 def test_a_wrapper_forwards_its_inner_metric_declaration():
     """GroupAverageMetricWrapper reads nothing itself; it must not widen the union."""
-    from avatar.metrics.utils import GroupAverageMetricWrapper
+    from fmlib.metrics.utils import GroupAverageMetricWrapper
 
     wrapper = GroupAverageMetricWrapper(Narrow())
     assert metric_field_selection([wrapper]) == (

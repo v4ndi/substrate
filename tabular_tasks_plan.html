@@ -552,7 +552,7 @@
       Разбор до работ. Каждая строка была проверена запуском, а не чтением
       кода: собрана модель на игрушечных данных, прогнан forward, результат
       отдан метрике ровно так, как это делает
-      <code>avatar.train.evaluate</code>. Всё описанное ниже закрыто.
+      <code>fmlib.train.evaluate</code>. Всё описанное ниже закрыто.
     </p>
 
     <div class="board">
@@ -604,7 +604,7 @@
         </dl>
         <p>
           Лосс корректен. Метрики многоклассовой классификации в
-          <code>avatar.metrics</code> нет вообще.
+          <code>fmlib.metrics</code> нет вообще.
         </p>
       </div>
     </div>
@@ -654,7 +654,7 @@
     <pre><code><span class="pass">[OK]</span>   multiclass K=5, targets long (B,): logits=(8, 5) loss=1.8050
 <span class="fail">[FAIL]</span> multiclass K=5 + ResponseMetrics: ValueError: multi_class must be in ('ovo', 'ovr')</code></pre>
     <p class="prose">
-      В <code>avatar.metrics</code> есть <code>ResponseMetrics</code>,
+      В <code>fmlib.metrics</code> есть <code>ResponseMetrics</code>,
       <code>RegressionMetrics</code>, <code>UpliftMetrics</code> и два
       инференс-коллектора. И всё.
     </p>
@@ -800,7 +800,7 @@
 
     <h3>Препроцессинг</h3>
     <p class="prose">
-      <code>avatar.preprocessing.local.TabularPreprocessor</code>, один проход,
+      <code>fmlib.preprocessing.local.TabularPreprocessor</code>, один проход,
       <strong>fit только на train</strong>. Выход шардируется на 8–16 файлов —
       иначе файловому шардированию нечего делить между рангами.
     </p>
@@ -834,7 +834,7 @@
       <div class="fix-head">
         <span class="tag">F1</span>
         <h3>Голова на один логит не сходится с таргетом <code>(B,)</code></h3>
-        <span class="where">блокер response · avatar/losses/classification.py</span>
+        <span class="where">блокер response · fmlib/losses/classification.py</span>
       </div>
       <p class="prose">
         Нужна одна точка согласования формы внутри
@@ -880,7 +880,7 @@
       <div class="fix-head">
         <span class="tag">F3</span>
         <h3>Метрики многоклассовой классификации</h3>
-        <span class="where">блокер multi-class · avatar/metrics/supervised.py</span>
+        <span class="where">блокер multi-class · fmlib/metrics/supervised.py</span>
       </div>
       <p class="prose">
         Новый класс на том же скелете <code>GroupedPredictionMetric</code>, что
@@ -921,7 +921,7 @@
       <div class="fix-head">
         <span class="tag">F4</span>
         <h3>MAPE на нулевых таргетах выдаёт 3.15e15</h3>
-        <span class="where">портит регрессию · avatar/metrics/supervised.py</span>
+        <span class="where">портит регрессию · fmlib/metrics/supervised.py</span>
       </div>
       <p class="prose">
         <code>sklearn.mean_absolute_percentage_error</code> при
@@ -958,7 +958,7 @@
       <div class="fix-head">
         <span class="tag">F6</span>
         <h3><code>SupervisedLearner</code> не переживает инференс</h3>
-        <span class="where">avatar/pipeline/tabular/supervised.py</span>
+        <span class="where">fmlib/pipeline/tabular/supervised.py</span>
       </div>
       <pre><code><span class="fail">[FAIL]</span> SupervisedLearner inference (targets=None):
        AttributeError: 'NoneType' object has no attribute 'device'
@@ -986,7 +986,7 @@
         <span class="where">experiments/sbercampaign_pilot/configs/pilot/train/*.yaml</span>
       </div>
       <p class="prose">
-        В них стоит <code>avatar.pipeline.uplift.SLearnerExp</code>, которого в
+        В них стоит <code>fmlib.pipeline.uplift.SLearnerExp</code>, которого в
         коде больше нет. <code>tests/docs/test_config_targets.py</code> смотрит
         только <code>examples/</code> и <code>docs/</code>, поэтому молчит. Не
         блокер, но как шаблон эти файлы брать нельзя — и сказать об этом надо
@@ -1008,58 +1008,58 @@
       <div class="config">
         <header><span>uplift</span><span>готово сегодня</span></header>
         <pre><code><span class="k">model</span>:
-  _target_: avatar.pipeline.uplift.SLearner
+  _target_: fmlib.pipeline.uplift.SLearner
   aggregation_config:
     num_features: N + 2  <span class="note"># +воздействие +группа</span>
   n_groups: 4
   exchange_treatment_group: true
 <span class="k">collate_fn</span>:
-  _target_: avatar.data.UpliftCollateFn
+  _target_: fmlib.data.UpliftCollateFn
   target_column: target
   treatment_column: treatment
   group_column: group
   inverse_treatment: True
 <span class="k">metrics</span>:
   valid_metrics:
-    _target_: avatar.metrics.UpliftMetrics
+    _target_: fmlib.metrics.UpliftMetrics
     require_calibration: true</code></pre>
       </div>
 
       <div class="config">
         <header><span>response</span><span>требует F1</span></header>
         <pre><code><span class="k">model</span>:
-  _target_: avatar.pipeline.tabular.TabularClassification
+  _target_: fmlib.pipeline.tabular.TabularClassification
   tabular_model: {TabularWithAggregatedStates}
   <span class="hl">num_classes: 1</span>   <span class="note"># один логит -> вероятность</span>
   <span class="hl">task_type: classification</span>
 <span class="k">collate_fn</span>:
-  _target_: avatar.data.SupervisedCollateFn
+  _target_: fmlib.data.SupervisedCollateFn
   target_column: target
   add_extra_columns: {group: group, epk_id: epk_id}
 <span class="k">metrics</span>:
   valid_metrics:
-    _target_: avatar.metrics.ResponseMetrics
+    _target_: fmlib.metrics.ResponseMetrics
     main_metric: roc_auc_score</code></pre>
       </div>
 
       <div class="config">
         <header><span>регрессия</span><span>требует F2, F4</span></header>
         <pre><code><span class="k">model</span>:
-  _target_: avatar.pipeline.tabular.TabularClassification
+  _target_: fmlib.pipeline.tabular.TabularClassification
   <span class="hl">num_classes: 1</span>
   <span class="hl">task_type: regression</span>
 <span class="k">collate_fn</span>:
-  _target_: avatar.data.SupervisedCollateFn
+  _target_: fmlib.data.SupervisedCollateFn
   target_column: target
   <span class="hl">is_regression: True</span>
   add_extra_columns: {group: group, epk_id: epk_id}
 <span class="k">metrics</span>:
   valid_metrics:
-    _target_: avatar.metrics.RegressionMetrics
+    _target_: fmlib.metrics.RegressionMetrics
     main_metric: mae
 <span class="k">train</span>:
   early_stopping:
-    _target_: avatar.train.EarlyStopping
+    _target_: fmlib.train.EarlyStopping
     main_metric: mean_mae
     strategy: min</code></pre>
       </div>
@@ -1067,16 +1067,16 @@
       <div class="config">
         <header><span>multi-class</span><span>требует F3</span></header>
         <pre><code><span class="k">model</span>:
-  _target_: avatar.pipeline.tabular.TabularClassification
+  _target_: fmlib.pipeline.tabular.TabularClassification
   <span class="hl">num_classes: 7</span>
   <span class="hl">task_type: classification</span>
 <span class="k">collate_fn</span>:
-  _target_: avatar.data.SupervisedCollateFn
+  _target_: fmlib.data.SupervisedCollateFn
   target_column: target
   add_extra_columns: {group: group, epk_id: epk_id}
 <span class="k">metrics</span>:
   valid_metrics:
-    _target_: avatar.metrics.MultiClassMetrics
+    _target_: fmlib.metrics.MultiClassMetrics
     num_classes: 7
     main_metric: balanced_accuracy</code></pre>
       </div>
@@ -1199,7 +1199,7 @@
         Отдельная задача и отдельный пример.
       </li>
       <li>
-        <strong>Multi-task.</strong> <code>avatar/pipeline/multi_task/</code>
+        <strong>Multi-task.</strong> <code>fmlib/pipeline/multi_task/</code>
         остаётся без рабочего конфига — это уже записано в отчёте по метрикам
         как открытый пункт.
       </li>

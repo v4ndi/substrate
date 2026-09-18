@@ -236,7 +236,7 @@ def generate(root: Path) -> dict[str, str]:
 
 
 def _current_config(task: str, root: Path, checkpoint: str):
-    from avatar.automl import (
+    from fmlib.automl import (
         BinaryTaskConfig,
         MulticlassTaskConfig,
         RegressionTaskConfig,
@@ -428,7 +428,7 @@ def _comparison(
 
 def run_checkpoint(root: Path, checkpoint: str) -> None:
     """Train and score every task once, recording the run under ``checkpoint``."""
-    from avatar.automl import (
+    from fmlib.automl import (
         BinaryTask,
         MulticlassTask,
         RegressionTask,

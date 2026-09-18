@@ -3,8 +3,8 @@ from inspect import signature
 
 import pytest
 
-from avatar.automl import BinaryTaskConfig, EnvironmentConfig, ResponseTaskConfig
-from avatar.automl.exceptions import ConfigError, UnsupportedBackendError
+from fmlib.automl import BinaryTaskConfig, EnvironmentConfig, ResponseTaskConfig
+from fmlib.automl.exceptions import ConfigError, UnsupportedBackendError
 
 
 def _config(**overrides):

@@ -11,7 +11,7 @@
 ## Как конфиг попадает в запуск
 
 ```bash
-torchrun --standalone --nproc_per_node=2 -m avatar.train \
+torchrun --standalone --nproc_per_node=2 -m fmlib.train \
     --config-dir=configs --config-name=my_run
 ```
 
@@ -20,7 +20,7 @@ torchrun --standalone --nproc_per_node=2 -m avatar.train \
 командной строки:
 
 ```bash
-python -m avatar.train --config-dir=configs --config-name=my_run \
+python -m fmlib.train --config-dir=configs --config-name=my_run \
     train.num_epochs=1 optimizer.lr=0.0005
 ```
 
@@ -37,7 +37,7 @@ python -m avatar.train --config-dir=configs --config-name=my_run \
 | `model` | да | пайплайн, который обучаем (`_target_` + аргументы) |
 | `train_dataloader` | да для обучения | `torch.utils.data.DataLoader` с датасетом и `collate_fn` |
 | `valid_dataloader` | нет | если не задан, валидации не будет вообще |
-| `test_dataloader` | нет | финальный прогон после обучения; обязателен для `avatar.inference` |
+| `test_dataloader` | нет | финальный прогон после обучения; обязателен для `fmlib.inference` |
 | `optimizer` | да | `_partial_: True`, применяется к параметрам модели |
 | `scheduler` | да | `_partial_: True`, шагает раз на границу накопления градиента |
 | `train` | да | длительность, сиды, чекпоинты, ранняя остановка (см. ниже) |
@@ -47,12 +47,12 @@ python -m avatar.train --config-dir=configs --config-name=my_run \
 | `logging` | нет | подробность логов, профайлер, метрики производительности |
 | `callbacks` | нет | явный список колбэков вместо стандартного |
 | `swa_model` | нет | усреднение весов (EMA/SWA) |
-| `load_state` | только инференс | путь к весам для `avatar.inference` |
+| `load_state` | только инференс | путь к весам для `fmlib.inference` |
 | `root_dir` | нет | `chdir` в этот каталог перед запуском |
 
 ## `train:` — параметры обучения
 
-Соответствует датаклассу `avatar.training_arguments.TrainingArguments`.
+Соответствует датаклассу `fmlib.training_arguments.TrainingArguments`.
 
 | ключ | по умолчанию | что делает |
 |---|---|---|
@@ -64,7 +64,7 @@ python -m avatar.train --config-dir=configs --config-name=my_run \
 | `checkpoint_state` | `null` | путь к чекпоинту для полного возобновления (модель + оптимизатор + планировщик + счётчики) |
 | `model_state` | `null` | путь только к весам модели; счётчики не восстанавливаются |
 | `steps_before_evaluation` | `null` | валидировать раз в N шагов оптимизатора; `null` — раз в эпоху |
-| `early_stopping` | `null` | блок с `_target_: avatar.train.EarlyStopping` |
+| `early_stopping` | `null` | блок с `_target_: fmlib.train.EarlyStopping` |
 | `device_specific` | `False` | **устаревший ключ, ничего не делает** |
 
 ### `device_specific` ничего не делает
@@ -86,7 +86,7 @@ python -m avatar.train --config-dir=configs --config-name=my_run \
 ```yaml
 train:
   early_stopping:
-    _target_: avatar.train.EarlyStopping
+    _target_: fmlib.train.EarlyStopping
     main_metric: roc_auc_score   # имя метрики без префикса valid_
     patience: 6                  # сколько валидаций терпеть без улучшения
     delta: 0                     # минимальное улучшение, которое считается улучшением
@@ -110,7 +110,7 @@ train:
 train_dataloader:
   _target_: torch.utils.data.DataLoader
   dataset:
-    _target_: avatar.data.TabularDataset
+    _target_: fmlib.data.TabularDataset
     path: /path/to/train
     shuffle_files: True
     shuffle_pq: True
@@ -119,7 +119,7 @@ train_dataloader:
   drop_last: False
   num_workers: 8
   collate_fn:
-    _target_: avatar.data.TabularCollateFn
+    _target_: fmlib.data.TabularCollateFn
     target_column: target_attr_1
 ```
 
@@ -137,7 +137,7 @@ train_dataloader:
 ```yaml
 metrics:
   valid_metrics:
-    _target_: avatar.metrics.ResponseMetrics
+    _target_: fmlib.metrics.ResponseMetrics
 ```
 
 Три независимых ключа: `train_metrics`, `valid_metrics`, `test_metrics`. Любой
@@ -162,7 +162,7 @@ mlflow:
 | `tracking_uri` | адрес сервера MLflow; без него пишется в локальный `./mlruns` |
 
 **Блок обязателен для обучения**, даже если логировать никуда не нужно: из
-`experiment_name` и `run_name` строится путь к чекпоинтам, и `avatar.train`
+`experiment_name` и `run_name` строится путь к чекпоинтам, и `fmlib.train`
 читает их безусловно. Само логирование выключается через `logging.enable: False`.
 При инференсе блок необязателен.
 
@@ -224,9 +224,9 @@ swa_model:
 
 ```yaml
 callbacks:
-  - _target_: avatar.train.MLflowCallback
-  - _target_: avatar.train.ProgressBarCallback
-  - _target_: avatar.train.CheckpointCallback
+  - _target_: fmlib.train.MLflowCallback
+  - _target_: fmlib.train.ProgressBarCallback
+  - _target_: fmlib.train.CheckpointCallback
     checkpoint_dir: best_models/my_run
 ```
 
@@ -235,7 +235,7 @@ callbacks:
 
 ## Конфиг инференса
 
-`avatar.inference` читает подмножество той же схемы:
+`fmlib.inference` читает подмножество той же схемы:
 
 ```yaml
 load_state: /path/to/model.bin   # веса; без них будет предупреждение и случайная модель
@@ -248,7 +248,7 @@ model:
   ...                            # та же архитектура, что при обучении
 metrics:
   test_metrics:
-    _target_: avatar.metrics.InferenceSupervisedMetrics
+    _target_: fmlib.metrics.InferenceSupervisedMetrics
     path_to_save: predicts/my_run
     save_steps: 100
     task_type: binary_clf
@@ -257,7 +257,7 @@ metrics:
 Запуск:
 
 ```bash
-python -m avatar.inference --config-dir=configs --config-name=inference
+python -m fmlib.inference --config-dir=configs --config-name=inference
 ```
 
 Блоки `train:`, `optimizer:`, `scheduler:` при инференсе не нужны. Раздел
@@ -277,7 +277,7 @@ python -m avatar.inference --config-dir=configs --config-name=inference
 
 ```yaml
 prepare_batch:
-  _target_: avatar.data.campaign.CampaignTaskChannelBatches
+  _target_: fmlib.data.campaign.CampaignTaskChannelBatches
   tasks: ${campaign_meta.tasks}
 
 campaign_meta:
@@ -286,7 +286,7 @@ campaign_meta:
       comm_type: [0, 1, 2, 3]
 ```
 
-Раньше это была отдельная точка входа `avatar.cam_inference`, отличавшаяся от
+Раньше это была отдельная точка входа `fmlib.cam_inference`, отличавшаяся от
 обычной ровно этим циклом. Точка входа в инференс теперь одна.
 
 ## Устаревший блок `accelerator:`

@@ -11,7 +11,7 @@
 
 ```yaml
 model:
-  _target_: avatar.pipeline.tabular.SupervisedLearner
+  _target_: fmlib.pipeline.tabular.SupervisedLearner
   num_classes: 2
   loss:
     _target_: examples.custom_loss.loss.FocalLoss
@@ -44,7 +44,7 @@ LossOutput(
 ## Про `components`
 
 Слагаемые нужны не для оптимизации, а для наблюдаемости: их подхватят
-`avatar.metrics.MultiLossMetric` и `avatar.metrics.UniversalLossesMetric`. В
+`fmlib.metrics.MultiLossMetric` и `fmlib.metrics.UniversalLossesMetric`. В
 примере туда кладётся необработанная кросс-энтропия — чтобы по логам было видно,
 насколько именно focal-взвешивание изменило значение.
 

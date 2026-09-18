@@ -8,7 +8,7 @@ import pyarrow.parquet as pq
 import pytest
 import torch
 
-from avatar.data.tabular import TabularDataset
+from fmlib.data.tabular import TabularDataset
 
 
 @pytest.fixture

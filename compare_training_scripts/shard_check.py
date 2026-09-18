@@ -29,10 +29,10 @@ import yaml  # noqa: E402
 from hydra.utils import instantiate  # noqa: E402
 from omegaconf import OmegaConf  # noqa: E402
 
-import avatar  # noqa: E402
+import fmlib  # noqa: E402
 
-assert avatar.__file__.startswith(os.getcwd()), (
-    f"avatar came from {avatar.__file__}, not from {os.getcwd()}"
+assert fmlib.__file__.startswith(os.getcwd()), (
+    f"fmlib came from {fmlib.__file__}, not from {os.getcwd()}"
 )
 
 config_path, out_dir = sys.argv[1], pathlib.Path(sys.argv[2])
@@ -69,7 +69,7 @@ for record in dataset:
 payload = {
     "rank": rank,
     "world": world,
-    "avatar": avatar.__file__,
+    "fmlib": fmlib.__file__,
     "n_records": len(hashes),
     "n_unique": len(set(hashes)),
     "hashes": sorted(set(hashes)),

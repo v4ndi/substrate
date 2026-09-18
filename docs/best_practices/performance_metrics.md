@@ -148,5 +148,5 @@ logging:
 `/home/datalab/nfs/profile_traces/{experiment_name}/{run_name}/{время}/trace.json`
 и открываются в `chrome://tracing` или Perfetto.
 
-Путь сохранения зашит в код (`avatar.utils.init_modules.init_profiler`) — если
+Путь сохранения зашит в код (`fmlib.utils.init_modules.init_profiler`) — если
 он вам не подходит, это место придётся править.

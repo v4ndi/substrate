@@ -1,4 +1,4 @@
-# avatar AutoML: запуск и справочник API
+# fmlib AutoML: запуск и справочник API
 
 Рабочие notebooks: `binary_pipeline.ipynb`, `response_pipeline.ipynb`, `regression_pipeline.ipynb`, `multiclass_pipeline.ipynb`, `uplift_pipeline.ipynb`. Каждый показывает typed config, train, одну ячейку вариантов `model_layout`, predict/evaluate, persistence и Osiris. Только Response/Uplift содержат одну отдельную path-based calibration ячейку.
 
@@ -6,7 +6,7 @@
 
 ### Установка
 
-AutoML устанавливается вместе с `avatar`; нужны Python 3.11+ и extra `boosting`
+AutoML устанавливается вместе с `fmlib`; нужны Python 3.11+ и extra `boosting`
 (CatBoost и XGBoost подключаются лениво, без них движки поднимают
 `MissingDependencyError`):
 
@@ -21,8 +21,8 @@ python -m venv .venv
 .venv/bin/python -m pip install "ipykernel>=6.29,<8"
 .venv/bin/python -m ipykernel install \
   --user \
-  --name avatar-env \
-  --display-name "avatar automl env"
+  --name fmlib-env \
+  --display-name "fmlib automl env"
 ```
 
 Для Osiris (`env_type="osiris"`) `environment.venv_path` должен указывать на
@@ -40,7 +40,7 @@ printf '%s\n' /opt/clients > \
 
 ```python
 from pathlib import Path
-from avatar.automl import BinaryTask, BinaryTaskConfig
+from fmlib.automl import BinaryTask, BinaryTaskConfig
 
 config = BinaryTaskConfig(
     env_type="local",
@@ -78,7 +78,7 @@ Local operation хранит owner и heartbeat. Если kernel/process зав�
 Data, `output_dir` и artifacts должны быть доступны notebook и job. Default launcher использует shared `/home/datalab/nfs/sber-amazme-fmlib/env`.
 
 ```python
-from avatar.automl import BinaryTask, BinaryTaskConfig, EnvironmentConfig
+from fmlib.automl import BinaryTask, BinaryTaskConfig, EnvironmentConfig
 
 config = BinaryTaskConfig(
     env_type="osiris",
@@ -240,6 +240,6 @@ Figures используют role-first names: binary/response ROC AUC, multicla
 
 ## Добавление метрик и калибровок
 
-Новая метрика должна быть частью общей editable installation `avatar`, доступной и notebook, и Osiris worker; notebook-callable не поддерживаются. Реализацию добавляют в task-specific модуль `avatar/automl/metrics/` по готовым классам из `avatar/automl/metrics/binary.py`, `avatar/automl/metrics/regression.py`, `avatar/automl/metrics/multiclass.py` или `avatar/automl/metrics/uplift.py`. Класс структурно соблюдает `Metric` и принимает `MetricInput` из `avatar/automl/metrics/base.py`, задаёт стабильные `name`, `supported_tasks`, `optimization_direction` (`None` для evaluation-only) и реализует `compute()`. Готовый экземпляр регистрируют в единственном реестре `avatar/automl/metrics/__init__.py`. Математику и входной scalar/matrix/treatment-aware контракт проверяют в `tests/automl/metrics/test_metrics.py`, а config, training/evaluation, persistence и remote run spec — в соответствующих task-level tests.
+Новая метрика должна быть частью общей editable installation `fmlib`, доступной и notebook, и Osiris worker; notebook-callable не поддерживаются. Реализацию добавляют в task-specific модуль `fmlib/automl/metrics/` по готовым классам из `fmlib/automl/metrics/binary.py`, `fmlib/automl/metrics/regression.py`, `fmlib/automl/metrics/multiclass.py` или `fmlib/automl/metrics/uplift.py`. Класс структурно соблюдает `Metric` и принимает `MetricInput` из `fmlib/automl/metrics/base.py`, задаёт стабильные `name`, `supported_tasks`, `optimization_direction` (`None` для evaluation-only) и реализует `compute()`. Готовый экземпляр регистрируют в единственном реестре `fmlib/automl/metrics/__init__.py`. Математику и входной scalar/matrix/treatment-aware контракт проверяют в `tests/automl/metrics/test_metrics.py`, а config, training/evaluation, persistence и remote run spec — в соответствующих task-level tests.
 
-Новую стратегию калибровки создают в `avatar/automl/calibrators/<strategy>.py` по `avatar/automl/calibrators/beta_calibration.py` и `avatar/automl/calibrators/isotonic_regression.py`. Класс структурно соблюдает `Calibrator` из `avatar/automl/calibrators/base.py`: реализует `fit`, `predict`, `to_dict` и `from_dict`, а сохраняемый state остаётся неизменяемым и JSON-safe. Публичное имя добавляют в `CalibrationStrategy` и `calibrator_class()` в `avatar/automl/calibrators/__init__.py`, затем покрывают Response/Uplift, persistence и fake-Osiris tests. `avatar/automl/tasks/calibration.py` не требует изменения только тогда, когда стратегия соблюдает уже существующий scalar mapping contract.
+Новую стратегию калибровки создают в `fmlib/automl/calibrators/<strategy>.py` по `fmlib/automl/calibrators/beta_calibration.py` и `fmlib/automl/calibrators/isotonic_regression.py`. Класс структурно соблюдает `Calibrator` из `fmlib/automl/calibrators/base.py`: реализует `fit`, `predict`, `to_dict` и `from_dict`, а сохраняемый state остаётся неизменяемым и JSON-safe. Публичное имя добавляют в `CalibrationStrategy` и `calibrator_class()` в `fmlib/automl/calibrators/__init__.py`, затем покрывают Response/Uplift, persistence и fake-Osiris tests. `fmlib/automl/tasks/calibration.py` не требует изменения только тогда, когда стратегия соблюдает уже существующий scalar mapping contract.

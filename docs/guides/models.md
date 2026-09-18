@@ -1,13 +1,13 @@
 # Из чего собирается модель
 
 В конфиге стоит один объект — `model:`. Это **пайплайн**: он владеет
-композицией блоков и считает функцию потерь. Всё, что лежит под `avatar/nn/`,
+композицией блоков и считает функцию потерь. Всё, что лежит под `fmlib/nn/`,
 функцию потерь не считает вообще — именно поэтому одни и те же блоки
 переиспользуются между задачами.
 
 ```
 батч ──► эмбеддинг ──► энкодер ──► агрегация ──► голова ──► функция потерь
-         avatar/nn      avatar/nn   avatar/nn    пайплайн    avatar/losses
+         fmlib/nn      fmlib/nn   fmlib/nn    пайплайн    fmlib/losses
 ```
 
 Каталог классов — в [../reference/pipeline.md](../reference/pipeline.md) и
@@ -19,14 +19,14 @@
 
 ```yaml
 model:
-  _target_: avatar.pipeline.tabular.SupervisedLearner
+  _target_: fmlib.pipeline.tabular.SupervisedLearner
   embedding:
-    _target_: avatar.nn.embedding.TabularEmbedding
+    _target_: fmlib.nn.embedding.TabularEmbedding
     num_numerical_features: 189
     vocab_size: 172
     hidden_size: 64
   tabular_encoder:
-    _target_: avatar.nn.tabular.TabularTransformer
+    _target_: fmlib.nn.tabular.TabularTransformer
     hidden_size: ${model.embedding.hidden_size}
     num_heads: 4
     num_layers: 3
@@ -68,9 +68,9 @@ model:
 
 ```yaml
 embedding:
-  _target_: avatar.nn.embedding.TabularEmbedding
+  _target_: fmlib.nn.embedding.TabularEmbedding
   hidden_state_aggregator:
-    _target_: avatar.nn.embedding.LayerNormConcatenate
+    _target_: fmlib.nn.embedding.LayerNormConcatenate
     hidden_state_dim: 128
     embedding_dim: ${model.embedding.hidden_size}
 ```
@@ -83,7 +83,7 @@ embedding:
 
 ```yaml
 model:
-  _target_: avatar.pipeline.tabular.SupervisedLearner
+  _target_: fmlib.pipeline.tabular.SupervisedLearner
   hidden_state_dim: 128
   proj_hiddens_to_dim: 64 # необязательно: проецировать, а не только нормировать
 ```
@@ -98,7 +98,7 @@ Early fusion даёт модели больше свободы, late — деш�
 события ──► EventEncoder ──► backbone ──► агрегация ──► (пайплайна нет)
 ```
 
-`avatar.nn.sequential.EventEncoder` кодирует одно событие, применяя внимание по
+`fmlib.nn.sequential.EventEncoder` кодирует одно событие, применяя внимание по
 его атрибутам; `TransformersWrapper` оборачивает backbone из HuggingFace
 `transformers`.
 
@@ -135,10 +135,10 @@ Early fusion даёт модели больше свободы, late — деш�
 
 ```yaml
 model:
-  _target_: avatar.pipeline.tabular.SupervisedLearner
+  _target_: fmlib.pipeline.tabular.SupervisedLearner
   num_classes: 2
   loss:
-    _target_: avatar.losses.ClassificationLoss
+    _target_: fmlib.losses.ClassificationLoss
     num_classes: 2
     task_type: classification
     l1_weight: 0.01
@@ -151,11 +151,11 @@ model:
 Правило одно: **блок не считает потери**. Он преобразует представление, а
 потери остаются пайплайну.
 
-* Свой энкодер — наследуйте `avatar.nn.tabular.BaseTabularEncoder`, принимайте
+* Свой энкодер — наследуйте `fmlib.nn.tabular.BaseTabularEncoder`, принимайте
   `(B, F, D)`, возвращайте `BaseTabularOutput`.
-* Свою агрегацию — наследуйте `avatar.nn.utils.BaseAggregation`.
+* Свою агрегацию — наследуйте `fmlib.nn.utils.BaseAggregation`.
 * Своё взаимодействие с воздействием — наследуйте
-  `avatar.pipeline.tabular.interaction.BaseTreatmentInteraction`.
+  `fmlib.pipeline.tabular.interaction.BaseTreatmentInteraction`.
 
 Всё это подставляется в конфиг как обычный `_target_` — регистрировать ничего
 не нужно.

@@ -1,6 +1,6 @@
 import torch
 
-from avatar.data import EventSequenceBatch
+from fmlib.data import EventSequenceBatch
 
 test_events = {
     "evt_attr_4": torch.tensor([[1, 1, 1, 1, 1]]),

@@ -1,9 +1,9 @@
-# avatar
+# fmlib
 
 Фундаментальные модели для табличных и событийных данных о клиентах: табличный
 трансформер с поддержкой внешних эмбеддингов, модели событийных
 последовательностей, uplift- и multi-task-пайплайны и слой предобработки с двумя
-взаимозаменяемыми бэкендами, плюс `avatar.automl` — автоматическое обучение
+взаимозаменяемыми бэкендами, плюс `fmlib.automl` — автоматическое обучение
 типовых supervised-задач.
 
 Обучение и инференс описываются одним YAML-конфигом и запускаются через
@@ -17,9 +17,9 @@ python -m pip install -e ".[spark,dev]"
 
 | extra | что тянет | нужен для |
 |---|---|---|
-| `spark` | `pyspark==3.5.0` | `avatar.preprocessing.spark` (плюс JDK 8/11/17) |
-| `catboost` | `catboost` | CatBoost-бенчмарк в `avatar.metrics.campaign` |
-| `boosting` | `catboost`, `xgboost` | движки бустинга в `avatar.automl` |
+| `spark` | `pyspark==3.5.0` | `fmlib.preprocessing.spark` (плюс JDK 8/11/17) |
+| `catboost` | `catboost` | CatBoost-бенчмарк в `fmlib.metrics.campaign` |
+| `boosting` | `catboost`, `xgboost` | движки бустинга в `fmlib.automl` |
 | `dev` | `pytest`, `ruff`, `pre-commit` | тесты и линтер |
 
 `requirements.txt` — обёртка, ставящая `-e .[spark,boosting,dev]`;
@@ -35,11 +35,11 @@ python examples/tabular_preprocessing/generate_data.py
 python examples/tabular_preprocessing/run_both_backends.py
 
 # обучение на своих данных
-torchrun --standalone --nproc_per_node=8 -m avatar.train \
+torchrun --standalone --nproc_per_node=8 -m fmlib.train \
     --config-dir=configs --config-name=my_run
 
 # инференс
-python -m avatar.inference --config-dir=configs --config-name=inference
+python -m fmlib.inference --config-dir=configs --config-name=inference
 ```
 
 Полный путь с разбором конфига — в
@@ -60,14 +60,14 @@ python -m avatar.inference --config-dir=configs --config-name=inference
 
 | путь | что |
 |---|---|
-| `avatar/nn/` | строительные блоки моделей (табличные / событийные / эмбеддинги) |
-| `avatar/pipeline/` | пайплайны задач (классификация, uplift, multi-task, next-k) |
-| `avatar/preprocessing/` | бэкенды `spark` и `local` (pyarrow + numpy), общий `base` |
-| `avatar/data/` | датасеты, collate-функции, чтение parquet |
-| `avatar/metrics/` | метрики обучения, кампаний и uplift |
-| `avatar/losses/` | функции потерь как отдельные подключаемые модули |
-| `avatar/train/` | цикл обучения, колбэки, чекпоинты (Hydra + `torch.distributed`) |
-| `avatar/automl/` | автоматическое обучение типовых задач (см. ниже) |
+| `fmlib/nn/` | строительные блоки моделей (табличные / событийные / эмбеддинги) |
+| `fmlib/pipeline/` | пайплайны задач (классификация, uplift, multi-task, next-k) |
+| `fmlib/preprocessing/` | бэкенды `spark` и `local` (pyarrow + numpy), общий `base` |
+| `fmlib/data/` | датасеты, collate-функции, чтение parquet |
+| `fmlib/metrics/` | метрики обучения, кампаний и uplift |
+| `fmlib/losses/` | функции потерь как отдельные подключаемые модули |
+| `fmlib/train/` | цикл обучения, колбэки, чекпоинты (Hydra + `torch.distributed`) |
+| `fmlib/automl/` | автоматическое обучение типовых задач (см. ниже) |
 | `examples/` | сквозные примеры |
 | `docs/` | документация |
 
@@ -86,13 +86,13 @@ Spark-тесты пропускаются, а не падают.
 
 ## AutoML
 
-`avatar.automl` обучает, скорит, оценивает и сохраняет модель для типовой
+`fmlib.automl` обучает, скорит, оценивает и сохраняет модель для типовой
 supervised-задачи по путям к parquet и одному типизированному конфигу —
 цикл обучения писать не нужно. Задачи: `BinaryTask`, `ResponseTask`,
 `RegressionTask`, `MulticlassTask`, `UpliftTask`.
 
 ```python
-from avatar.automl import BinaryTask, BinaryTaskConfig
+from fmlib.automl import BinaryTask, BinaryTaskConfig
 
 task = BinaryTask(BinaryTaskConfig(
     env_type="local", backend="boosting", engine="catboost", device="cpu",
@@ -119,10 +119,10 @@ Excel-отчёты, локальный запуск или Osiris. Сейчас 
 
 ## Бэкенды предобработки
 
-`avatar.preprocessing` предоставляет один и тот же API на двух движках:
+`fmlib.preprocessing` предоставляет один и тот же API на двух движках:
 
-* `avatar.preprocessing.spark` — PySpark, для кластерного fit/transform;
-* `avatar.preprocessing.local` — pyarrow + numpy, одна машина, потоковая
+* `fmlib.preprocessing.spark` — PySpark, для кластерного fit/transform;
+* `fmlib.preprocessing.local` — pyarrow + numpy, одна машина, потоковая
   обработка (переваривает данные больше объёма RAM), без Spark и JVM.
 
 Артефакты (`dump()` / `load()`) переносятся между бэкендами в обе стороны. См.

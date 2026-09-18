@@ -1,7 +1,7 @@
 import pytest
 from pyspark.sql import types as T
 
-from avatar.preprocessing.spark.pipeline import TabularPreprocessor
+from fmlib.preprocessing.spark.pipeline import TabularPreprocessor
 
 
 @pytest.fixture

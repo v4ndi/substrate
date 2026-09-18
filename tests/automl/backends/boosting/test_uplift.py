@@ -10,14 +10,14 @@ import numpy as np
 import polars as pl
 import pytest
 
-from avatar.automl import PredictionResult, UpliftTask, UpliftTaskConfig
-from avatar.automl.backends.boosting.uplift import (
+from fmlib.automl import PredictionResult, UpliftTask, UpliftTaskConfig
+from fmlib.automl.backends.boosting.uplift import (
     UPLIFT_SCORE_COLUMNS,
     UpliftBoostingBackend,
 )
-from avatar.automl.data import FeatureSchema
-from avatar.automl.exceptions import ConfigError, SchemaError
-from avatar.automl.metrics import resolve_metric
+from fmlib.automl.data import FeatureSchema
+from fmlib.automl.exceptions import ConfigError, SchemaError
+from fmlib.automl.metrics import resolve_metric
 
 
 @dataclass

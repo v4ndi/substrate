@@ -2,8 +2,8 @@
 
 import torch
 
-from avatar.nn.tabular import TabularTransformer, build_feature_padding_mask
-from avatar.outputs import BaseTabularOutput
+from fmlib.nn.tabular import TabularTransformer, build_feature_padding_mask
+from fmlib.outputs import BaseTabularOutput
 
 B, F, D = 4, 9, 16
 

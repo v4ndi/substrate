@@ -1,4 +1,4 @@
-"""Run a real :class:`~avatar.train.loop.Trainer` under ``torchrun``.
+"""Run a real :class:`~fmlib.train.loop.Trainer` under ``torchrun``.
 
 Launched by ``tests/train/test_distributed_training.py``. Each rank trains the
 tiny synthetic task, then reports what it saw; rank 0 gathers the reports and
@@ -24,7 +24,7 @@ from tiny_training import (
     parameter_fingerprint,
 )
 
-from avatar.train import (
+from fmlib.train import (
     CheckpointCallback,
     DistEnv,
     RunConfig,
@@ -33,8 +33,8 @@ from avatar.train import (
     load_checkpoint,
     unwrap_model,
 )
-from avatar.train.config import DDPConfig, DistributedConfig
-from avatar.training_arguments import TrainingArguments
+from fmlib.train.config import DDPConfig, DistributedConfig
+from fmlib.training_arguments import TrainingArguments
 
 
 def build_loader(num_records, batch_size, env, seed, num_workers=0):

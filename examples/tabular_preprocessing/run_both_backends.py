@@ -4,9 +4,9 @@ Flow:
 
 1. ``generate_data.py`` writes a synthetic wide table (run it first, or this
    script will do it automatically).
-2. Fit :class:`avatar.preprocessing.local.TabularPreprocessor` -- a single
+2. Fit :class:`fmlib.preprocessing.local.TabularPreprocessor` -- a single
    streaming pass, no Spark.
-3. Fit :class:`avatar.preprocessing.spark.pipeline.TabularPreprocessor` (skipped
+3. Fit :class:`fmlib.preprocessing.spark.pipeline.TabularPreprocessor` (skipped
    if no Spark / JDK is available).
 4. Dump the artifact from each backend and load it into the *other* one.
 5. Transform with every combination and assert the outputs are identical
@@ -125,7 +125,7 @@ def main() -> None:
     )
 
     # ---- local backend --------------------------------------------------
-    from avatar.preprocessing.local import TabularPreprocessor as LocalTab
+    from fmlib.preprocessing.local import TabularPreprocessor as LocalTab
 
     local_pp = LocalTab(**kw, batch_rows=50_000)
     local_pp.fit(args.data)
@@ -141,7 +141,7 @@ def main() -> None:
         return
 
     # ---- spark backend ------------------------------------------------------
-    from avatar.preprocessing.spark.pipeline import TabularPreprocessor as SparkTab
+    from fmlib.preprocessing.spark.pipeline import TabularPreprocessor as SparkTab
 
     sdf = spark.read.parquet(args.data)
     spark_pp = SparkTab(**kw)

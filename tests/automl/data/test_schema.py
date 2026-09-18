@@ -4,9 +4,9 @@ import numpy as np
 import polars as pl
 import pytest
 
-from avatar.automl.config import BinaryTaskConfig
-from avatar.automl.data import ParquetSource, prepare_data
-from avatar.automl.exceptions import SchemaError
+from fmlib.automl.config import BinaryTaskConfig
+from fmlib.automl.data import ParquetSource, prepare_data
+from fmlib.automl.exceptions import SchemaError
 
 
 def _config(**overrides):

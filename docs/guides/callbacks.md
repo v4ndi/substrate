@@ -98,8 +98,8 @@ MLflowCallback, ProgressBarCallback, TrainStatsCallback,
 ## Как написать свой колбэк
 
 ```python
-from avatar.train import TrainerCallback
-from avatar.train.state import CallbackContext
+from fmlib.train import TrainerCallback
+from fmlib.train.state import CallbackContext
 
 
 class GradientNormAlarm(TrainerCallback):
@@ -126,11 +126,11 @@ class GradientNormAlarm(TrainerCallback):
 
 ```yaml
 callbacks:
-  - _target_: avatar.train.MLflowCallback
-  - _target_: avatar.train.ProgressBarCallback
+  - _target_: fmlib.train.MLflowCallback
+  - _target_: fmlib.train.ProgressBarCallback
   - _target_: mypackage.callbacks.GradientNormAlarm
     threshold: 50.0
-  - _target_: avatar.train.CheckpointCallback
+  - _target_: fmlib.train.CheckpointCallback
     checkpoint_dir: best_models/my_experiment/my_run
 ```
 

@@ -23,7 +23,7 @@ python examples/tabular_preprocessing/run_both_backends.py
 
 # четыре постановки на открытых данных: выгрузка, затем обучение
 python examples/tabular_tasks/prepare_data.py --task all --scale smoke
-python -m avatar.train --config-dir=examples/tabular_tasks/configs --config-name=response
+python -m fmlib.train --config-dir=examples/tabular_tasks/configs --config-name=response
 
 # точки расширения
 python -m pytest tests/examples

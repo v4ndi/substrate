@@ -1,7 +1,7 @@
 import pytest
 
-from avatar.nn.embedding import BaseEmbedding
-from avatar.nn.sequential.event_encoder.base import BaseEventEncoder
+from fmlib.nn.embedding import BaseEmbedding
+from fmlib.nn.sequential.event_encoder.base import BaseEventEncoder
 
 
 def _embedding():

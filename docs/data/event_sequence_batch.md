@@ -2,7 +2,7 @@
 
 Класс для работы с батчами временных последовательностей событий.  
 
-**Модуль**: `avatar.data.EventSequenceBatch`  
+**Модуль**: `fmlib.data.EventSequenceBatch`  
 
 ## Описание  
 
@@ -144,7 +144,7 @@ batch_gpu = batch.to("cuda:0")
 ### Последовательность транзакций  
 ```python
 import torch
-from avatar.data import EventSequenceBatch
+from fmlib.data import EventSequenceBatch
 
 
 events = {
@@ -178,7 +178,7 @@ batch = EventSequenceBatch(events=events, timestamps=timestamps, attention_mask=
 ### Последовательность транзакций и кликстрим
 ```python
 import torch
-from avatar.data import EventSequenceBatch
+from fmlib.data import EventSequenceBatch
 
 
 events = {

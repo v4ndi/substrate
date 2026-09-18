@@ -33,8 +33,8 @@ def _cmp_tabular(a, b):
 
 
 def test_tabular_fit_and_cross_load(spark_session, write_parquet, tabular_table):
-    from avatar.preprocessing.local import TabularPreprocessor as Local
-    from avatar.preprocessing.spark.pipeline import TabularPreprocessor as Spark
+    from fmlib.preprocessing.local import TabularPreprocessor as Local
+    from fmlib.preprocessing.spark.pipeline import TabularPreprocessor as Spark
 
     d = write_parquet(tabular_table)
     kw = dict(
@@ -86,8 +86,8 @@ def _canon(row, cols):
 
 
 def test_sequence_fit_and_cross_load(spark_session, write_parquet, sequence_table):
-    from avatar.preprocessing.local import EventSequencePreprocessor as Local
-    from avatar.preprocessing.spark.pipeline import EventSequencePreprocessor as Spark
+    from fmlib.preprocessing.local import EventSequencePreprocessor as Local
+    from fmlib.preprocessing.spark.pipeline import EventSequencePreprocessor as Spark
 
     d = write_parquet(sequence_table)
     kw = dict(
@@ -116,8 +116,7 @@ def test_sequence_fit_and_cross_load(spark_session, write_parquet, sequence_tabl
         spark_pp.transform(sdf).toPandas().sort_values("epk_id").reset_index(drop=True)
     )
     lout = (
-        Local
-        .load(spark_pp.dump())
+        Local.load(spark_pp.dump())
         .transform(d)
         .to_pandas()
         .sort_values("epk_id")

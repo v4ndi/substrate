@@ -1,10 +1,10 @@
-# Справочник: `avatar.pipeline`
+# Справочник: `fmlib.pipeline`
 
 Каталог пайплайнов — того, что ставится в `model:`. Как они собираются из
 блоков — в [../guides/models.md](../guides/models.md).
 
 Пайплайн — единственный слой, который считает функцию потерь. Всё под
-`avatar/nn/` от неё свободно, поэтому одни и те же блоки переиспользуются
+`fmlib/nn/` от неё свободно, поэтому одни и те же блоки переиспользуются
 между задачами.
 
 Колонка «батч» указывает, какая collate-функция должна стоять в даталоадере:
@@ -83,8 +83,8 @@ dropout первым, активация перед нормализацией. 
 
 Семейства `sequence` (`NextKTokensPrediction`, `SequenceModelWithAggregation`,
 `SequenceClassification`) и `multi_task` (`MMoE`, `PLE`, `MultiTaskResponse`,
-`MultiTaskUplift`) удалены из `avatar/pipeline`. Препроцессинг событийных
-последовательностей и энкодеры под них (`avatar/data/sequential`,
-`avatar/nn/sequential`) остались на месте — ушёл только слой задачи над ними.
+`MultiTaskUplift`) удалены из `fmlib/pipeline`. Препроцессинг событийных
+последовательностей и энкодеры под них (`fmlib/data/sequential`,
+`fmlib/nn/sequential`) остались на месте — ушёл только слой задачи над ними.
 Причины и границы решения — в
 [../decisions/pipeline_boundaries.md](../decisions/pipeline_boundaries.md).

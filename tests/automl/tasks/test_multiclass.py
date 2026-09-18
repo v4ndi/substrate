@@ -7,18 +7,18 @@ import numpy as np
 import polars as pl
 import pytest
 
-from avatar.automl import MulticlassTask, MulticlassTaskConfig, PredictionResult
-from avatar.automl.backends.boosting import MulticlassBoostingBackend
-from avatar.automl.exceptions import ArtifactError, ConfigError, SchemaError
-from avatar.automl.metrics import binary_top_k_metrics, multiclass_class_metrics
+from fmlib.automl import MulticlassTask, MulticlassTaskConfig, PredictionResult
+from fmlib.automl.backends.boosting import MulticlassBoostingBackend
+from fmlib.automl.exceptions import ArtifactError, ConfigError, SchemaError
+from fmlib.automl.metrics import binary_top_k_metrics, multiclass_class_metrics
 
 
 def test_multiclass_documentation_is_self_contained_and_base_is_task_neutral():
     repository = Path(__file__).resolve().parents[3]
     documentation_paths = [
-        repository / "avatar/automl/tasks/multiclass.py",
-        repository / "avatar/automl/backends/boosting/multiclass.py",
-        repository / "avatar/automl/config/tasks.py",
+        repository / "fmlib/automl/tasks/multiclass.py",
+        repository / "fmlib/automl/backends/boosting/multiclass.py",
+        repository / "fmlib/automl/config/tasks.py",
         repository / "examples/automl/configs/fmlib_multiclass.yaml",
         repository / "examples/automl/tests/configs/multiclass_one_trial.yaml",
         repository / "examples/automl/tests/configs/multiclass_inline_features.yaml",
@@ -60,8 +60,8 @@ def test_multiclass_documentation_is_self_contained_and_base_is_task_neutral():
     common_source = "\n".join(
         (repository / relative).read_text(encoding="utf-8")
         for relative in (
-            "avatar/automl/tasks/base.py",
-            "avatar/automl/backends/boosting/base.py",
+            "fmlib/automl/tasks/base.py",
+            "fmlib/automl/backends/boosting/base.py",
         )
     ).casefold()
     for task_specific in (

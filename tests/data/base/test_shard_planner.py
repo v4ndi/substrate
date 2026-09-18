@@ -10,7 +10,7 @@ import itertools
 import numpy as np
 import pytest
 
-from avatar.data.base import ShardPlanner
+from fmlib.data.base import ShardPlanner
 
 # Deliberately uneven file sizes — equal-sized files hide every sharding bug.
 UNEVEN = np.array([13, 1, 40, 7, 22, 3, 91, 5], dtype=np.int64)

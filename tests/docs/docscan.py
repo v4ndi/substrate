@@ -36,10 +36,10 @@ EXCLUDED_RELATIVE_DIRS = ("docs/decisions",)
 #: point of a plan. Reports of *finished* work stay in scope and are checked.
 EXCLUDED_FILES = frozenset({"TODO.md", "tabular_tasks_plan.md"})
 
-#: ``avatar`` followed by at least one dotted segment. ``avatar_fm`` does not
-#: match (the character after ``avatar`` must be a dot), and a sentence-final
+#: ``fmlib`` followed by at least one dotted segment. ``avatar_fm`` does not
+#: match (the character after ``fmlib`` must be a dot), and a sentence-final
 #: period is not consumed (every dot must be followed by an identifier char).
-DOTTED_PATH = re.compile(r"\bavatar(?:\.[A-Za-z_][A-Za-z0-9_]*)+")
+DOTTED_PATH = re.compile(r"\bfmlib(?:\.[A-Za-z_][A-Za-z0-9_]*)+")
 
 #: Inline code spans: `like this`. Fenced blocks are handled separately.
 INLINE_CODE = re.compile(r"`([^`\n]+)`")
@@ -89,7 +89,7 @@ def resolve_dotted(dotted: str) -> Any:
     """Resolve ``a.b.C.attr``, trying the longest importable module prefix first.
 
     Args:
-        dotted: a fully qualified dotted path, e.g. ``avatar.data.TabularDataset``.
+        dotted: a fully qualified dotted path, e.g. ``fmlib.data.TabularDataset``.
 
     Returns:
         The referenced object.
@@ -101,7 +101,7 @@ def resolve_dotted(dotted: str) -> Any:
     """
     parts = dotted.split(".")
     with warnings.catch_warnings():
-        # Deprecation shims (avatar.nn.tabular.ste, avatar.train_utils) warn on
+        # Deprecation shims (fmlib.nn.tabular.ste, fmlib.train_utils) warn on
         # import. Resolving a name is not using it, so the warning is noise here.
         warnings.simplefilter("ignore")
         for split in range(len(parts), 0, -1):
@@ -124,7 +124,7 @@ def resolve_dotted(dotted: str) -> Any:
 
 
 def dotted_paths(text: str) -> list[str]:
-    """Every ``avatar.*`` dotted path in ``text``, in order, de-duplicated."""
+    """Every ``fmlib.*`` dotted path in ``text``, in order, de-duplicated."""
     seen: dict[str, None] = {}
     for match in DOTTED_PATH.findall(text):
         seen.setdefault(match, None)

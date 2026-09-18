@@ -21,7 +21,7 @@ class BaseMetric(abc.ABC):
 * `inputs` — батч, ровно в том виде, в каком его собрала collate-функция и
   получила модель. Это словарь: `targets`, идентификаторы, дополнительные
   колонки.
-* `outputs` — то, что вернул пайплайн: датакласс из `avatar.outputs` с
+* `outputs` — то, что вернул пайплайн: датакласс из `fmlib.outputs` с
   `logits`, `loss` и полями конкретной задачи.
 
 Отсюда следует практическое правило: **метрика привязана к паре
@@ -127,13 +127,13 @@ class MeanConfidence(ScalarMetric):
 ```yaml
 metrics:
   valid_metrics:
-    - _target_: avatar.metrics.utils.GroupAverageMetricWrapper
+    - _target_: fmlib.metrics.utils.GroupAverageMetricWrapper
       metric:
-        _target_: avatar.metrics.utils.GroupDevidedMetricsWrapper
+        _target_: fmlib.metrics.utils.GroupDevidedMetricsWrapper
         columns_to_devide: [target_attr_2, target_attr_3]
         columns_desc: [channel, group]
         metric_class:
-          _target_: avatar.metrics.ResponseMetrics
+          _target_: fmlib.metrics.ResponseMetrics
           _partial_: true
       avg_over_regulars:
         avg_control_roc_auc: ^channel_\d+_group_1_.*roc_auc_score
@@ -147,7 +147,7 @@ metrics:
 ## Как написать свою метрику
 
 ```python
-from avatar.metrics import ScalarMetric
+from fmlib.metrics import ScalarMetric
 
 
 class MeanConfidence(ScalarMetric):
@@ -209,8 +209,8 @@ metrics:
 ```yaml
 metrics:
   valid_metrics:
-    - _target_: avatar.metrics.ResponseMetrics
-    - _target_: avatar.metrics.MultiLossMetric
+    - _target_: fmlib.metrics.ResponseMetrics
+    - _target_: fmlib.metrics.MultiLossMetric
 ```
 
 Имена при этом не должны пересекаться: словари сливаются, и последний

@@ -1,10 +1,10 @@
-"""Local-only tests for ``avatar.preprocessing.local.TabularPreprocessor``."""
+"""Local-only tests for ``fmlib.preprocessing.local.TabularPreprocessor``."""
 
 import pyarrow as pa
 import pytest
 import yaml
 
-from avatar.preprocessing.local import TabularPreprocessor
+from fmlib.preprocessing.local import TabularPreprocessor
 
 CAT = ["cat_a", "cat_b"]
 NUM = ["num_1", "num_2", "num_3"]

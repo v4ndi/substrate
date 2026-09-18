@@ -1,9 +1,9 @@
 # Tabular preprocessing: Spark and local backends
 
-`avatar.preprocessing` has two interchangeable implementations of the same
+`fmlib.preprocessing` has two interchangeable implementations of the same
 tabular preprocessor:
 
-| | `avatar.preprocessing.spark.pipeline.TabularPreprocessor` | `avatar.preprocessing.local.TabularPreprocessor` |
+| | `fmlib.preprocessing.spark.pipeline.TabularPreprocessor` | `fmlib.preprocessing.local.TabularPreprocessor` |
 |---|---|---|
 | engine | PySpark on a cluster | pyarrow + numpy, one machine |
 | needs | Spark / YARN / JVM | nothing extra (deps already in `requirements.txt`) |
@@ -57,7 +57,7 @@ All backends and cross-loaded artifacts produce identical output.
 ## Typical usage
 
 ```python
-from avatar.preprocessing.local import TabularPreprocessor
+from fmlib.preprocessing.local import TabularPreprocessor
 import yaml
 
 pp = TabularPreprocessor(

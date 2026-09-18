@@ -1,11 +1,11 @@
 import torch
 
-from avatar.nn.utils import (
+from fmlib.nn.utils import (
     BaseAggregation,
     LastHiddenState,
     MeanHiddenState,
 )
-from avatar.outputs import BaseSequenceOutput
+from fmlib.outputs import BaseSequenceOutput
 
 
 class TestSample:

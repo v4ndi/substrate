@@ -11,18 +11,18 @@
 
 ```yaml
 callbacks:
-  - _target_: avatar.train.MLflowCallback
-  - _target_: avatar.train.ProgressBarCallback
+  - _target_: fmlib.train.MLflowCallback
+  - _target_: fmlib.train.ProgressBarCallback
   - _target_: examples.custom_callback.callback.GradientNormAlarm
     threshold: 1.0
-  - _target_: avatar.train.CheckpointCallback
+  - _target_: fmlib.train.CheckpointCallback
     checkpoint_dir: best_models/my_experiment/my_run
 ```
 
 Явный список `callbacks:` **заменяет стандартный целиком**, поэтому колбэк
 чекпоинтов нужно перечислить самому. Если он не нужен, а нужен только свой
 колбэк вдобавок к стандартным — проще собрать список из
-`avatar.train.build_default_callbacks` в Python, чем перечислять всё в YAML.
+`fmlib.train.build_default_callbacks` в Python, чем перечислять всё в YAML.
 
 ## Две вещи, которые легко сделать неправильно
 
@@ -46,4 +46,4 @@ python -m pytest tests/examples
 ```
 
 Тесты создают колбэк ровно тем же способом, что и конфиг — через Hydra
-`_target_`, — поэтому переименование в `avatar.train` ломает тест, а не читателя.
+`_target_`, — поэтому переименование в `fmlib.train` ломает тест, а не читателя.

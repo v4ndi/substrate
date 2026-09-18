@@ -5,8 +5,8 @@ from inspect import signature
 
 import pytest
 
-from avatar.automl import BinaryTaskConfig, ResponseTaskConfig
-from avatar.automl.exceptions import ConfigError
+from fmlib.automl import BinaryTaskConfig, ResponseTaskConfig
+from fmlib.automl.exceptions import ConfigError
 
 
 def _values(**overrides):

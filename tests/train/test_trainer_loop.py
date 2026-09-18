@@ -6,7 +6,7 @@ import torch
 from tiny_training import TinyModel, TinyShardedDataset, collate
 from torch.utils.data import DataLoader
 
-from avatar.train import (
+from fmlib.train import (
     CallbackContext,
     CheckpointCallback,
     DistEnv,
@@ -18,9 +18,9 @@ from avatar.train import (
     TrainStatsCallback,
     load_checkpoint,
 )
-from avatar.train.checkpoint import checkpoint_path, latest_checkpoint_step
-from avatar.train.config import DistributedConfig
-from avatar.training_arguments import TrainingArguments
+from fmlib.train.checkpoint import checkpoint_path, latest_checkpoint_step
+from fmlib.train.config import DistributedConfig
+from fmlib.training_arguments import TrainingArguments
 
 
 def newest_checkpoint(directory) -> str | None:

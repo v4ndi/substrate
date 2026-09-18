@@ -1,5 +1,5 @@
 {
-  "avatar": "/home/jovyan/rusakov/repos/avatar_fm/.claude/worktrees/cmp-new/avatar/__init__.py",
+  "fmlib": "/home/jovyan/rusakov/repos/avatar_fm/.claude/worktrees/cmp-new/fmlib/__init__.py",
   "class": "SLearner",
   "total_params": 162636,
   "n_tensors": 60,

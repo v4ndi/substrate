@@ -14,9 +14,9 @@ import numpy as np
 import pytest
 import torch
 
-from avatar.metrics import ResponseMetrics
-from avatar.metrics.base import ScalarMetric
-from avatar.metrics.utils import (
+from fmlib.metrics import ResponseMetrics
+from fmlib.metrics.base import ScalarMetric
+from fmlib.metrics.utils import (
     GroupAverageMetricWrapper,
     GroupDevidedMetricsWrapper,
 )
@@ -258,7 +258,7 @@ def test_an_average_over_nothing_is_not_reported(caplog):
     )
 
     with caplog.at_level(
-        logging.WARNING, logger="avatar.metrics.utils.group_average_wrap"
+        logging.WARNING, logger="fmlib.metrics.utils.group_average_wrap"
     ):
         result = wrapper.compute()
 
@@ -272,7 +272,7 @@ def test_an_explicit_group_survives_a_missing_member(caplog):
     wrapper = GroupAverageMetricWrapper(inner, groups={"avg": ["a", "b"]})
 
     with caplog.at_level(
-        logging.WARNING, logger="avatar.metrics.utils.group_average_wrap"
+        logging.WARNING, logger="fmlib.metrics.utils.group_average_wrap"
     ):
         result = wrapper.compute()
 

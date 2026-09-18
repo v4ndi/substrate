@@ -17,7 +17,7 @@ python -m pip install -e ".[dev]"
 | extra | что тянет | когда нужен |
 |---|---|---|
 | `spark` | `pyspark==3.5.0` | Spark-бэкенд предобработки; нужен JDK 8/11/17 |
-| `catboost` | `catboost` | CatBoost-бенчмарк в `avatar.metrics.campaign` |
+| `catboost` | `catboost` | CatBoost-бенчмарк в `fmlib.metrics.campaign` |
 | `dev` | `pytest`, `ruff`, `pre-commit` | тесты и линтер |
 
 Проверка, что всё встало:
@@ -38,8 +38,8 @@ Spark-тесты сами пропускаются, если подходяще�
 * `num_features` — `list<float32>`, стандартизованные числовые признаки.
 
 Есть два взаимозаменяемых бэкенда с одинаковым API:
-`avatar.preprocessing.local` (pyarrow + numpy, одна машина, потоковая обработка)
-и `avatar.preprocessing.spark` (PySpark, кластер). Артефакты `dump()`/`load()`
+`fmlib.preprocessing.local` (pyarrow + numpy, одна машина, потоковая обработка)
+и `fmlib.preprocessing.spark` (PySpark, кластер). Артефакты `dump()`/`load()`
 переносятся между ними в обе стороны.
 
 Запустить на синтетических данных прямо сейчас:
@@ -56,7 +56,7 @@ python examples/tabular_preprocessing/run_both_backends.py
 
 ```python
 import yaml
-from avatar.preprocessing.local import TabularPreprocessor
+from fmlib.preprocessing.local import TabularPreprocessor
 
 pp = TabularPreprocessor(
     categorical_columns=cat_cols,
@@ -77,7 +77,7 @@ yaml.safe_dump(pp.dump(), open("artifacts/preprocessor.yaml", "w"))
 ровно тот же `transform`.
 
 Для событийных последовательностей есть
-`avatar.preprocessing.local.EventSequencePreprocessor` и пример
+`fmlib.preprocessing.local.EventSequencePreprocessor` и пример
 `examples/eventsequence_preprocessing/`.
 
 ## 3. Обучение
@@ -98,7 +98,7 @@ amp: no
 train_dataloader:
   _target_: torch.utils.data.DataLoader
   dataset:
-    _target_: avatar.data.TabularDataset
+    _target_: fmlib.data.TabularDataset
     path: /data/train_processed
     shuffle_files: True
     shuffle_pq: True
@@ -107,13 +107,13 @@ train_dataloader:
   drop_last: False
   pin_memory: True
   collate_fn:
-    _target_: avatar.data.TabularCollateFn
+    _target_: fmlib.data.TabularCollateFn
     target_column: target
 
 valid_dataloader:
   _target_: torch.utils.data.DataLoader
   dataset:
-    _target_: avatar.data.TabularDataset
+    _target_: fmlib.data.TabularDataset
     path: /data/valid_processed
     shuffle_files: False
     shuffle_pq: False
@@ -122,18 +122,18 @@ valid_dataloader:
   drop_last: False
   pin_memory: True
   collate_fn:
-    _target_: avatar.data.TabularCollateFn
+    _target_: fmlib.data.TabularCollateFn
     target_column: target
 
 model:
-  _target_: avatar.pipeline.tabular.SupervisedLearner
+  _target_: fmlib.pipeline.tabular.SupervisedLearner
   embedding:
-    _target_: avatar.nn.embedding.TabularEmbedding
+    _target_: fmlib.nn.embedding.TabularEmbedding
     num_numerical_features: 24    # сколько числовых признаков после препроцессинга
     vocab_size: 74                # pp.vocab_size
     hidden_size: 64
   tabular_encoder:
-    _target_: avatar.nn.tabular.TabularTransformer
+    _target_: fmlib.nn.tabular.TabularTransformer
     hidden_size: 64
     num_heads: 4
     num_layers: 3
@@ -161,7 +161,7 @@ train:
   seed: 42
   max_saved_checkpoints: 5
   early_stopping:
-    _target_: avatar.train.EarlyStopping
+    _target_: fmlib.train.EarlyStopping
     # Имя целиком, как метрика его выдаёт: ROC AUC считается по группам, а
     # сводное число называется mean_roc_auc_score.
     main_metric: mean_roc_auc_score
@@ -174,7 +174,7 @@ mlflow:
 
 metrics:
   valid_metrics:
-    _target_: avatar.metrics.ResponseMetrics
+    _target_: fmlib.metrics.ResponseMetrics
 ```
 
 Три числа, которые чаще всего ставят неправильно, берутся из препроцессора:
@@ -187,17 +187,17 @@ metrics:
 
 ```bash
 # одна карта
-python -m avatar.train --config-dir=configs --config-name=my_run
+python -m fmlib.train --config-dir=configs --config-name=my_run
 
 # все карты машины
-torchrun --standalone --nproc_per_node=8 -m avatar.train \
+torchrun --standalone --nproc_per_node=8 -m fmlib.train \
     --config-dir=configs --config-name=my_run
 ```
 
 Любой ключ переопределяется из командной строки — удобно для быстрой проверки:
 
 ```bash
-python -m avatar.train --config-dir=configs --config-name=my_run train.num_epochs=1
+python -m fmlib.train --config-dir=configs --config-name=my_run train.num_epochs=1
 ```
 
 ### Куда всё складывается
@@ -221,14 +221,14 @@ model:
   ...                    # ровно тот же блок, что при обучении
 metrics:
   test_metrics:
-    _target_: avatar.metrics.InferenceSupervisedMetrics
+    _target_: fmlib.metrics.InferenceSupervisedMetrics
     path_to_save: predicts/my_run
     save_steps: 100
     task_type: binary_clf
 ```
 
 ```bash
-python -m avatar.inference --config-dir=configs --config-name=inference
+python -m fmlib.inference --config-dir=configs --config-name=inference
 ```
 
 Блок `model:` должен совпадать с обучающим до последнего аргумента — иначе

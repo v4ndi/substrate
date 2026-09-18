@@ -4,7 +4,7 @@ Usage: run_training.py <tag> [hydra overrides...]
 
 The tag names the config in ``configs/`` and decides the worktree: ``*_base_*``
 runs on 7c96504 (before the refactor), ``*_new_*`` on
-``refactor/data-sharding-hdfs``. The runner checks that ``avatar`` really
+``refactor/data-sharding-hdfs``. The runner checks that ``fmlib`` really
 resolves inside that worktree before starting — the machine has an editable
 install pointing at an unrelated checkout, and a silent fallback to it would
 invalidate the whole comparison.
@@ -41,15 +41,15 @@ def main() -> None:
     worktree = worktree_for(tag)
 
     probe = subprocess.run(
-        [PYTHON, "-c", "import avatar, sys; print(avatar.__file__)"],
+        [PYTHON, "-c", "import fmlib, sys; print(fmlib.__file__)"],
         cwd=worktree,
         capture_output=True,
         text=True,
     )
     resolved = probe.stdout.strip()
     if not resolved.startswith(str(worktree)):
-        raise SystemExit(f"avatar resolves to {resolved!r}, not to {worktree}")
-    print(f"[{tag}] avatar: {resolved}")
+        raise SystemExit(f"fmlib resolves to {resolved!r}, not to {worktree}")
+    print(f"[{tag}] fmlib: {resolved}")
 
     work = ROOT / "work" / tag
     work.mkdir(parents=True, exist_ok=True)
@@ -82,7 +82,7 @@ def main() -> None:
 
     started = time.time()
     with log_path.open("w") as handle:
-        handle.write(f"# cwd={worktree}\n# avatar={resolved}\n# cmd={' '.join(argv)}\n")
+        handle.write(f"# cwd={worktree}\n# fmlib={resolved}\n# cmd={' '.join(argv)}\n")
         handle.flush()
         code = subprocess.call(
             argv, cwd=worktree, env=env, stdout=handle, stderr=subprocess.STDOUT
@@ -92,7 +92,7 @@ def main() -> None:
     record = {
         "tag": tag,
         "revision_dir": str(worktree),
-        "avatar": resolved,
+        "fmlib": resolved,
         "overrides": overrides,
         "exit_code": code,
         "seconds": round(elapsed, 1),

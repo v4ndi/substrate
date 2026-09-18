@@ -17,8 +17,8 @@ import os
 import torch
 import torch.distributed as dist
 
-from avatar.data.sequential import EventSequenceCollateFn, EventSequenceDataset
-from avatar.data.tabular import TabularCollateFn, TabularDataset
+from fmlib.data.sequential import EventSequenceCollateFn, EventSequenceDataset
+from fmlib.data.tabular import TabularCollateFn, TabularDataset
 
 SEQUENCE_COLUMNS = ["mcc", "price"]
 

@@ -4,8 +4,8 @@ import numpy as np
 import polars as pl
 import pytest
 
-from avatar.automl.backends.boosting import resolve_default_search_space, suggest_params
-from avatar.automl.data import FeatureSchema
+from fmlib.automl.backends.boosting import resolve_default_search_space, suggest_params
+from fmlib.automl.data import FeatureSchema
 
 
 class RecordingTrial:

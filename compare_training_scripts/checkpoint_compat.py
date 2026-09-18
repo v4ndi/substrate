@@ -20,9 +20,9 @@ import yaml  # noqa: E402
 from hydra.utils import instantiate  # noqa: E402
 from omegaconf import OmegaConf  # noqa: E402
 
-import avatar  # noqa: E402
+import fmlib  # noqa: E402
 
-assert avatar.__file__.startswith(os.getcwd())
+assert fmlib.__file__.startswith(os.getcwd())
 
 config_path, checkpoint_path = sys.argv[1], sys.argv[2]
 config = OmegaConf.create(yaml.safe_load(pathlib.Path(config_path).read_text()))
@@ -33,7 +33,7 @@ state = payload.get("model", payload) if isinstance(payload, dict) else payload
 if hasattr(state, "state_dict"):
     state = state.state_dict()
 
-print(f"avatar:     {avatar.__file__}")
+print(f"fmlib:     {fmlib.__file__}")
 print(f"checkpoint: {checkpoint_path}")
 print(f"tensors in checkpoint: {len(state)}")
 

@@ -11,7 +11,7 @@ from dataclasses import dataclass
 
 import torch
 
-from avatar.metrics import MultiLossMetric, UniversalLossesMetric
+from fmlib.metrics import MultiLossMetric, UniversalLossesMetric
 
 
 @dataclass

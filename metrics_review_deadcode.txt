@@ -10,39 +10,39 @@
 
 1. НИ ОДНОЙ ССЫЛКИ НИГДЕ — кандидаты на удаление
 ------------------------------------------------------------------------------
-  avatar/losses/multi_task.py:252                    MultiTaskLoss
+  fmlib/losses/multi_task.py:252                    MultiTaskLoss
 
 2. ИСПОЛЬЗУЕТСЯ ТОЛЬКО ВНУТРИ СВОЕГО ФАЙЛА — сделать приватным или экспортировать
 ------------------------------------------------------------------------------
-  avatar/losses/multi_task.py:127                    PCGradBalancer  (1 использований в файле)
-  avatar/losses/multi_task.py:35                     UncertainlyLossBalancer  (1 использований в файле)
-  avatar/losses/multi_task.py:9                      WeightLossBalancer  (1 использований в файле)
-  avatar/train/dist.py:28                            object_group  (2 использований в файле)
+  fmlib/losses/multi_task.py:127                    PCGradBalancer  (1 использований в файле)
+  fmlib/losses/multi_task.py:35                     UncertainlyLossBalancer  (1 использований в файле)
+  fmlib/losses/multi_task.py:9                      WeightLossBalancer  (1 использований в файле)
+  fmlib/train/dist.py:28                            object_group  (2 использований в файле)
 
-3. КЛАССЫ avatar.metrics ПО ИСТОЧНИКУ ССЫЛОК
+3. КЛАССЫ fmlib.metrics ПО ИСТОЧНИКУ ССЫЛОК
 ------------------------------------------------------------------------------
    config       — experiments/ или examples/ (рабочие конфиги)
    example-code — питон в examples/
-   lib          — код avatar/ вне avatar/metrics/
+   lib          — код fmlib/ вне fmlib/metrics/
    docs, test   — документация и тесты
 
-  DEAD  ArtifactMetric                     avatar/metrics/base.py:113                        docs:2, other:1
-  LIVE  BaseMetric                         avatar/metrics/base.py:33                         docs:3, example-code:1, lib:5, other:2
-  LIVE  CollectEmbeddings                  avatar/metrics/campaign.py:16                     config:2, docs:4, example-code:1, other:2
-  LIVE  GroupAverageMetricWrapper          avatar/metrics/utils/group_average_wrap.py:9      config:21, docs:4, other:3
-  DEAD  GroupDevidedMetricsWrapper         avatar/metrics/utils/group_devided_wrap.py:11     docs:3, other:3
-  LIVE  InferenceMultiTaskCampaignMetrics  avatar/metrics/campaign.py:101                    config:23, docs:4, other:2
-  DEAD  InferenceSupervisedMetrics         avatar/metrics/supervised.py:440                  docs:5, other:2
-  LIVE  MultiLossMetric                    avatar/metrics/multi_loss.py:13                   config:1, docs:5, example-code:2, other:2
-  DEAD  RegressionMetrics                  avatar/metrics/supervised.py:272                  docs:3, other:3
-  DEAD  ResponseMetrics                    avatar/metrics/supervised.py:86                   docs:5, other:2
-  DEAD  ScalarMetric                       avatar/metrics/base.py:104                        docs:2, other:2
-  LIVE  UniversalLossesMetric              avatar/metrics/loss_logging.py:9                  docs:4, example-code:1, other:2
-  LIVE  UpliftMetrics                      avatar/metrics/uplift.py:139                      config:23, docs:4, example-code:1, other:2
+  DEAD  ArtifactMetric                     fmlib/metrics/base.py:113                        docs:2, other:1
+  LIVE  BaseMetric                         fmlib/metrics/base.py:33                         docs:3, example-code:1, lib:5, other:2
+  LIVE  CollectEmbeddings                  fmlib/metrics/campaign.py:16                     config:2, docs:4, example-code:1, other:2
+  LIVE  GroupAverageMetricWrapper          fmlib/metrics/utils/group_average_wrap.py:9      config:21, docs:4, other:3
+  DEAD  GroupDevidedMetricsWrapper         fmlib/metrics/utils/group_devided_wrap.py:11     docs:3, other:3
+  LIVE  InferenceMultiTaskCampaignMetrics  fmlib/metrics/campaign.py:101                    config:23, docs:4, other:2
+  DEAD  InferenceSupervisedMetrics         fmlib/metrics/supervised.py:440                  docs:5, other:2
+  LIVE  MultiLossMetric                    fmlib/metrics/multi_loss.py:13                   config:1, docs:5, example-code:2, other:2
+  DEAD  RegressionMetrics                  fmlib/metrics/supervised.py:272                  docs:3, other:3
+  DEAD  ResponseMetrics                    fmlib/metrics/supervised.py:86                   docs:5, other:2
+  DEAD  ScalarMetric                       fmlib/metrics/base.py:104                        docs:2, other:2
+  LIVE  UniversalLossesMetric              fmlib/metrics/loss_logging.py:9                  docs:4, example-code:1, other:2
+  LIVE  UpliftMetrics                      fmlib/metrics/uplift.py:139                      config:23, docs:4, example-code:1, other:2
 
 4. compute() БЕЗ ВОЗВРАЩАЕМОГО ЗНАЧЕНИЯ (падение на scores.update(None))
 ------------------------------------------------------------------------------
-  avatar/metrics/base.py:81     BaseMetric.compute
+  fmlib/metrics/base.py:81     BaseMetric.compute
 
 5. МОДУЛИ, ИМЯ КОТОРЫХ НЕ ВСТРЕЧАЕТСЯ БОЛЬШЕ НИГДЕ
 ------------------------------------------------------------------------------

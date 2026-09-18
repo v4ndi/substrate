@@ -24,10 +24,10 @@ compile: null                      # null | inductor | ...
 
 ```bash
 # один процесс, без лаунчера
-python -m avatar.train --config-dir=configs --config-name=my_run
+python -m fmlib.train --config-dir=configs --config-name=my_run
 
 # все GPU одной машины
-torchrun --standalone --nproc_per_node=8 -m avatar.train \
+torchrun --standalone --nproc_per_node=8 -m fmlib.train \
     --config-dir=configs --config-name=my_run
 ```
 
@@ -35,7 +35,7 @@ torchrun --standalone --nproc_per_node=8 -m avatar.train \
 поэтому размер мира равен 1, группа процессов не создаётся, а модель не
 оборачивается в DDP. Один и тот же конфиг работает и там, и там.
 
-Инференс запускается так же — `python -m avatar.inference` или под `torchrun`.
+Инференс запускается так же — `python -m fmlib.inference` или под `torchrun`.
 
 ### Несколько узлов
 
@@ -45,7 +45,7 @@ torchrun --standalone --nproc_per_node=8 -m avatar.train \
 torchrun \
     --nnodes=2 --node_rank=0 --nproc_per_node=8 \
     --rdzv_backend=c10d --rdzv_endpoint=head-node:29500 \
-    -m avatar.train --config-dir=configs --config-name=my_run
+    -m fmlib.train --config-dir=configs --config-name=my_run
 ```
 
 На втором узле — то же самое с `--node_rank=1`. `RANK`, `LOCAL_RANK` и
@@ -171,7 +171,7 @@ parquet» — **не делает ни одной коллективной оп�
 ```yaml
 test_dataloader:
   dataset:
-    _target_: avatar.data.TabularDataset
+    _target_: fmlib.data.TabularDataset
     drop_tail: false   # инференс сохраняет хвост
 ```
 
@@ -212,7 +212,7 @@ drop_tail=True, which drops the remainder that does not divide by world_size=2.
   каждый ранг берёт своё `datetime.now()`, а часы узлов расходятся. На
   корректность это не влияет — уникальность даёт ранг, — и ничто в репозитории
   не ищет файлы по метке: чтение всегда идёт по директории целиком
-  (`avatar/preprocessing/base/io.py`).
+  (`fmlib/preprocessing/base/io.py`).
 * **Коллективные операции в режиме `local` отсутствуют**, кроме одного барьера
   в конце. В режиме `gather` на каждом шаге добавляется одно `all_reduce`
   размером в скаляр — рядом с пересылкой самих предсказаний это незаметно.

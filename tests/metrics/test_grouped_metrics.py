@@ -13,7 +13,7 @@ import numpy as np
 import pytest
 import torch
 
-from avatar.metrics import RegressionMetrics, ResponseMetrics, UpliftMetrics
+from fmlib.metrics import RegressionMetrics, ResponseMetrics, UpliftMetrics
 
 
 def supervised_batch(targets, logits, group, split_type):
@@ -301,7 +301,7 @@ def test_a_metric_that_cannot_be_computed_is_not_reported(caplog):
             split_type=["calib"] * 4,
         )
     )
-    with caplog.at_level(logging.WARNING, logger="avatar.metrics.grouped"):
+    with caplog.at_level(logging.WARNING, logger="fmlib.metrics.grouped"):
         scores = metric.compute()
 
     assert "calib_group_0_roc_auc_score" in scores

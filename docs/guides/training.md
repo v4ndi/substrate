@@ -1,6 +1,6 @@
 # Цикл обучения
 
-Обучение выполняет `avatar.train.Trainer`. Всё, что не является форвардом,
+Обучение выполняет `fmlib.train.Trainer`. Всё, что не является форвардом,
 бэквардом, шагом оптимизатора, границей накопления, AMP, `no_sync` у DDP, шагом
 планировщика и переносом батча на устройство, вынесено в колбэки — см.
 [callbacks.md](callbacks.md).
@@ -143,8 +143,8 @@ train:
 Из Python цикл собирается без Hydra:
 
 ```python
-from avatar.train import Trainer, DistEnv, RunConfig
-from avatar.training_arguments import TrainingArguments
+from fmlib.train import Trainer, DistEnv, RunConfig
+from fmlib.training_arguments import TrainingArguments
 
 trainer = Trainer(
     model=model,

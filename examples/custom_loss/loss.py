@@ -1,20 +1,20 @@
-"""A worked example of a custom :class:`~avatar.losses.Loss`.
+"""A worked example of a custom :class:`~fmlib.losses.Loss`.
 
 Focal loss for imbalanced binary classification: down-weights examples the
 model already gets right, so the gradient keeps coming from the hard ones.
 
 What it demonstrates is the contract — returning a
-:class:`~avatar.outputs.LossOutput` — and the one thing that is *not* part of
+:class:`~fmlib.outputs.LossOutput` — and the one thing that is *not* part of
 it: the argument list. That is the pipeline's business, so a replacement loss
 must accept what the pipeline it plugs into passes. Here that is
 ``(logits, targets, model=None)``, matching
-:class:`~avatar.losses.ClassificationLoss`, which is what
-:class:`~avatar.pipeline.tabular.SupervisedLearner` calls.
+:class:`~fmlib.losses.ClassificationLoss`, which is what
+:class:`~fmlib.pipeline.tabular.SupervisedLearner` calls.
 
 Inject it from a config::
 
     model:
-      _target_: avatar.pipeline.tabular.SupervisedLearner
+      _target_: fmlib.pipeline.tabular.SupervisedLearner
       num_classes: 2
       loss:
         _target_: examples.custom_loss.loss.FocalLoss
@@ -26,7 +26,7 @@ from __future__ import annotations
 import torch
 import torch.nn as nn
 
-from avatar.losses import Loss, LossOutput
+from fmlib.losses import Loss, LossOutput
 
 
 class FocalLoss(Loss):
@@ -39,7 +39,7 @@ class FocalLoss(Loss):
             cross-entropy.
 
     Returns:
-        :class:`~avatar.outputs.LossOutput` whose ``loss`` is the focal term
+        :class:`~fmlib.outputs.LossOutput` whose ``loss`` is the focal term
         and whose ``components`` carry the unweighted cross-entropy, so both
         are visible in the logs and it is obvious what the focusing did.
     """

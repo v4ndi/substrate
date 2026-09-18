@@ -1,4 +1,4 @@
-# Документация avatar
+# Документация fmlib
 
 Навигация по документации репозитория. Всё, что не является кодом и примерами,
 лежит здесь.
@@ -77,19 +77,19 @@
 
 | документ | о чём |
 |---|---|
-| [decisions/data_redesign.md](decisions/data_redesign.md) | переработка `avatar/data`: шардирование по записям, HDFS, кэш фильтров |
+| [decisions/data_redesign.md](decisions/data_redesign.md) | переработка `fmlib/data`: шардирование по записям, HDFS, кэш фильтров |
 | [decisions/train_redesign.md](decisions/train_redesign.md) | отказ от `accelerate`, колбэки, вынесение лосса в отдельный модуль |
-| [decisions/tabular_refactor.md](decisions/tabular_refactor.md) | раскладка `avatar/nn/tabular`, `STEv2` → `TabularTransformer` |
-| [decisions/sequential_refactor.md](decisions/sequential_refactor.md) | раскладка `avatar/nn/sequential` |
+| [decisions/tabular_refactor.md](decisions/tabular_refactor.md) | раскладка `fmlib/nn/tabular`, `STEv2` → `TabularTransformer` |
+| [decisions/sequential_refactor.md](decisions/sequential_refactor.md) | раскладка `fmlib/nn/sequential` |
 | [decisions/documentation.md](decisions/documentation.md) | план документирования репозитория (этот раздел — его результат) |
-| [decisions/maintenance.md](decisions/maintenance.md) | чистка репозитория и рефакторинг `avatar/nn/embedding` |
+| [decisions/maintenance.md](decisions/maintenance.md) | чистка репозитория и рефакторинг `fmlib/nn/embedding` |
 
 ## Как документация не протухает
 
 В `tests/docs/` лежат три проверки, которые запускаются вместе с обычными
 тестами:
 
-* `tests/docs/test_doc_references.py` — каждое имя вида `avatar.*`, упомянутое
+* `tests/docs/test_doc_references.py` — каждое имя вида `fmlib.*`, упомянутое
   в markdown, должно импортироваться;
 * `tests/docs/test_config_targets.py` — каждый `_target_` в каждом YAML должен
   разрешаться в существующий класс;

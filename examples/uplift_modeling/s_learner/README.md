@@ -17,7 +17,7 @@ ddp:
 train_dataloader:
   _target_: torch.utils.data.DataLoader
   dataset:
-    _target_: avatar.data.TabularDataset
+    _target_: fmlib.data.TabularDataset
     path: /home/datalab/nfs/avatar_fm/examples/uplift_modeling/s_learner/data/s_learner/train
     shuffle_files: True
     shuffle_pq: True
@@ -27,14 +27,14 @@ train_dataloader:
   drop_last: False
   num_workers: 8
   collate_fn:
-    _target_: avatar.data.UpliftCollateFn
+    _target_: fmlib.data.UpliftCollateFn
     target_column: target_attr_1 # назване колонки факта конверсии
     treatment_column: target_attr_3 # название колонки флага контролько целевой группы (1 - ЦГ, 0 - КГ)
     inverse_treatment: True # если True то в treatment_column 0 заменяется на 1  и наоборот (В данном наборе данных 1 - КГ, 0 - ЦГ, поэтому необходимо сделать 1 - treatment_column)
 valid_dataloader:
   _target_: torch.utils.data.DataLoader
   dataset:
-    _target_: avatar.data.TabularDataset
+    _target_: fmlib.data.TabularDataset
     path: /home/datalab/nfs/avatar_fm/examples/uplift_modeling/s_learner/data/s_learner/valid
     shuffle_files: False
     shuffle_pq: False
@@ -44,20 +44,20 @@ valid_dataloader:
   drop_last: False
   num_workers: 8
   collate_fn:
-    _target_: avatar.data.UpliftCollateFn
+    _target_: fmlib.data.UpliftCollateFn
     target_column: target_attr_1 # назване колонки факта конверсии
     treatment_column: target_attr_3 # название колонки флага контролько целевой группы (1 - ЦГ, 0 - КГ)
     inverse_treatment: True # если True то в treatment_column 0 заменяется на 1  и наоборот (В данном наборе данных 1 - КГ, 0 - ЦГ, поэтому необходимо сделать 1 - treatment_column)
 model:
-  _target_: avatar.pipeline.tabular.SLearner
+  _target_: fmlib.pipeline.tabular.SLearner
   embedding:
-    _target_: avatar.nn.embedding.TabularEmbedding
+    _target_: fmlib.nn.embedding.TabularEmbedding
     num_numerical_features: 189
     hidden_size: 64
     vocab_size: 172
     std_noise: null
   tabular_encoder:
-    _target_: avatar.nn.tabular.TabularTransformer
+    _target_: fmlib.nn.tabular.TabularTransformer
     hidden_size: ${model.embedding.hidden_size}
     num_heads: 4
     num_layers: 3
@@ -95,7 +95,7 @@ train:
   early_stopping: null
 metrics:
   valid_metrics:
-    _target_: avatar.metrics.UpliftMetrics
+    _target_: fmlib.metrics.UpliftMetrics
     require_calibration: True
 ```
 
@@ -109,11 +109,11 @@ metrics:
 
 ## Запуск обучения
 ```bash
-torchrun --standalone --nproc_per_node=1 -m avatar.train --config-dir=configs --config-name=train
+torchrun --standalone --nproc_per_node=1 -m fmlib.train --config-dir=configs --config-name=train
 ```
 
 ## Запуск инференса
 ```bash
-python -m avatar.inference --config-dir=configs --config-name=inference
+python -m fmlib.inference --config-dir=configs --config-name=inference
 ```
 Результаты инференса можно найти в директории `predict`.

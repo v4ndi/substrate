@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from omegaconf import OmegaConf
 
-from avatar.train.config import DDPConfig, RunConfig, resolve_run_config
+from fmlib.train.config import DDPConfig, RunConfig, resolve_run_config
 
 LEGACY_WITH_DDP = {
     "accelerator": {

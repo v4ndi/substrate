@@ -12,7 +12,7 @@ ddp:
 train_dataloader:
   _target_: torch.utils.data.DataLoader
   dataset:
-    _target_: avatar.data.TabularDataset
+    _target_: fmlib.data.TabularDataset
     path: examples/tabular_tasks/data/response_smoke/train
     shuffle_files: True
     shuffle_pq: True
@@ -21,7 +21,7 @@ train_dataloader:
   drop_last: False
   num_workers: 2
   collate_fn:
-    _target_: avatar.data.SupervisedCollateFn
+    _target_: fmlib.data.SupervisedCollateFn
     target_column: target
     # The metrics read `group` as a tensor; `split_type` and `epk_id` travel as
     # they are. A column named anything else never reaches them.
@@ -31,7 +31,7 @@ train_dataloader:
 valid_dataloader:
   _target_: torch.utils.data.DataLoader
   dataset:
-    _target_: avatar.data.TabularDataset
+    _target_: fmlib.data.TabularDataset
     path: examples/tabular_tasks/data/response_smoke/valid
     shuffle_files: False
     shuffle_pq: False
@@ -40,20 +40,20 @@ valid_dataloader:
   drop_last: False
   num_workers: 2
   collate_fn:
-    _target_: avatar.data.SupervisedCollateFn
+    _target_: fmlib.data.SupervisedCollateFn
     target_column: target
     add_extra_columns:
       group: group
 
 model:
-  _target_: avatar.pipeline.tabular.SupervisedLearner
+  _target_: fmlib.pipeline.tabular.SupervisedLearner
   embedding:
-    _target_: avatar.nn.embedding.TabularEmbedding
+    _target_: fmlib.nn.embedding.TabularEmbedding
     num_numerical_features: 2
     hidden_size: 64
     vocab_size: 26
   tabular_encoder:
-    _target_: avatar.nn.tabular.TabularTransformer
+    _target_: fmlib.nn.tabular.TabularTransformer
     hidden_size: ${model.embedding.hidden_size}
     num_heads: 4
     num_layers: 2
@@ -90,12 +90,12 @@ train:
   num_epochs: 10
   max_saved_checkpoints: 2
   early_stopping:
-    _target_: avatar.train.EarlyStopping
+    _target_: fmlib.train.EarlyStopping
     main_metric: mean_roc_auc_score
     patience: 3
     strategy: max
 
 metrics:
   valid_metrics:
-    _target_: avatar.metrics.ResponseMetrics
+    _target_: fmlib.metrics.ResponseMetrics
     main_metric: roc_auc_score

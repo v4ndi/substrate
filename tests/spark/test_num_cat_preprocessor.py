@@ -4,8 +4,8 @@ import numpy as np
 import pytest
 from pyspark.sql import functions as F
 
-from avatar.preprocessing.spark import LabelEncoder, StandardScaler
-from avatar.preprocessing.spark.pipeline.base_pipe import NumCatPipeline
+from fmlib.preprocessing.spark import LabelEncoder, StandardScaler
+from fmlib.preprocessing.spark.pipeline.base_pipe import NumCatPipeline
 
 
 @pytest.fixture

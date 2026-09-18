@@ -12,9 +12,9 @@ import types
 import pandas as pd
 import pytest
 
-from avatar.metrics.base import ArtifactMetric, ScalarMetric
-from avatar.train.dist import DistEnv
-from avatar.train.evaluate import metrics_need_population, warn_about_dropped_tail
+from fmlib.metrics.base import ArtifactMetric, ScalarMetric
+from fmlib.train.dist import DistEnv
+from fmlib.train.evaluate import metrics_need_population, warn_about_dropped_tail
 
 
 class Numbers(ScalarMetric):

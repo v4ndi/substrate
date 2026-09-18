@@ -7,7 +7,7 @@ import pyarrow.parquet as pq
 import pytest
 import torch
 
-from avatar.data.tabular import (
+from fmlib.data.tabular import (
     SupervisedCollateFn,
     TabularCollateFn,
     UpliftCollateFn,

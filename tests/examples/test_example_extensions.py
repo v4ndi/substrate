@@ -3,7 +3,7 @@
 They are documentation that happens to be executable, and they are the only
 worked examples of the two extension points. Both are exercised here through
 the same route a user takes — Hydra ``_target_`` instantiation — so a rename in
-``avatar.train`` or ``avatar.losses`` breaks this test rather than the reader.
+``fmlib.train`` or ``fmlib.losses`` breaks this test rather than the reader.
 """
 
 from __future__ import annotations
@@ -11,8 +11,8 @@ from __future__ import annotations
 import torch
 from hydra.utils import instantiate
 
-from avatar.train import DistEnv, RunConfig
-from avatar.train.state import CallbackContext, TrainerControl, TrainerState
+from fmlib.train import DistEnv, RunConfig
+from fmlib.train.state import CallbackContext, TrainerControl, TrainerState
 
 CALLBACK_TARGET = "examples.custom_callback.callback.GradientNormAlarm"
 LOSS_TARGET = "examples.custom_loss.loss.FocalLoss"

@@ -1,7 +1,7 @@
 import pytest
 
-from avatar.automl import RegressionTaskConfig
-from avatar.automl.exceptions import ConfigError
+from fmlib.automl import RegressionTaskConfig
+from fmlib.automl.exceptions import ConfigError
 
 
 def _config(**overrides):

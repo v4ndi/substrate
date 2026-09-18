@@ -2,15 +2,15 @@ import inspect
 
 import pytest
 
-from avatar.automl.backends.boosting import (
+from fmlib.automl.backends.boosting import (
     BinaryBoostingBackend,
     MulticlassBoostingBackend,
     RegressionBoostingBackend,
     UpliftBoostingBackend,
 )
-from avatar.automl.backends.boosting.base import BaseBoostingBackend
-from avatar.automl.backends.boosting.interface import BoostingBackend
-from avatar.automl.exceptions import ConfigError
+from fmlib.automl.backends.boosting.base import BaseBoostingBackend
+from fmlib.automl.backends.boosting.interface import BoostingBackend
+from fmlib.automl.exceptions import ConfigError
 
 
 def test_boosting_backends_are_independent_siblings():

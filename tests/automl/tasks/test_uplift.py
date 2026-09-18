@@ -8,18 +8,18 @@ import numpy as np
 import polars as pl
 import pytest
 
-from avatar.automl import (
+from fmlib.automl import (
     BinaryTask,
     MulticlassTask,
     RegressionTask,
     UpliftTask,
     UpliftTaskConfig,
 )
-from avatar.automl.backends.boosting.binary import BinaryBoostingBackend
-from avatar.automl.backends.boosting.regression import RegressionBoostingBackend
-from avatar.automl.backends.boosting.uplift import UpliftBoostingBackend
-from avatar.automl.exceptions import ConfigError, SchemaError
-from avatar.automl.metrics import qini_auc_score, uplift_at_k, uplift_auc_score
+from fmlib.automl.backends.boosting.binary import BinaryBoostingBackend
+from fmlib.automl.backends.boosting.regression import RegressionBoostingBackend
+from fmlib.automl.backends.boosting.uplift import UpliftBoostingBackend
+from fmlib.automl.exceptions import ConfigError, SchemaError
+from fmlib.automl.metrics import qini_auc_score, uplift_at_k, uplift_auc_score
 
 
 def test_uplift_task_and_backend_are_independent_siblings() -> None:

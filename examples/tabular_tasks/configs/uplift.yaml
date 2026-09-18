@@ -12,7 +12,7 @@ ddp:
 train_dataloader:
   _target_: torch.utils.data.DataLoader
   dataset:
-    _target_: avatar.data.TabularDataset
+    _target_: fmlib.data.TabularDataset
     path: examples/tabular_tasks/data/uplift_smoke/train
     shuffle_files: True
     shuffle_pq: True
@@ -21,7 +21,7 @@ train_dataloader:
   drop_last: False
   num_workers: 2
   collate_fn:
-    _target_: avatar.data.UpliftCollateFn
+    _target_: fmlib.data.UpliftCollateFn
     target_column: target
     treatment_column: treatment # 1 = control in the data, hence inverse_treatment
     group_column: group
@@ -30,7 +30,7 @@ train_dataloader:
 valid_dataloader:
   _target_: torch.utils.data.DataLoader
   dataset:
-    _target_: avatar.data.TabularDataset
+    _target_: fmlib.data.TabularDataset
     path: examples/tabular_tasks/data/uplift_smoke/valid
     shuffle_files: False
     shuffle_pq: False
@@ -39,21 +39,21 @@ valid_dataloader:
   drop_last: False
   num_workers: 2
   collate_fn:
-    _target_: avatar.data.UpliftCollateFn
+    _target_: fmlib.data.UpliftCollateFn
     target_column: target
     treatment_column: treatment
     group_column: group
     inverse_treatment: True
 
 model:
-  _target_: avatar.pipeline.tabular.SLearner
+  _target_: fmlib.pipeline.tabular.SLearner
   embedding:
-    _target_: avatar.nn.embedding.TabularEmbedding
+    _target_: fmlib.nn.embedding.TabularEmbedding
     num_numerical_features: 2
     hidden_size: 64
     vocab_size: 26
   tabular_encoder:
-    _target_: avatar.nn.tabular.TabularTransformer
+    _target_: fmlib.nn.tabular.TabularTransformer
     hidden_size: ${model.embedding.hidden_size}
     num_heads: 4
     num_layers: 2
@@ -89,7 +89,7 @@ train:
   num_epochs: 10
   max_saved_checkpoints: 2
   early_stopping:
-    _target_: avatar.train.EarlyStopping
+    _target_: fmlib.train.EarlyStopping
     # Calibrated numbers exist only because the valid set carries split_type;
     # they are reported on the held-out half alone.
     main_metric: mean_calibrated_qini_auc_score
@@ -98,5 +98,5 @@ train:
 
 metrics:
   valid_metrics:
-    _target_: avatar.metrics.UpliftMetrics
+    _target_: fmlib.metrics.UpliftMetrics
     require_calibration: true

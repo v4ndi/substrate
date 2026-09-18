@@ -1,4 +1,4 @@
-# Справочник: `avatar.metrics`
+# Справочник: `fmlib.metrics`
 
 Каталог метрик. Контракт и то, как они композируются, — в
 [../guides/metrics.md](../guides/metrics.md).
@@ -155,8 +155,8 @@ multi_class="ovr")`. Главная метрика по умолчанию — `
 
 Uplift- и supervised-метрики устроены одинаково: накопить колонки по батчам,
 слить их, разрезать по `group` и `split_type`, назвать числа. Этот скелет
-вынесен в `avatar.metrics.grouped.GroupedPredictionMetric`; наследник
+вынесен в `fmlib.metrics.grouped.GroupedPredictionMetric`; наследник
 реализует только `collect` (что оставить от батча) и `score_group` (как
-оценить срез). `avatar.metrics.supervised.SupervisedMetric` — ещё один шаг
+оценить срез). `fmlib.metrics.supervised.SupervisedMetric` — ещё один шаг
 вниз: `ResponseMetrics` и `RegressionMetrics` отличаются от него лишь
 `task_type` и тем, как логит становится предсказанием.

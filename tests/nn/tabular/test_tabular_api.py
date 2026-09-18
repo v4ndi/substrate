@@ -1,4 +1,4 @@
-"""Public API surface of avatar.nn.tabular."""
+"""Public API surface of fmlib.nn.tabular."""
 
 import importlib
 import warnings
@@ -7,7 +7,7 @@ import pytest
 
 
 def test_flat_public_api():
-    import avatar.nn.tabular as tab
+    import fmlib.nn.tabular as tab
 
     for name in [
         "BaseTabularEncoder",
@@ -21,10 +21,10 @@ def test_flat_public_api():
 
 
 def test_subpackage_paths():
-    from avatar.nn.tabular.base.encoder import BaseTabularEncoder
-    from avatar.nn.tabular.base.layers import EncoderBlock, SublayerConnection
-    from avatar.nn.tabular.models.transformer import TabularTransformer
-    from avatar.nn.tabular.utils.masking import build_feature_padding_mask
+    from fmlib.nn.tabular.base.encoder import BaseTabularEncoder
+    from fmlib.nn.tabular.base.layers import EncoderBlock, SublayerConnection
+    from fmlib.nn.tabular.models.transformer import TabularTransformer
+    from fmlib.nn.tabular.utils.masking import build_feature_padding_mask
 
     assert issubclass(TabularTransformer, BaseTabularEncoder)
     assert EncoderBlock is not None and SublayerConnection is not None
@@ -32,7 +32,7 @@ def test_subpackage_paths():
 
 
 def test_removed_symbols_are_gone():
-    import avatar.nn.tabular as tab
+    import fmlib.nn.tabular as tab
 
     for name in [
         "BaseTabularBackbone",
@@ -49,10 +49,10 @@ def test_removed_symbols_are_gone():
 def test_no_deprecation_warning_from_top_level_import():
     with warnings.catch_warnings():
         warnings.simplefilter("error", DeprecationWarning)
-        importlib.reload(importlib.import_module("avatar.nn.tabular"))
+        importlib.reload(importlib.import_module("fmlib.nn.tabular"))
 
 
 def test_deprecation_shim_is_gone():
-    """avatar.nn.tabular.ste was dropped after configs moved to TabularTransformer."""
+    """fmlib.nn.tabular.ste was dropped after configs moved to TabularTransformer."""
     with pytest.raises(ModuleNotFoundError):
-        importlib.import_module("avatar.nn.tabular.ste")
+        importlib.import_module("fmlib.nn.tabular.ste")

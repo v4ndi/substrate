@@ -13,8 +13,8 @@ import pandas as pd
 import pytest
 import torch
 
-from avatar.data.base import ShardPlanner
-from avatar.data.sequential import EventSequenceCollateFn, EventSequenceDataset
+from fmlib.data.base import ShardPlanner
+from fmlib.data.sequential import EventSequenceCollateFn, EventSequenceDataset
 
 SEQUENCE_COLUMNS = ["mcc", "price"]
 

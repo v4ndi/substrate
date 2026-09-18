@@ -6,22 +6,22 @@ import numpy as np
 import polars as pl
 import pytest
 
-from avatar.automl import (
+from fmlib.automl import (
     BinaryTask,
     BinaryTaskConfig,
     PredictionResult,
     ResponseTask,
     ResponseTaskConfig,
 )
-from avatar.automl.backends.boosting import BinaryBoostingBackend, suggest_params
-from avatar.automl.exceptions import (
+from fmlib.automl.backends.boosting import BinaryBoostingBackend, suggest_params
+from fmlib.automl.exceptions import (
     ArtifactError,
     ArtifactIntegrityError,
     ConfigError,
     NotFittedError,
     SchemaError,
 )
-from avatar.automl.metrics import DEFAULT_EVALUATION_METRICS, binary_top_k_metrics
+from fmlib.automl.metrics import DEFAULT_EVALUATION_METRICS, binary_top_k_metrics
 
 
 @pytest.fixture(autouse=True)
@@ -837,7 +837,7 @@ def test_gpu_catboost_logs_cpu_prediction_policy(monkeypatch, caplog):
         raise RuntimeError(msg)
 
     monkeypatch.setattr(
-        "avatar.automl.tasks.training.ParquetSource.resolve", stop_after_policy_log
+        "fmlib.automl.tasks.training.ParquetSource.resolve", stop_after_policy_log
     )
     with (
         caplog.at_level("INFO"),

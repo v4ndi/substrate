@@ -7,8 +7,8 @@ import polars as pl
 import pytest
 from polars.testing import assert_frame_equal
 
-from avatar.automl.result_io import evaluation_from_payload, evaluation_payload
-from avatar.automl.types import EvaluationResult
+from fmlib.automl.result_io import evaluation_from_payload, evaluation_payload
+from fmlib.automl.types import EvaluationResult
 
 
 @pytest.mark.parametrize("empty", [False, True])

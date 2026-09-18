@@ -9,7 +9,7 @@ import polars as pl
 import pytest
 from polars.testing import assert_frame_equal
 
-from avatar.automl import (
+from fmlib.automl import (
     BinaryTask,
     BinaryTaskConfig,
     CalibrationResult,
@@ -22,8 +22,8 @@ from avatar.automl import (
     UpliftTask,
     UpliftTaskConfig,
 )
-from avatar.automl.backends.boosting.uplift import UPLIFT_SCORE_COLUMNS
-from avatar.automl.exceptions import ArtifactIntegrityError, ConfigError, SchemaError
+from fmlib.automl.backends.boosting.uplift import UPLIFT_SCORE_COLUMNS
+from fmlib.automl.exceptions import ArtifactIntegrityError, ConfigError, SchemaError
 
 
 def _base(config_class, tmp_path, **updates):

@@ -21,10 +21,10 @@ import yaml  # noqa: E402
 from hydra.utils import instantiate  # noqa: E402
 from omegaconf import OmegaConf  # noqa: E402
 
-import avatar  # noqa: E402
+import fmlib  # noqa: E402
 
-assert avatar.__file__.startswith(os.getcwd()), (
-    f"avatar came from {avatar.__file__}, not from {os.getcwd()}"
+assert fmlib.__file__.startswith(os.getcwd()), (
+    f"fmlib came from {fmlib.__file__}, not from {os.getcwd()}"
 )
 
 config_path, out_path = sys.argv[1], sys.argv[2]
@@ -48,7 +48,7 @@ for _, tensor in model.named_parameters():
     values.update(tensor.detach().cpu().numpy().tobytes())
 
 report = {
-    "avatar": avatar.__file__,
+    "fmlib": fmlib.__file__,
     "class": type(model).__name__,
     "total_params": total,
     "n_tensors": len(params),
@@ -58,4 +58,4 @@ report = {
 }
 pathlib.Path(out_path).write_text(json.dumps(report, indent=2))
 print(f"{type(model).__name__}: {total} params in {len(params)} tensors")
-print(f"init sha256: {report['init_sha256'][:16]}  from {avatar.__file__}")
+print(f"init sha256: {report['init_sha256'][:16]}  from {fmlib.__file__}")

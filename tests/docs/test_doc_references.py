@@ -1,4 +1,4 @@
-"""Every ``avatar.*`` name mentioned in the documentation must still exist.
+"""Every ``fmlib.*`` name mentioned in the documentation must still exist.
 
 This is the check that keeps the rest of the documentation honest. Renaming a
 class is a one-line change in the code and an invisible break in six markdown
@@ -17,7 +17,7 @@ MARKDOWN = markdown_files()
 
 
 @pytest.mark.parametrize("path", MARKDOWN, ids=relative)
-def test_avatar_references_resolve(path):
+def test_fmlib_references_resolve(path):
     broken = []
     for dotted in dotted_paths(path.read_text()):
         try:
@@ -35,4 +35,4 @@ def test_avatar_references_resolve(path):
 def test_the_scan_actually_finds_references():
     """Guard against the regex silently matching nothing and the suite passing."""
     total = sum(len(dotted_paths(p.read_text())) for p in MARKDOWN)
-    assert total > 20, f"only {total} avatar.* references found — is the scan broken?"
+    assert total > 20, f"only {total} fmlib.* references found — is the scan broken?"

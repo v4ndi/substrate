@@ -11,9 +11,9 @@ from types import SimpleNamespace
 import polars as pl
 import pytest
 
-from avatar.automl import BinaryTask, BinaryTaskConfig, EnvironmentConfig
-from avatar.automl.environment import EnvironmentRunner
-from avatar.automl.exceptions import (
+from fmlib.automl import BinaryTask, BinaryTaskConfig, EnvironmentConfig
+from fmlib.automl.environment import EnvironmentRunner
+from fmlib.automl.exceptions import (
     ArtifactIntegrityError,
     ConfigError,
     RemoteExecutionError,
@@ -97,7 +97,7 @@ def test_standard_osiris_profile_uses_shared_venv_without_scheduler_pool(
     )
     request = osiris.create_calls[0]
     spec = json.loads((run_dir / "run_spec.json").read_text(encoding="utf-8"))
-    assert request["command"][1:] == ["-m", "avatar.automl.run"]
+    assert request["command"][1:] == ["-m", "fmlib.automl.run"]
     assert request["command"][0].replace("\\", "/").endswith("/bin/python")
     assert "PYTHONPATH" not in request["envs"]
     assert request["num_nodes"] == 1 and request["num_gpus"] == 1
@@ -287,7 +287,7 @@ def test_entity_load_recovers_dead_local_operation(tmp_path, monkeypatch):
     )
     task._store.update_operation(operation, state="running")
     monkeypatch.setattr(
-        "avatar.automl.lifecycle.AutoMLStore._local_owner_is_alive",
+        "fmlib.automl.lifecycle.AutoMLStore._local_owner_is_alive",
         staticmethod(lambda _owner: False),
     )
 
@@ -341,7 +341,7 @@ def test_waiting_prediction_status_publishes_scores_for_the_exact_test_path(
         ),
     )
     monkeypatch.setattr(
-        "avatar.automl.tasks.operations.time.sleep", lambda _seconds: None
+        "fmlib.automl.tasks.operations.time.sleep", lambda _seconds: None
     )
     test_path = tmp_path / "data" / "test"
 

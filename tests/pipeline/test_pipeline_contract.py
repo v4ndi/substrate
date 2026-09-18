@@ -5,7 +5,7 @@ time, because the defects it exists to catch were never about one class: a
 ``forward`` that made ``targets`` mandatory killed inference for
 ``SupervisedLearner``, and the same mistake was one line away in every other
 pipeline. The rules themselves are stated on
-:class:`~avatar.pipeline.base.BasePipeline`.
+:class:`~fmlib.pipeline.base.BasePipeline`.
 """
 
 from __future__ import annotations
@@ -15,11 +15,11 @@ import inspect
 import pytest
 import torch
 
-from avatar import pipeline as pipeline_module
-from avatar.data.tabular.batch import TabularBatch
-from avatar.nn.embedding import TabularEmbedding
-from avatar.nn.tabular import TabularTransformer
-from avatar.pipeline import BasePipeline
+from fmlib import pipeline as pipeline_module
+from fmlib.data.tabular.batch import TabularBatch
+from fmlib.nn.embedding import TabularEmbedding
+from fmlib.nn.tabular import TabularTransformer
+from fmlib.pipeline import BasePipeline
 
 PIPELINES = [
     getattr(pipeline_module, name)

@@ -8,19 +8,19 @@ import numpy as np
 import polars as pl
 import pytest
 
-from avatar.automl import RegressionTask, RegressionTaskConfig
-from avatar.automl.backends.boosting import RegressionBoostingBackend, suggest_params
-from avatar.automl.exceptions import ArtifactError, ConfigError, SchemaError
+from fmlib.automl import RegressionTask, RegressionTaskConfig
+from fmlib.automl.backends.boosting import RegressionBoostingBackend, suggest_params
+from fmlib.automl.exceptions import ArtifactError, ConfigError, SchemaError
 
 
 def test_regression_api_and_documentation_are_self_contained():
     repository = Path(__file__).resolve().parents[3]
     implementation_paths = [
-        repository / "avatar/automl/calibrators/isotonic_regression.py",
-        repository / "avatar/automl/tasks/base.py",
-        repository / "avatar/automl/tasks/regression.py",
-        repository / "avatar/automl/backends/boosting/regression.py",
-        repository / "avatar/automl/config/tasks.py",
+        repository / "fmlib/automl/calibrators/isotonic_regression.py",
+        repository / "fmlib/automl/tasks/base.py",
+        repository / "fmlib/automl/tasks/regression.py",
+        repository / "fmlib/automl/backends/boosting/regression.py",
+        repository / "fmlib/automl/config/tasks.py",
         repository / "examples/automl/configs/fmlib_regression.yaml",
         repository / "examples/automl/tests/configs/regression_one_trial.yaml",
         repository / "examples/automl/tests/configs/regression_inline_features.yaml",
@@ -49,7 +49,7 @@ def test_regression_api_and_documentation_are_self_contained():
 
 
 def test_base_task_docstrings_are_task_neutral():
-    automl_root = Path(__file__).resolve().parents[3] / "avatar/automl"
+    automl_root = Path(__file__).resolve().parents[3] / "fmlib/automl"
     base_paths = [
         automl_root / "tasks/base.py",
         automl_root / "backends/boosting/base.py",
@@ -432,7 +432,7 @@ def test_regression_search_space_float_step_and_log_validation(tmp_path):
 
 
 def test_regression_uses_packaged_default_search_space(tmp_path, monkeypatch):
-    import avatar.automl.backends.boosting.hyperopt as boosting_hyperopt
+    import fmlib.automl.backends.boosting.hyperopt as boosting_hyperopt
 
     monkeypatch.setattr(
         boosting_hyperopt,

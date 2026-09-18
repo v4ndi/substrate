@@ -1,4 +1,4 @@
-"""A worked example of a custom :class:`~avatar.train.TrainerCallback`.
+"""A worked example of a custom :class:`~fmlib.train.TrainerCallback`.
 
 Counts how often the gradient norm exceeded a threshold, and reports the total
 across ranks once per epoch. Small on purpose — what it demonstrates is the two
@@ -12,11 +12,11 @@ rules that are easy to get wrong:
 Register it from a config::
 
     callbacks:
-      - _target_: avatar.train.MLflowCallback
-      - _target_: avatar.train.ProgressBarCallback
+      - _target_: fmlib.train.MLflowCallback
+      - _target_: fmlib.train.ProgressBarCallback
       - _target_: examples.custom_callback.callback.GradientNormAlarm
         threshold: 1.0
-      - _target_: avatar.train.CheckpointCallback
+      - _target_: fmlib.train.CheckpointCallback
         checkpoint_dir: best_models/my_experiment/my_run
 
 An explicit ``callbacks:`` list replaces the default one entirely, so the
@@ -25,8 +25,8 @@ checkpoint callback has to be listed too.
 
 from __future__ import annotations
 
-from avatar.train import TrainerCallback
-from avatar.train.state import CallbackContext
+from fmlib.train import TrainerCallback
+from fmlib.train.state import CallbackContext
 
 
 class GradientNormAlarm(TrainerCallback):

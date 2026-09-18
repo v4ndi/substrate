@@ -7,7 +7,7 @@ import numpy as np
 import polars as pl
 import pytest
 
-from avatar.automl import (
+from fmlib.automl import (
     BinaryTask,
     BinaryTaskConfig,
     MulticlassTask,
@@ -18,10 +18,10 @@ from avatar.automl import (
     UpliftTask,
     UpliftTaskConfig,
 )
-from avatar.automl.backends.boosting.binary import BinaryBoostingBackend
-from avatar.automl.backends.boosting.uplift import UpliftBoostingBackend
-from avatar.automl.execution import ExecutionContext
-from avatar.automl.metrics import resolve_evaluation_metrics
+from fmlib.automl.backends.boosting.binary import BinaryBoostingBackend
+from fmlib.automl.backends.boosting.uplift import UpliftBoostingBackend
+from fmlib.automl.execution import ExecutionContext
+from fmlib.automl.metrics import resolve_evaluation_metrics
 
 
 def _config(tmp_path, config_class=BinaryTaskConfig, engine="catboost", **updates):

@@ -13,7 +13,7 @@ ddp:
 train_dataloader:
   _target_: torch.utils.data.DataLoader
   dataset:
-    _target_: avatar.data.TabularDataset
+    _target_: fmlib.data.TabularDataset
     path: examples/tabular_tasks/data/multiclass_smoke/train
     shuffle_files: True
     shuffle_pq: True
@@ -22,7 +22,7 @@ train_dataloader:
   drop_last: False
   num_workers: 2
   collate_fn:
-    _target_: avatar.data.SupervisedCollateFn
+    _target_: fmlib.data.SupervisedCollateFn
     target_column: target
     add_extra_columns:
       group: group
@@ -30,7 +30,7 @@ train_dataloader:
 valid_dataloader:
   _target_: torch.utils.data.DataLoader
   dataset:
-    _target_: avatar.data.TabularDataset
+    _target_: fmlib.data.TabularDataset
     path: examples/tabular_tasks/data/multiclass_smoke/valid
     shuffle_files: False
     shuffle_pq: False
@@ -39,20 +39,20 @@ valid_dataloader:
   drop_last: False
   num_workers: 2
   collate_fn:
-    _target_: avatar.data.SupervisedCollateFn
+    _target_: fmlib.data.SupervisedCollateFn
     target_column: target
     add_extra_columns:
       group: group
 
 model:
-  _target_: avatar.pipeline.tabular.SupervisedLearner
+  _target_: fmlib.pipeline.tabular.SupervisedLearner
   embedding:
-    _target_: avatar.nn.embedding.TabularEmbedding
+    _target_: fmlib.nn.embedding.TabularEmbedding
     num_numerical_features: 10
     hidden_size: 64
     vocab_size: 132
   tabular_encoder:
-    _target_: avatar.nn.tabular.TabularTransformer
+    _target_: fmlib.nn.tabular.TabularTransformer
     hidden_size: ${model.embedding.hidden_size}
     num_heads: 4
     num_layers: 2
@@ -89,7 +89,7 @@ train:
   num_epochs: 10
   max_saved_checkpoints: 2
   early_stopping:
-    _target_: avatar.train.EarlyStopping
+    _target_: fmlib.train.EarlyStopping
     # Class 2 is 49% of this target and class 4 is 0.5%: plain accuracy would
     # report the size of the majority class rather than the model.
     main_metric: mean_balanced_accuracy
@@ -98,6 +98,6 @@ train:
 
 metrics:
   valid_metrics:
-    _target_: avatar.metrics.MultiClassMetrics
+    _target_: fmlib.metrics.MultiClassMetrics
     num_classes: 7
     main_metric: balanced_accuracy

@@ -3,9 +3,9 @@
 Flow mirrors ``examples/tabular_preprocessing/run_both_backends.py``:
 
 1. ``generate_data.py`` writes a synthetic shuffled event log.
-2. Fit :class:`avatar.preprocessing.local.EventSequencePreprocessor` (streaming,
+2. Fit :class:`fmlib.preprocessing.local.EventSequencePreprocessor` (streaming,
    no Spark).
-3. Fit :class:`avatar.preprocessing.spark.pipeline.EventSequencePreprocessor`
+3. Fit :class:`fmlib.preprocessing.spark.pipeline.EventSequencePreprocessor`
    (skipped without Spark / JDK).
 4. Dump the artifact from each backend, load into the other.
 5. Transform and compare per-user sequences.
@@ -134,7 +134,7 @@ def main() -> None:
     )
     print(f"events={n_events}")
 
-    from avatar.preprocessing.local import EventSequencePreprocessor as LocalSeq
+    from fmlib.preprocessing.local import EventSequencePreprocessor as LocalSeq
 
     local_pp = LocalSeq(**KW, batch_rows=100_000)
     local_pp.fit(args.data)
@@ -148,7 +148,7 @@ def main() -> None:
         print({c: list(np.asarray(row[c]))[:6] for c in LIST_COLS})
         return
 
-    from avatar.preprocessing.spark.pipeline import (
+    from fmlib.preprocessing.spark.pipeline import (
         EventSequencePreprocessor as SparkSeq,
     )
 

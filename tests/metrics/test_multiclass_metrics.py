@@ -1,7 +1,7 @@
 """Metrics for a head wider than one column.
 
 What makes the multiclass case different from the rest of
-:mod:`avatar.metrics.supervised` is that the prediction kept per record is a
+:mod:`fmlib.metrics.supervised` is that the prediction kept per record is a
 row of probabilities, not a number. Everything downstream of that — the group
 loop, the mean, the submit file — has to cope with a column that is itself a
 matrix.
@@ -15,7 +15,7 @@ import pandas as pd
 import pytest
 import torch
 
-from avatar.metrics import InferenceSupervisedMetrics, MultiClassMetrics
+from fmlib.metrics import InferenceSupervisedMetrics, MultiClassMetrics
 
 NUM_CLASSES = 3
 

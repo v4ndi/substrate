@@ -40,19 +40,19 @@ Uplift и response делят один датасет намеренно: раз
 python examples/tabular_tasks/prepare_data.py --task all --scale smoke
 
 # 2. обучение
-python -m avatar.train --config-dir=examples/tabular_tasks/configs --config-name=uplift
-python -m avatar.train --config-dir=examples/tabular_tasks/configs --config-name=response
-python -m avatar.train --config-dir=examples/tabular_tasks/configs --config-name=regression
-python -m avatar.train --config-dir=examples/tabular_tasks/configs --config-name=multiclass
+python -m fmlib.train --config-dir=examples/tabular_tasks/configs --config-name=uplift
+python -m fmlib.train --config-dir=examples/tabular_tasks/configs --config-name=response
+python -m fmlib.train --config-dir=examples/tabular_tasks/configs --config-name=regression
+python -m fmlib.train --config-dir=examples/tabular_tasks/configs --config-name=multiclass
 
 # 3. инференс: предсказания лягут в predict/<задача>/
-python -m avatar.inference --config-dir=examples/tabular_tasks/configs --config-name=response_inference
+python -m fmlib.inference --config-dir=examples/tabular_tasks/configs --config-name=response_inference
 ```
 
 Многокарточный запуск — та же команда под `torchrun`:
 
 ```bash
-torchrun --standalone --nproc_per_node=2 -m avatar.train \
+torchrun --standalone --nproc_per_node=2 -m fmlib.train \
     --config-dir=examples/tabular_tasks/configs --config-name=multiclass
 ```
 
@@ -72,7 +72,7 @@ torchrun --standalone --nproc_per_node=2 -m avatar.train \
 python examples/tabular_tasks/prepare_data.py --task regression --scale full
 
 D=examples/tabular_tasks/data
-python -m avatar.train --config-dir=examples/tabular_tasks/configs \
+python -m fmlib.train --config-dir=examples/tabular_tasks/configs \
     --config-name=regression \
     train_dataloader.dataset.path=$D/regression_full/train \
     valid_dataloader.dataset.path=$D/regression_full/valid \
@@ -142,12 +142,12 @@ Uplift — единственный, у которого своя collate-фун
 
 ```yaml
 collate_fn:
-  _target_: avatar.data.UpliftCollateFn
+  _target_: fmlib.data.UpliftCollateFn
   treatment_column: treatment
   group_column: group
   inverse_treatment: True
 model:
-  _target_: avatar.pipeline.tabular.SLearner
+  _target_: fmlib.pipeline.tabular.SLearner
   n_groups: 4                # 3 канала плюс идентификатор под контроль
   exchange_treatment_group: true
   aggregation_config:

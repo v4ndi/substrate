@@ -3,8 +3,8 @@
 import numpy as np
 import pytest
 
-from avatar.automl.exceptions import ConfigError
-from avatar.automl.metrics import (
+from fmlib.automl.exceptions import ConfigError
+from fmlib.automl.metrics import (
     DEFAULT_EVALUATION_METRICS,
     METRIC_REGISTRY,
     MetricInput,

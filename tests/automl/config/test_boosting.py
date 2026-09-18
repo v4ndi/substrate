@@ -1,6 +1,6 @@
 import pytest
 
-from avatar.automl.config.boosting import default_model_params, default_search_space
+from fmlib.automl.config.boosting import default_model_params, default_search_space
 
 
 def test_default_model_params_match_lightautoml_boosters():

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from avatar.automl import UpliftTaskConfig
-from avatar.automl.exceptions import ConfigError
+from fmlib.automl import UpliftTaskConfig
+from fmlib.automl.exceptions import ConfigError
 
 
 def _values(**overrides):

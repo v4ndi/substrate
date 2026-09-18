@@ -6,7 +6,7 @@ import pytest
 import torch
 import torch.nn as nn
 
-from avatar.losses import (
+from fmlib.losses import (
     ClassificationLoss,
     CompositeLoss,
     ContrastiveLoss,

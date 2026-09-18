@@ -12,7 +12,7 @@ The preprocessor is fitted on the train split only and applied to both splits.
 Both revisions under comparison read exactly these files, so any metric
 difference between them cannot come from the data.
 
-Run with cwd set to the worktree whose ``avatar`` should do the preprocessing.
+Run with cwd set to the worktree whose ``fmlib`` should do the preprocessing.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ import pathlib
 import shutil
 import sys
 
-# Run the avatar of the *current directory*: this script lives outside any
+# Run the fmlib of the *current directory*: this script lives outside any
 # checkout, so sys.path[0] would otherwise be its own directory and the import
 # would fall through to whatever editable install happens to be registered.
 sys.path.insert(0, os.getcwd())
@@ -34,11 +34,11 @@ import pyarrow as pa  # noqa: E402
 import pyarrow.parquet as pq  # noqa: E402
 import yaml  # noqa: E402
 
-import avatar  # noqa: E402
-from avatar.preprocessing.local import TabularPreprocessor  # noqa: E402
+import fmlib  # noqa: E402
+from fmlib.preprocessing.local import TabularPreprocessor  # noqa: E402
 
-assert avatar.__file__.startswith(os.getcwd()), (
-    f"avatar came from {avatar.__file__}, not from {os.getcwd()}"
+assert fmlib.__file__.startswith(os.getcwd()), (
+    f"fmlib came from {fmlib.__file__}, not from {os.getcwd()}"
 )
 
 ROOT = pathlib.Path("/home/jovyan/rusakov/runs/compare_training")
@@ -89,7 +89,7 @@ def write_shards(table: pa.Table, out_dir: pathlib.Path, shards: int) -> None:
 
 def main(name: str) -> None:
     spec = SPECS[name]
-    print(f"avatar from: {avatar.__file__}")
+    print(f"fmlib from: {fmlib.__file__}")
     frame = pd.read_parquet(DATA / f"{name}_raw.parquet")
 
     # --- targets ---------------------------------------------------------

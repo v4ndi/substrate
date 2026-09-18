@@ -1,4 +1,4 @@
-"""One rank of a multi-rank :func:`avatar.train.evaluate.predict` run.
+"""One rank of a multi-rank :func:`fmlib.train.evaluate.predict` run.
 
 Built as a separate script because the thing under test only exists across
 processes: whether the ranks agree on how many collectives they perform, and
@@ -19,10 +19,10 @@ from torch.utils.data import DataLoader
 
 sys.path.insert(0, os.getcwd())
 
-from avatar.data.tabular import TabularCollateFn, TabularDataset
-from avatar.metrics.base import ArtifactMetric, ScalarMetric
-from avatar.train.dist import DistEnv
-from avatar.train.evaluate import predict
+from fmlib.data.tabular import TabularCollateFn, TabularDataset
+from fmlib.metrics.base import ArtifactMetric, ScalarMetric
+from fmlib.train.dist import DistEnv
+from fmlib.train.evaluate import predict
 
 
 @dataclasses.dataclass

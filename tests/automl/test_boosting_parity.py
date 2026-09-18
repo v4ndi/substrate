@@ -32,7 +32,7 @@ import numpy as np
 import polars as pl
 import pytest
 
-from avatar import automl
+from fmlib import automl
 
 pytestmark = pytest.mark.slow
 

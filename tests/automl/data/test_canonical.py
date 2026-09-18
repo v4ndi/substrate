@@ -1,9 +1,9 @@
 import polars as pl
 import pytest
 
-from avatar.automl import ResponseTaskConfig
-from avatar.automl.data import CanonicalColumnMapper
-from avatar.automl.exceptions import SchemaError
+from fmlib.automl import ResponseTaskConfig
+from fmlib.automl.data import CanonicalColumnMapper
+from fmlib.automl.exceptions import SchemaError
 
 
 def _config():

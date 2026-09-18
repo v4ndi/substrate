@@ -1,6 +1,6 @@
 import pytest
 
-from avatar.preprocessing.spark import LabelEncoder
+from fmlib.preprocessing.spark import LabelEncoder
 
 
 @pytest.fixture

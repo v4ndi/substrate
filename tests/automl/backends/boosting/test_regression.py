@@ -2,9 +2,9 @@ import numpy as np
 import polars as pl
 import pytest
 
-from avatar.automl.backends.boosting import RegressionBoostingBackend
-from avatar.automl.data import FeatureSchema
-from avatar.automl.exceptions import UnsupportedBackendError
+from fmlib.automl.backends.boosting import RegressionBoostingBackend
+from fmlib.automl.data import FeatureSchema
+from fmlib.automl.exceptions import UnsupportedBackendError
 
 
 def _schema():

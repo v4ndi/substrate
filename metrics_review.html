@@ -1,4 +1,4 @@
-<title>Ревью avatar.metrics</title>
+<title>Ревью fmlib.metrics</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Serif:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
@@ -497,7 +497,7 @@
 
   <header class="masthead">
     <p class="eyebrow">Код-ревью · avatar_fm · после чистки</p>
-    <h1>Ревью модуля <code>avatar.metrics</code></h1>
+    <h1>Ревью модуля <code>fmlib.metrics</code></h1>
     <p class="standfirst">
       Половина модуля не использовалась — её больше нет. Контракт разделён на
       «числа» и «файлы», тройная копия цикла по группам свёрнута в один базовый
@@ -587,7 +587,7 @@
       <p>
         Вместе с ними ушёл модуль-шим обратной совместимости для опечатки в имени
         <code>training_arguments</code> — из той же семьи, что три пакета
-        <code>avatar.nn</code>, удалённые в PR&nbsp;#6 — и три примера,
+        <code>fmlib.nn</code>, удалённые в PR&nbsp;#6 — и три примера,
         построенных на удалённых метриках: tabular_hidden_states,
         distributed_training и multi_task, плюс рецепт MLP-бенчмарка в
         документации.
@@ -939,7 +939,7 @@ nan нет   best=0.9   early_stop=True</code></pre>
         </p>
       </div>
 
-      <h3>В <code>avatar.metrics</code> мёртвого кода не осталось</h3>
+      <h3>В <code>fmlib.metrics</code> мёртвого кода не осталось</h3>
 
       <p>
         Из 13 имён в <code>__all__</code> восемь встречаются в рабочих конфигах или
@@ -956,9 +956,9 @@ nan нет   best=0.9   early_stop=True</code></pre>
         <p>
           <strong>Побочный эффект чистки: осиротел multi-task.</strong> Удаление
           примера multi_task забрало <strong>единственные рабочие конфиги</strong>
-          для <code>avatar.pipeline.multi_task</code>. Прямое следствие видно в
+          для <code>fmlib.pipeline.multi_task</code>. Прямое следствие видно в
           машинном отчёте: <code>MultiTaskLoss</code> из
-          <code>avatar.losses.multi_task</code> теперь не упоминается нигде, а
+          <code>fmlib.losses.multi_task</code> теперь не упоминается нигде, а
           <code>WeightLossBalancer</code>, <code>UncertainlyLossBalancer</code> и
           <code>PCGradBalancer</code> используются только внутри своего файла.
         </p>
@@ -972,7 +972,7 @@ nan нет   best=0.9   early_stop=True</code></pre>
         </p>
       </div>
 
-      <h3>Вне <code>avatar.metrics</code></h3>
+      <h3>Вне <code>fmlib.metrics</code></h3>
 
       <p>
         Прежний список сократился: <code>check_columns_to_tensor</code>,
@@ -988,7 +988,7 @@ nan нет   best=0.9   early_stop=True</code></pre>
       <h2>5. Порядок дальнейших работ</h2>
 
       <ol class="plan">
-        <li><span>Переименовать <code>GroupDevidedMetricsWrapper</code> и <code>columns_to_devide</code> (правильно — divided) с шимом на один релиз, тем же приёмом, каким убрали шимы в <code>avatar.nn</code>. Класс не встречается ни в одном рабочем конфиге, так что цена минимальна.</span></li>
+        <li><span>Переименовать <code>GroupDevidedMetricsWrapper</code> и <code>columns_to_devide</code> (правильно — divided) с шимом на один релиз, тем же приёмом, каким убрали шимы в <code>fmlib.nn</code>. Класс не встречается ни в одном рабочем конфиге, так что цена минимальна.</span></li>
         <li><span>Вернуть пример multi-task, если постановка нужна: пайплайн и его тесты на месте, но рабочего конфига для него в репозитории больше нет.</span></li>
         <li><span>Добавить колонку <code>split_type</code> в валидационные наборы пилота — без неё калиброванные uplift-метрики не считаются вовсе, и это правильно, но и нежелательно.</span></li>
       </ol>

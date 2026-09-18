@@ -16,7 +16,7 @@ python -m pip install -e ".[spark,dev]"
 ```yaml
 train_dataloader:
   dataset:
-    _target_: avatar.data.TabularDataset
+    _target_: fmlib.data.TabularDataset
     path: hdfs://arnsdpsbx/user/team/team_ai_avatar/avatar_fm/examples/campaign_demo
 ```
 

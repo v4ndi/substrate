@@ -2,9 +2,9 @@ from pathlib import Path
 
 import pytest
 
-from avatar.automl import BinaryTaskConfig, MulticlassTaskConfig, RegressionTaskConfig
-from avatar.automl.config.base import BaseTaskConfig
-from avatar.automl.exceptions import ConfigError
+from fmlib.automl import BinaryTaskConfig, MulticlassTaskConfig, RegressionTaskConfig
+from fmlib.automl.config.base import BaseTaskConfig
+from fmlib.automl.exceptions import ConfigError
 
 
 def _config(**overrides):

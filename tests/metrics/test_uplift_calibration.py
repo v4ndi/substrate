@@ -13,7 +13,7 @@ import numpy as np
 import pytest
 import torch
 
-from avatar.metrics import UpliftMetrics
+from fmlib.metrics import UpliftMetrics
 
 
 def uplift_batch(conversion, t_probs, c_probs, treatment, split_type=None):
@@ -75,7 +75,7 @@ def test_asking_for_calibration_without_a_held_out_slice_says_so(caplog):
     """The run is not left guessing why the number it asked for is missing."""
     metric = UpliftMetrics(require_calibration=True)
     metric.update(*population())
-    with caplog.at_level(logging.WARNING, logger="avatar.metrics.uplift"):
+    with caplog.at_level(logging.WARNING, logger="fmlib.metrics.uplift"):
         metric.compute()
 
     assert any(
@@ -123,7 +123,7 @@ def test_a_slice_without_conversions_produces_no_metrics(caplog):
     size = 200
     metric = UpliftMetrics()
     metric.update(*population(size=size, conversion=np.zeros(size)))
-    with caplog.at_level(logging.WARNING, logger="avatar.metrics.uplift"):
+    with caplog.at_level(logging.WARNING, logger="fmlib.metrics.uplift"):
         scores = metric.compute()
 
     assert scores == {}
@@ -144,7 +144,7 @@ def test_a_slice_with_one_arm_produces_no_metrics(caplog):
             treatment=np.ones(size, dtype=np.int64),
         )
     )
-    with caplog.at_level(logging.WARNING, logger="avatar.metrics.uplift"):
+    with caplog.at_level(logging.WARNING, logger="fmlib.metrics.uplift"):
         scores = metric.compute()
 
     assert scores == {}
@@ -163,7 +163,7 @@ def test_a_group_whose_calib_slice_cannot_be_fitted_keeps_its_raw_metrics(caplog
     metric.update(
         *population(size=size, split_type=halves(size), conversion=conversion)
     )
-    with caplog.at_level(logging.WARNING, logger="avatar.metrics.uplift"):
+    with caplog.at_level(logging.WARNING, logger="fmlib.metrics.uplift"):
         scores = metric.compute()
 
     assert "test_group_0_qini_auc_score" in scores

@@ -13,15 +13,15 @@ import pyarrow.fs as pafs
 import pyarrow.parquet as pq
 import pytest
 
-from avatar.data.base import BaseParquetDataset
-from avatar.data.base.fs import (
+from fmlib.data.base import BaseParquetDataset
+from fmlib.data.base.fs import (
     discover_parquet_files,
     file_size,
     is_local_filesystem,
     resolve_filesystem,
     resolve_filesystems,
 )
-from avatar.data.base.parquet import parquet_num_rows, read_parquet_file
+from fmlib.data.base.parquet import parquet_num_rows, read_parquet_file
 
 
 @pytest.fixture
