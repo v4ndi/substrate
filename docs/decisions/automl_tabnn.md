@@ -1,608 +1,610 @@
-# Design: neural-network backend for `avatar.automl`
+# Design v3: TabNN в FMLib AutoML
 
-Status: **proposed**, open questions resolved 2026-09-16 (§11), review answers
-and the `obligatory.md` audit items applied 2026-09-17 (§12), cross-checked
-against an independent design the same day (§13); §14 says how the remote path
-is tested without a cluster. Stage 3 of the combine-avatar-automl task, on top of
-[automl_migration.md](automl_migration.md) (stages 1–2, done).
+Статус: **согласовано** (2026-09-18). Документ сведён из двух независимых
+дизайнов — `tabnn_design_v2.md` и прежней редакции `automl_tabnn.md` — по
+результатам сверки `automl_tabnn_v2_diff.md` (вопросы Q1–Q11; оба исходных файла
+лежат вне репозитория). Все вопросы закрыты, открытых развилок в тексте нет: там,
+где дизайны расходились, выбран один вариант и названа причина.
 
-Written against `master`, re-grounded on `refactor/data-sharding-hdfs`
-(2026-09-16). That branch rewrote three of the four things this design leans
-on — `avatar/train.py` became the `avatar/train/` package on plain
-`torch.distributed` with callbacks, `avatar/data/` split into
-`base` / `sequential` / `tabular` with one sharding engine and HDFS, and the
-four tabular pipelines collapsed into `SupervisedLearner` + `SLearner`. Every
-change was in this design's favour; §6 and N4 are written against the new API,
-and the three `train.py` library-mode defects the first draft had to fix are
-already fixed upstream.
+Этап 3 задачи combine-avatar-automl, поверх
+[automl_migration.md](automl_migration.md) (этапы 1–2, сделаны).
 
-Goal: `backend="tabnn"` trains a tabular neural network with hyperparameter
-search through the same `BinaryTask/.../UpliftTask` API that `backend="boosting"`
-uses today — same config object, same `train/predict/evaluate/save/load`, same
-artifact layout, same metrics and reports.
+**Соглашение о ссылках на код.** Пути даны по текущему состоянию репозитория:
+относительные (`tasks/operations.py`) отсчитываются от `avatar/automl/`,
+остальные пишутся полностью от корня (`avatar/train/loop.py`). После S1
+(переименование пакета) корень читается как `fmlib/`.
 
-Two hard constraints, in this order:
+## 1. Цель
 
-1. **The boosting pipeline does not change behaviour.** Every refactor step is
-   gated on the parity harness reproducing byte-identical boosting results
-   (§9, S0).
-2. **Maximum reuse.** The NN backend reuses the AutoML task/data/metric/
-   artifact layers unchanged, and the torch modules that already exist in
-   `avatar.nn` / `avatar.pipeline`. New code is confined to one package.
+Добавить `backend="tabnn"` в существующий AutoML так, чтобы boosting и TabNN
+использовали один публичный task API:
 
-**Target environment** (§12, F1–F3): one A100 80 GB; splits of 3–100 M rows and
-~200 features; 128–256 GB RAM on the box; one AutoML run may take a night or
-two. Every default below is calibrated for that, and the multi-GPU paths are
-specified but dormant until a multi-card node exists.
+```text
+BinaryTask / ResponseTask / RegressionTask / MulticlassTask / UpliftTask
+    -> train(...) -> predict(...) -> calibrate(...) -> evaluate(...) -> save/load
+```
+
+AutoML не реализует собственный NN framework. Для TabNN он выполняет
+препроцессинг, применяет `model_layout`, переводит свой конфиг в конфиг
+существующих компонентов FMLib, запускает `fmlib.train.Trainer`, управляет
+трейлами и remote lifecycle и складывает результат в существующий artifact/result
+contract.
+
+Два жёстких ограничения, в этом порядке:
+
+1. **Поведение бустинга не меняется.** Каждый шаг рефакторинга проходит под
+   парити-харнессом (S0), который воспроизводит метрики, `best_params` и sha256
+   скоров.
+2. **Максимальное переиспользование.** Новый код живёт в одном пакете; всё
+   остальное — существующие слои AutoML и модули FMLib.
+
+**Standalone-обучение и предикт через FMLib продолжают работать без AutoML** —
+это критерий приёмки, а не пожелание.
+
+### 1.1. Целевое окружение
+
+Одна **A100 80 GB**; сплиты 3–100 млн строк, ~200 признаков; 128–256 ГБ RAM;
+один прогон AutoML занимает ночь-две. Все дефолты откалиброваны под это.
+Multi-GPU пути специфицированы и протестированы на CPU-рангах, но до появления
+многокарточной ноды не исполняются по-настоящему (см. §11).
+
+### 1.2. Целевой train flow
+
+```text
+AutoML TaskConfig + raw train/valid
+        -> backend dispatch
+           |- boosting: существующий путь без изменений
+           `- tabnn:
+                fit препроцессора на полном train (потоково, пул процессов)
+                transform полных train/valid -> processed data
+                model_layout режет уже обработанные данные
+                build fmlib config для model part + trial params
+                SupervisedLearner / SLearner
+                fmlib.train.Trainer
+                checkpoint + validation metric
+        -> AutoML artifact
+```
+
+### 1.3. Целевой predict flow
+
+```text
+Task.predict(raw)
+        -> backend dispatch
+           |- boosting: существующий predict
+           `- tabnn:
+                загрузка fitted препроцессора из артефакта
+                transform входа
+                model_layout routing на обработанных данных
+                загрузка checkpoint -> fmlib inference (по num_gpus)
+                нормализация скоров к контракту AutoML
+        -> существующая сборка PredictionResult
+        -> существующие calibrate / evaluate
+```
+
+Различается только получение сырых скоров. Lifecycle, routing, сборка
+результата, калибровка и оценка — общие.
 
 ---
 
-## 1. Where the seam already is
+## 2. Prerequisites: что чинится до TabNN
 
-The config layer was written with this in mind and already reserves the family:
+Восемь изменений в существующем AutoML. Каждое — самостоятельная задача с
+тестами, не смешивается с NN-функциональностью.
+
+### P1. Финализация remote-результата восстанавливаема
+
+Джобы могут завершиться после смерти контейнера-драйвера. Сейчас `status()`
+пишет `state=aggregate` (то есть `succeeded`) в `tasks/operations.py:382`,
+**затем** вызывает `_finalize_remote_train` (:388), а цикл опроса пропускает
+операции в состоянии `succeeded`/`failed`/`partial_failed` (:374-380). Падение
+между этими двумя действиями оставляет операцию терминальной и несобранной, и ни
+один последующий `status()` её не тронет.
+
+Требования:
+
+- публичный идемпотентный **`finalize()`**: повторный вызов безопасен, работает
+  после перезапуска процесса, применяется ко всем remote-операциям, где после
+  джоб нужна сборка результата, а не только к `train`;
+- внутреннее нетерминальное состояние **`finalizing`** пишется до сборки,
+  `succeeded` — только после неё;
+- happy path не меняется: живой процесс финализирует сам, ручной `finalize()`
+  нужен только для восстановления;
+- **`status()` не становится скрытым вызовом финализации** — он остаётся
+  отражением состояния джоб;
+- сценарий восстановления описан в `examples/automl/README`, там же сказано, что
+  в обычной работе `finalize()` руками звать не нужно.
+
+### P2. Каждый успешный submit сохраняется немедленно
+
+`_start_remote_train` копит джобы в локальном списке и зовёт `update_operation`
+один раз после цикла (`tasks/operations.py:178-208`). Падение на k-м сабмите
+теряет идентификаторы джоб 1..k-1, которые продолжают работать и держать карты.
+
+После **каждого** успешного `submit` сразу персистится: логический
+job/trial/model-part id, scheduler job id и имя, номер попытки, текущее
+состояние. Только после успешной записи выполняется следующий submit.
+
+Окно между `submit` и записью закрывается детерминированным `run_dir` с
+`mkdir(parents=True, exist_ok=False)` (`avatar/automl/environment.py:238`) и
+`trial_id` в имени джобы (сейчас `f"fmlib-{action}-{run_id[:8]}"` со свежим
+uuid, `environment.py:266`): после падения остаётся **находимый сирота**, а не
+молчаливый дубль.
+
+### P3. Общее состояние операции обновляется безопасно
+
+`update_operation` (`avatar/automl/lifecycle.py:183-193`) — это
+read-modify-write без блокировки, а `write_json` (:48) использует фиксированное
+имя `operation.json.tmp`, за которое два писателя дерутся.
+
+В этом дизайне драйвер — единственный писатель `operation.json` (джобы пишут
+свой `result.json` в свой `run_dir`), поэтому параллельные джобы состояние не
+портят. Проблема приходит из сценария восстановления P1: «контейнер умер,
+запускаю `status()`/`finalize()` заново» может поставить два драйвера на одну
+операцию. Решение — **проверка единственного писателя**, а не блокировка:
+запись уже несёт `owner.{hostname,pid,token}` (`lifecycle.py:173-178`), а
+`reconcile_local_operations` (`lifecycle.py:244`) уже умеет проверять живость
+владельца. Второй драйвер либо забирает владение, либо отказывается работать.
+
+### P4. Состояния планировщика различимы, ожидание конечно
+
+Сейчас всё нераспознанное — один `unknown` (`environment.py:345`), агрегат тоже
+`unknown` (:372), а `status(wait=True)` считает это активным состоянием вечно
+(`tasks/operations.py:428-429`). При K trial-джобах вероятность встретить это
+выше в K раз, а цена — прогон, который висит всю ночь и не отдаёт уже
+пришедшие результаты.
+
+Таксономия:
+
+| наблюдение | состояние | реакция |
+|---|---|---|
+| `KubernetesError: container "pytorch" ... is not available` | **`submitting`** | нормальный старт, просто продолжаем опрос; **никогда** не пересоздаём джобу |
+| scheduler `pending` | `queued` | как сейчас |
+| джоба идёт | `running` | |
+| `NotFoundError: Field 'pods' not found ...` | `missing` → после grace **`lost`** | джоба не создалась; **авто-пересабмита нет** — трейл получает `tell(state=FAIL)`, диагностика пишется в `operation.json`, пересоздание остаётся решением человека |
+| нераспознанный ответ API | `unknown` | только fallback, но тоже с конечным выходом: grace → `lost` |
+
+Нормальный жизненный цикл: `submitting → queued → running → succeeded / failed`.
+Ни одно состояние не удерживает `status(wait=True)` бесконечно и молча.
+
+Выдержки (grace) — **константы модуля** с переопределением через переменную
+окружения, а не поля публичного конфига: это операционная деталь планировщика,
+а не свойство задачи обучения.
+
+### P5. `CUDA_VISIBLE_DEVICES` живёт только внутри операции
+
+`run_local` ставит переменную для любого бэкенда и не восстанавливает её
+(`environment.py:142`; `finally` на :165 закрывает только логгеры), поэтому один
+вызов AutoML навсегда сужает ядро ноутбука до одной карты.
+
+- **Область.** Переменная ставится контекст-менеджером, прежнее значение
+  восстанавливается в `finally`, либо передаётся только дочернему процессу.
+- **Пин на GPU 0 — только для `backend="boosting"`**, ровно как уже делает
+  `submit` для remote-джоб (`environment.py:268-271`). Значение `"0"` для
+  бустинга осознанное и сохраняется: CatBoost с `task_type="GPU"` без явного
+  `devices` (`backends/boosting/binary.py:41`) расползается по всем видимым
+  картам, и текущее поведение закреплено тестом
+  (`tests/automl/test_environment.py:159`).
+- **Для TabNN видимость определяется `num_gpus`** — и на обучении, и на
+  предикте. Принудительный пин запрещён: иначе multi-GPU не увидит остальные
+  карты, а `num_gpus` как «карты на trial» станет ложью.
+
+### P6. Task/search seam становится backend-neutral
+
+Переименования без alias'ов (старые имена полупубличные, но все их потребители
+в этом репозитории и в коде кластера, который мы контролируем):
+
+```text
+BaseBoostingTask       -> BaseTask
+SupervisedBoostingTask -> SupervisedTask
+fit_boosting_model     -> fit_model          (backends/search.py)
+BoostingFitResult      -> FitResult
+```
+
+Выбор бэкенда — словарь внутри `Task._backend_class_for(config.backend)`;
+отдельного registry-модуля нет, две семьи его не оправдывают. После рефактора
+поведение бустинга не меняется под парити-тестами.
+
+### P7. Поиск отделён от исполнения
+
+Текущий бустинговый `study.optimize` держит трейлы внутри одного процесса
+(`backends/boosting/hyperopt.py:336`). Для TabNN поиск разделяется:
+
+```text
+сэмплирование наборов параметров   +   run_trial(params) -> metric + checkpoint
+```
+
+Сэмплер не владеет жизненным циклом исполнения. Реализаций `run_trial` три
+(§6.3), интерфейс один.
+
+Дополнительно: `study.optimize` вызывается **без `catch=`**, поэтому первый
+упавший трейл убивает весь поиск. Для tabnn исключения трейла перехватываются и
+записываются как упавший трейл; **бустинговый вызов сохраняет сегодняшнее
+поведение**, потому что его изменение меняло бы результат бустинга на падающем
+трейле.
+
+### P8. Результат трейла — чекпоинт, а не объект
+
+Бустинг держит лучшую обученную модель в памяти координатора
+(`backends/boosting/hyperopt.py:313`, `best_backend = backend`). Для сети это неприемлемо и вдобавок
+невозможно для двух из трёх раннеров: подпроцесс и джоба Osiris не могут вернуть
+Python-объект.
+
+Результат трейла: `trial_id`, params, validation metric, **путь к чекпоинту**,
+status/error. Победитель восстанавливается из чекпоинта один раз, после поиска.
+Бустинговое поведение не трогаем (ограничение 1); это отдельный пункт бэклога.
+
+---
+
+## 3. S1: переименование `avatar` → `fmlib`
+
+Это первое изменение кода (Q1), и ему предшествует только парити-харнесс S0 —
+тест, а не функциональность. Причина: механическая замена в **334 из 492**
+файлов под git это ровно тот случай, ради которого гейт и существует; если
+харнесс появится после переименования, доказать, что оно ничего не изменило,
+будет уже нечем.
+
+- переименовать пакет, заменить импорты `avatar.* -> fmlib.*`;
+- заменить строковые ссылки, включая Hydra `_target_`;
+- заменить entrypoint'ы вида `python -m avatar...`
+  (в том числе команду remote-джобы `python -m avatar.automl.run`);
+- пройти по tests/configs/scripts/examples на строковые `avatar.`;
+- smoke: `import fmlib`, `fmlib.automl`, `fmlib.train`, `fmlib.preprocessing`,
+  минимальный прогон `Trainer`, полный сьют тестов, парити-харнесс S0.
+
+Дальше в документе используется имя `fmlib`, а ссылки вида
+`avatar/automl/...` указывают на сегодняшнее расположение файла.
+
+---
+
+## 4. Граница бэкендов
+
+После P6 общими остаются: публичный task API, lifecycle операций и сущностей,
+`model_layout`, local/Osiris оркестрация, artifact lifecycle, сборка результата,
+калибровка и оценка.
+
+Диспетч простой:
 
 ```python
-# avatar/automl/config/base.py
-backend: Literal["boosting", "tabnn"]
-...
-if self.backend == "tabnn" and self.engine != "ste":       raise UnsupportedBackendError
-if self.backend == "tabnn" and self.hyperopt:              raise ConfigError("Optuna hyperopt is available only for boosting")
-if self.backend == "tabnn" and self.device == "cpu":       raise ConfigError("TabNN does not support device='cpu'")
+if config.backend == "boosting": ...
+elif config.backend == "tabnn":  ...
 ```
 
-All three guards go (N6, N8, N9). The training call chain for a supervised task
-is:
+Новых семей бэкендов не планируется. Движок внутри TabNN —
+**`engine="tabular_transformer"`**; значение `"ste"` отвергается с
+`UnsupportedBackendError`, называющим замену (класс был переименован
+`STEv2 -> TabularTransformer`, артефактов с таким движком не существует).
 
-```
-Task.train
-  -> TrainingCoordinator.execute            tasks/training.py    (generic: sources, plan, per-part loop)
-     -> SupervisedBoostingTask._fit_one     tasks/supervised.py  (generic: prepare_data + target + metric)
-        -> fit_boosting_model               backends/boosting/hyperopt.py
-           -> backend.prepare_fit_data / fit_prepared / predict_prepared_score
-```
+Точек различия ровно четыре: обучить одну модель/трейл, сырой предикт,
+save/load payload, маппинг конфига.
 
-Everything above `fit_boosting_model` is already backend-agnostic: it works on a
-normalized polars frame, a `FeatureSchema`, a target `np.ndarray`, and an
-`objective_metric(target, scores) -> float` callable. `fit_boosting_model`
-itself is generic too — the Optuna loop, the "keep the best fitted model"
-bookkeeping and the progress logging contain nothing boosting-specific except:
+### 4.1. Новый пакет
 
-| boosting-specific in `fit_boosting_model` | generalization |
-|---|---|
-| `backend_class(engine=…, params=…, random_state=…, device=…, verbose=…)` | same signature for every family |
-| `can_prequantize(space)` (CatBoost pools) | rename to `can_reuse_prepared(space)`; default `False` |
-| `resolve_default_search_space(engine, …)` | per-family lookup |
-| the `BoostingFitResult` name | `FitResult` |
+Файл заводится, когда у него есть **своя причина меняться**. Бустинг держит
+модуль на задачу потому, что каждой задаче нужен свой нативный estimator
+(`backends/boosting/regression.py:26-45` выбирает между `CatBoostRegressor` и
+`XGBRegressor`); у TabNN модель всегда `SupervisedLearner`, а задачи отличаются
+только `num_classes`/`task_type`, лоссом и постобработкой скора — это таблица, а
+не четыре модуля.
 
-Persistence is already delegated: `ArtifactRepository` calls
-`item.backend.save(dir)` / `backend_class.load(dir)` and only reads
-`backend.json` for the `engine` field, so an NN backend that writes the same
-metadata file needs **no** artifact-layer change.
-
-## 2. What the NN backend must provide
-
-```python
-class ModelBackend(ABC):                     # today: BoostingBackend
-    engine: str; params: Mapping[str, Any]; random_state: int
-    device: str; verbose: bool | int
-
-    def predict_score(self, frame: pl.DataFrame, schema: FeatureSchema) -> np.ndarray
-    def feature_importance(self, schema: FeatureSchema) -> pl.DataFrame | None
-    def save(self, path: Path) -> None
-    @classmethod
-    def load(cls, path: Path, *, device: str = "cpu") -> Self
-    def set_runtime_device(self, device: str) -> None
-    def for_execution(self, device: str) -> Self
-
-class TrainableBackend(ModelBackend):        # what the search loop needs
-    consumes: ClassVar[Literal["frames", "sources"]]
-    def prepare_fit_data(self, part: PartDescriptor, *, reuse: bool) -> Prepared
-    def fit_prepared(self, prepared: Prepared) -> None
-    def predict_prepared_score(self, features: Any) -> np.ndarray
-    def can_reuse_prepared(self, search_space) -> bool
-```
-
-`consumes` is what §6 turns on: `"frames"` (boosting, today's behaviour, two
-materialized polars frames) or `"sources"` (tabnn: `ParquetSource` + a group
-predicate, nothing materialized). For tabnn, `Prepared` holds **paths to an
-encoded parquet cache**, not tensors — and unlike CatBoost quantization that
-cache is *always* reusable across trials, so `can_reuse_prepared` returns `True`
-unless the search space touches the encoding itself.
-
-## 3. Locked decisions
-
-- **N1 — one new package, `avatar/automl/backends/tabnn/`, laid out by what
-  changes on its own, not by mirroring `backends/boosting/`.** The boosting
-  package has a file per task because each task needs a different *native
-  estimator*: `regression.py:26-45` exists to choose between `CatBoostRegressor`
-  and `XGBRegressor` and to arrange their parameters. tabnn has no such fork —
-  by N5 the model is always `SupervisedLearner`, and binary, response,
-  regression and multiclass differ only in `num_classes` / `task_type`, the
-  injected loss and the score post-processing (sigmoid / softmax / identity).
-  That is a table, not four modules; the boosting shape solves a problem this
-  backend does not have. The rule is therefore **a module earns its file by
-  having its own reason to change**, which gives the eight files of §4 instead
-  of twelve. `backends/boosting/**` keeps its files; only the three shared
-  pieces move up.
-- **N2 — backend-neutral names at the task layer, renamed outright.**
-  `BaseBoostingTask -> BaseTask`, `SupervisedBoostingTask -> SupervisedTask`,
-  `fit_boosting_model -> fit_model` (`backends/search.py`),
-  `BoostingFitResult -> FitResult`. **No deprecation aliases** (§12, A2): the
-  old names are semi-public but their users are in this repo and in cluster
-  code we control, and a rename that leaves both spellings alive gets frozen in
-  that state. S1 updates the call sites in the same commit.
-- **N3 — no registry module.** Backend choice is a dict inside
-  `Task._backend_class_for(config.backend)` (§12, A3). Two families do not
-  justify a registry with its own module and import graph; a third family is a
-  new line in the dict.
-- **N4 — training goes through `avatar.train.Trainer`; AutoML owns no
-  training logic.** `Trainer` (`avatar/train/loop.py`) takes model, optimizer,
-  scheduler, dataloaders, metrics, `TrainingArguments`, `RunConfig`, a callback
-  list and a checkpoint directory. Everything cross-cutting is a
-  `TrainerCallback`, so the backend passes exactly three —
-  `EarlyStoppingCallback`, `CheckpointCallback` and `MLflowCallback` (N15) —
-  and gets nothing it did not ask for: no profiler, no progress bar, no
-  throughput logging. What it does get is DDP, AMP, gradient accumulation,
-  clipping, checkpoint rotation and resume. Writing a second training loop is
-  not on the list of options.
-- **N4a — no library-mode fixes are needed any more.** The first draft had to
-  patch three defects in `avatar/train.py` (no return value, an unguarded
-  `accelerator.trackers[0]`, an unconditionally indexed `logging_info`). The
-  `train.py` rewrite removed all three: `Trainer.train()` returns
-  `dict | None`, the objective is `trainer.state.best_metric` — written by
-  `EarlyStoppingCallback` at every evaluation — and tracking is opt-in through
-  the callback list. AutoML calls the library as it is.
-- **N4b — one trial is one `Trainer(...).train()`, behind a trial-runner
-  interface with three implementations** (§12, B2/B2a/B2b):
-
-  | runner | when | how the objective comes back |
-  |---|---|---|
-  | in-process | `num_gpus <= 1` or CPU — **today's only real case** | `trainer.state.best_metric` |
-  | `torch.distributed.run` subprocess | `num_gpus > 1` on one node | worker writes `result.json`, driver reads it |
-  | Osiris job | `env_type="osiris"` with trial fan-out (N14) | job writes `result.json`, `status()` collects it |
-
-  The three share one interface (`run_trial(spec) -> TrialResult`) and one spec
-  format — the same `run_spec.json` protocol `avatar.automl.run` already uses
-  for remote operations. There is no fourth option: running *the whole AutoML
-  process* under `torchrun` is rejected, because launching from a notebook
-  makes it impossible and because every rank would then execute the polars,
-  reporting and artifact code.
-- **N4c — ranking stays comparable across backends** (§12, B3). `Trainer` ranks
-  by `avatar.metrics` objects, AutoML by its own registry
-  (`resolve_metric(...).compute(MetricInput)`). **One** `ScalarMetric` subclass
-  in `backends/tabnn/metric.py` bridges them *by composition*: it holds the
-  resolved AutoML metric, accumulates targets and scores in `update()`, and
-  `compute()` returns `{name: value}` for the configured `optimization_metric`.
-  The AutoML metric classes are not touched and inherit nothing —
-  `Metric` is a structural `Protocol`, `METRIC_REGISTRY` holds instances, and
-  `avatar/automl/**` contains no `import torch` today, which is exactly the
-  property that keeps the boosting path torch-free. The adapter sets
-  `needs_full_population = True` (ROC-AUC and Qini are not sums) and names its
-  `required_inputs` / `required_outputs` so a distributed run gathers those two
-  tensors instead of whole batches. `EarlyStopping(main_metric=<that name>,
-  strategy=direction)` then drives on exactly the number AutoML reports.
-- **N4d — multi-GPU is a launch decision, not a backend one.** With
-  `torch.distributed` there is no in-process launcher, so `world_size > 1`
-  requires an external launcher; N4b puts that behind the subprocess runner.
-  On the current hardware (one A100) the in-process runner is the only one that
-  executes, and the subprocess runner is implemented when a multi-card node
-  appears — the interface exists from the start so that arrival is a new class,
-  not a refactor. Inside an Osiris job the rule is the same: one trial per job,
-  and if the job holds several cards the trial uses them through
-  `torch.distributed.run` within that job (§12, B2b).
-- **N5 — the modules are reused verbatim:**
-  `avatar.nn.embedding.TabularEmbedding` → embedding,
-  `avatar.nn.tabular.TabularTransformer` → encoder,
-  `avatar.pipeline.tabular.SupervisedLearner` → the whole stack (embedding,
-  encoder, pooling, late-fused external embeddings, head, loss),
-  `avatar.pipeline.tabular.SLearner` → uplift,
-  `avatar.data.tabular.TabularBatch` → the batch contract. Binary, regression
-  and multiclass are `SupervisedLearner` with a different `num_classes` /
-  `task_type` pair, and the loss (`avatar.losses.ClassificationLoss`) is
-  injected rather than chosen inside the model — exactly the shape a per-task
-  backend adapter wants.
-- **N6 — the tabnn engine is `engine="tabular_transformer"`** (§12, A4).
-  `"ste"` is *rejected* with an `UnsupportedBackendError` naming the
-  replacement: it was only ever a reserved value, no tabnn artifact exists, and
-  the class it referred to was already renamed `STEv2 -> TabularTransformer` in
-  [tabular_refactor.md](tabular_refactor.md), its deprecation shim since
-  deleted. The engine string is persisted in `backend.json` and checked on
-  load, so it names the class it builds. Adding an engine later (`mlp`,
-  `ft_transformer`) is a dict entry plus a default search space.
-- **N7 — encoding reuses `avatar.preprocessing.local.TabularPreprocessor`**
-  (§12, C3). It fits **streaming, from the parquet source** — not from a
-  materialized frame — and gives exactly what `TabularEmbedding` expects: a
-  *shared* categorical vocabulary with per-column offsets (`offset_map`,
-  `vocab_size`, a reserved `unk` id 0 that unseen values map to) and
-  standardized numericals (`mean_std`, optional `signed_log1p`). This keeps
-  AutoML's encoding identical to the encoding used by hand-written avatar
-  training runs, and its Spark twin produces the same artifact. `dump()` is
-  JSON-safe and goes into `backend.json`; it is **also written as a standalone
-  file** next to the model (§8) so it can be restored with
-  `TabularPreprocessor.load()` without parsing the AutoML artifact.
-- **N8 — CPU is supported, with a warning** (§12, D1). The current
-  `tabnn + device="cpu"` ban goes: the default unit suite must stay runnable
-  without a card, and the boosting backend already supports both devices. The
-  development box does have one A100 80 GB — the target card of §7 — so the GPU
-  path is genuinely testable here (§14) and the CPU path is not a substitute
-  for it; it is what keeps the suite portable.
-  `env_type="osiris"` keeps requiring `device="gpu"`.
-  `device="cpu"` logs one explicit warning naming the training-row count,
-  because CPU × `n_trials` × epochs is how a one-hour run silently becomes a
-  one-day run.
-- **N9 — hyperopt is enabled for tabnn, but the epoch budget is not searched**
-  (§12, D2). The `"Optuna hyperopt is available only for boosting"` guard is
-  removed once `fit_model` is family-agnostic. `max_epochs` and `patience` are
-  **fixed defaults**, not search dimensions: with early stopping live, a larger
-  epoch cap does not buy metric, it buys wall-clock, so that axis trades search
-  budget for nothing. This mirrors boosting, where the iteration count is
-  settled by early stopping inside one fit rather than by Optuna.
-  **On large splits the unit is steps, not epochs:** at 100 M rows one epoch is
-  hours and `patience=5` means "stop after a week", so the backend sets
-  `TrainingArguments.steps_before_evaluation` (already supported —
-  `avatar/training_arguments.py:46`, used at `avatar/train/loop.py:315`) and
-  counts patience in evaluations. Default: evaluate every
-  `ceil(rows / batch_size / 8)` steps, capped at one epoch.
-- **N10 — task coverage lands in two waves** (§12, E1). Wave 1: `binary`,
-  `response`, `regression`, `multiclass` — one `SupervisedLearner` each,
-  differing only in `num_classes` / `task_type` and the injected loss. Wave 2:
-  `uplift` via `SLearner` only — the boosting backend's S/T/X metalearner
-  search is out of scope for v1, and `UpliftTaskConfig` gains no new field (an
-  unsupported metalearner combination raises `UnsupportedBackendError`).
-- **N11 — model-part layouts are unchanged, but partitioned lazily** (§12, C5).
-  `global`, `per_group` and `global_and_per_group` are decided by
-  `TrainingCoordinator` above the backend, so they work for free. Under
-  `consumes="sources"` the per-group split becomes a scan predicate
-  (`scan().filter(group == value)`) instead of `DataFrame.partition_by`
-  (`tasks/training.py:143`), which is what makes per-group training possible at
-  all when one split does not fit in RAM. The cache is written per part, so the
-  predicate runs once and trials read their own slice directly.
-- **N12 — out-of-core by construction: encode once to a packed parquet cache**
-  (§12, C1/C2/G6). Real datasets already exceed RAM under the boosting backend,
-  so the NN backend does not inherit AutoML's in-memory assumption — and **there
-  is no in-memory fast path**, not even for small splits: two data paths in one
-  backend cost more than one. `prepare_fit_data`:
-
-  1. fits `TabularPreprocessor` in one streaming pass (`MeanStdAccumulator` /
-     `ValueCountAccumulator` are already batched at `batch_rows=250_000`);
-  2. `transform(..., output="packed", identity_cols=[target, treatment, group,
-     date, *hidden_state_columns])` writes the `cat_features` / `num_features`
-     list columns that `avatar.data.tabular.TabularDataset` expects.
-
-  Every trial streams that cache through `TabularDataset` +
-  `TabularCollateFn`; peak memory is one batch. The cache is the streaming
-  analogue of CatBoost's shared quantized pool: written once, reused by every
-  trial. Three properties are decisions, not mechanics:
-
-  - **The cache is kept, not deleted** (§12, C2). It is what
-    `calibrate(valid_path)` — a separate call after `train()` — re-scores, what
-    the report and `evaluate` pass over again, what a resumed or extended search
-    reuses, and what `global_and_per_group` reads twice in one `predict`.
-    Deletion is an explicit operation: `cache_policy: "keep" | "delete"`
-    (default `keep`) and `task.clear_cache()`.
-  - **The cache directory is content-keyed**, not `<part>`-named: the key is the
-    source manifest (`DataPreparation.source_manifest` already returns
-    `path`/`size`/`modified_ns` per file, `tasks/preparation.py:53`) plus the
-    part name plus the preprocessor config. Without the key, "keep" means a
-    re-run on different data under the same `output_dir` silently reuses a
-    stale cache. This is a condition of the keep policy, not a nicety.
-  - **`cache_dir` is configurable**, default `<output_dir>/cache/`. Artifacts
-    live in `<output_dir>/artifacts/`, so the cache is a sibling and `save()`
-    never picks it up. **On Osiris the cache goes to NFS, not HDFS** (§12, G6):
-    HDFS is read natively by `TabularDataset`, but the Kerberos ticket expires,
-    and a job that streams batches for hours will hit an expired token
-    mid-training. Source parquet is read from HDFS once, during encoding, while
-    the ticket is fresh; after that every job reads NFS only.
-
-  The cache is written as **many files, not one**. `TabularPreprocessor.transform`
-  currently opens a single `pq.ParquetWriter(output_path, schema)`
-  (`avatar/preprocessing/local/pipeline/tabular_pipe.py:154`); tabnn needs it
-  split by row count or target file size. Sharding correctness does not depend
-  on this — `ShardPlanner` splits by record, not by file
-  (`avatar/data/base/iterable.py`) — but read parallelism and shuffle
-  granularity do, and on NFS a single file is a contention point for K jobs.
-
-  **Encoding runs in a process pool over parquet shards, not in one process.**
-  Encoding blocks every trial, so a serial pass is a card standing idle: at
-  100 M rows x ~200 features a single-process `NumCatPipeline.fit`
-  (`avatar/preprocessing/local/pipeline/base_pipe.py:70-105`, one sequential
-  loop over `iter_record_batches`) is measured in hours before the first step
-  of the first trial. The shape is `shard -> worker -> partial state -> merge`
-  for the fit and `shard -> worker -> part-*.parquet` for the transform, which
-  is also how the cache ends up as many files. No distributed framework: a
-  process pool over the accumulators that already exist. What has to be added
-  is small and the existing code is unusually friendly to it:
-
-  - `MeanStdAccumulator.update` already combines a batch's `(n, mean, m2)` into
-    the running state with Chan's parallel formula
-    (`avatar/preprocessing/base/accumulators.py:49-68`), so `merge(other)` is
-    those same three lines with a second state in place of a batch.
-  - `ValueCountAccumulator` holds `{column: {value: count}}`, so merging is
-    summing dicts.
-  - **The vocabulary does not depend on shard order.** Ids are assigned in
-    `finalize(order="sorted")` — the default (`label_encoder.py:41`) — and the
-    count-descending orders break ties by value
-    (`accumulators.py:136-176`), so a parallel fit reproduces the serial
-    artifact exactly. `order="first_seen"` is the one order-dependent mode and
-    is rejected when the parallel path is used.
-  - The unit of parallelism is `NumCatPipeline.fit`, not the individual
-    accumulator: both accumulators are updated in one pass over the same
-    batches, and splitting them would read the source twice.
-
-  This is the one idea taken from the independent design (§13).
-- **N13 — hidden states reach the model as vectors; there is no flatten path**
-  (§12, C4). `_expand_hidden_states` (`avatar/automl/data/schema.py:162`, called
-  at line 306) turns a 256-dim embedding into 256 scalar columns and folds them
-  into `numerical` / `feature_order`. That is the only thing a booster can eat
-  and the wrong thing for a network: the embedding then dominates attention by
-  sheer column count, each coordinate gets standardized separately (destroying
-  the geometry the source model produced), and each gets its own input
-  projection. tabnn therefore uses **late fusion only**:
-  `SupervisedLearner(hidden_state_dim=…, normalize_hidden_states={name: width},
-  proj_hiddens_to_dim=…)` (`avatar/pipeline/tabular/supervised.py:154-175`,
-  width accounted at lines 233-234), with `TabularDataset(hidden_state_columns=[…])`
-  reading the list column natively (`avatar/data/tabular/dataset.py:62`). Early
-  fusion (`hidden_state_aggregator`, the embedding as an extra token) is not in
-  wave 1 — it touches the encoder — and stays a candidate search axis later.
-
-  Two consequences: schema construction must learn **not** to expand (a
-  backend-family flag; `TabularSchema` carries `hidden_states: {name: width}` as
-  its own field, and the widths are already computed from the parquet schema
-  without reading rows), and the cache carries the list column as an
-  `identity_col` — the preprocessor must not standardize it, because the
-  embedding is normalized as a whole vector by `LayerNorm` inside the model.
-  Feature parity with boosting is therefore gone by design: boosting sees 256
-  scalar columns, tabnn sees one vector. Metric comparison stays honest (same
-  data, same metric) but compares *pipelines*, not only architectures, and the
-  benchmark in S7 says so.
-- **N14 — on Osiris, the fan-out goes one level deeper: a job per trial**
-  (§12, G1–G5, G7). AutoML already fans out one job per model part
-  (`tasks/operations.py`, `operation["jobs"]`, `status()`,
-  `_finalize_remote_train`); trial-level fan-out reuses that machinery. What
-  changes around it:
-
-  - **Optuna moves to the driver** and the job becomes "train one parameter set,
-    return a metric". `search_strategy: "tpe" | "random" | "grid" |
-    "explicit"` decides how the driver samples; the default is `tpe` for the
-    local sequential path (the driver is alive by construction) and **`random`
-    for Osiris fan-out**.
-  - **`grid` is the Optuna-free mode** (§13). It expands a fully categorical
-    `search_space` into its Cartesian product, and when `n_trials` is smaller
-    than the product it picks that many combinations deterministically from
-    `random_state`. Nothing is sampled and nothing is persisted: the trial list
-    is a pure function of the config, so resuming after a dead driver needs no
-    state at all. It is an option, not the default, because it cannot express a
-    continuous axis — `lr` log-uniform matters more for a network than for a
-    booster — and because the product explodes on the ten axes of §7 (three
-    values each is ~59 000 combinations). Use it for a small explicit grid,
-    where it is strictly better than sampling.
-  - **With `random`/`explicit` there are no waves.** All K parameter sets are
-    sampled before the first submit, so the driver's only job is to submit and
-    later collect. This matters because the driver is a notebook container that
-    can die: jobs cannot submit jobs, so there is no in-cluster driver, and any
-    design that needs the notebook alive between waves is fragile. Adaptivity
-    costs a live driver; giving it up buys "the driver need not survive".
-    The quality loss is small at this budget — with a wave of width K every
-    trial in the wave is sampled from the same posterior, so 50 trials at K=20
-    is two or three adaptive updates, and random search is a strong baseline on
-    six axes at that budget. Waves stay documented as an opt-in; the persistence
-    below already supports them.
-  - **We drop adaptivity, not Optuna.** `RandomSampler` + `ask()` keeps one
-    `search_space` format for both families, one trial history for the report,
-    and makes TPE a one-line sampler change later.
-  - **Search state is persisted next to the jobs.** In-memory storage would lose
-    the trial↔job mapping on a driver restart — the job ids themselves survive,
-    because `update_operation` writes `operation.json` before waiting
-    (`avatar/automl/lifecycle.py:183`, `tasks/operations.py:549`). So each trial
-    is recorded with `trial_id`, parameters, state and metric; **parameters are
-    written before submit**, metrics after polling; on resume the study is
-    rebuilt with `add_trial`. The sampler is seeded and trials are re-added in
-    order, or a resumed run diverges from an uninterrupted one.
-  - **Resource fields.** `num_gpus` means **cards per trial** (per job) — the
-    `EnvironmentConfig` docstring that calls them "GPUs for the operation" is
-    corrected. `trials_per_job` is not introduced: one trial per job is the
-    point. `max_parallel_jobs` is an optional cap; when it is set, submission
-    happens in chunks and must be **resumable** — `status()` finds trials in
-    state `planned` without a `job_id` and submits them. The deterministic
-    per-trial `run_dir` plus `mkdir(exist_ok=False)`
-    (`avatar/automl/environment.py:238`) is the write-ahead marker, and the job
-    name must carry `trial_id` (today it is `f"fmlib-{action}-{run_id[:8]}"`
-    with a fresh uuid, `environment.py:266`), so a crash between submit and
-    recording the id yields a findable orphan rather than a duplicate job.
-  - **A failed trial is `tell(state=FAIL)` and the run continues.** Under
-    `random` that costs one point out of K; the operation succeeds if any trial
-    produced a model, and failure counts and reasons land in `operation.json`
-    and the report. **The local sequential path needs the same tolerance:**
-    `study.optimize` is called without `catch=`
-    (`backends/boosting/hyperopt.py:336`), so today the first failing trial
-    aborts the whole search. That is tolerable for boosting, where a trial
-    rarely fails, and wrong for tabnn, where OOM is an ordinary outcome of a
-    sampled `batch_size` x `hidden_size` pair. `fit_model` therefore catches
-    per-trial exceptions **for tabnn only** and records them as failed trials;
-    the boosting call keeps today's fail-fast behaviour, because changing it
-    would change boosting results on a failing trial.
-  - **Boosting keeps its execution path.** Trial fan-out is tabnn-only: a
-    boosting trial takes minutes, the per-job overhead is not worth it, and the
-    first constraint of this design is not to disturb that path. The shared
-    trial selector makes enabling it later a configuration change.
-  - **Reproducibility is scoped.** Byte-identical parity is claimed and tested
-    only for the local sequential CPU path. On the cluster, GPU arithmetic is
-    non-deterministic, the set of completed trials can differ (failures), and a
-    0.7231-vs-0.7230 margin can flip which parameters reach the artifact — so
-    the assertion is metric equality within tolerance, and `best_params`
-    equality is not asserted. The *search* is reproducible: seeded `random`
-    gives the same parameter sets run to run.
-- **N15 — every trial logs to MLflow** (§12, B6). `MLflowCallback`
-  (`avatar/train/callbacks/mlflow.py`) is passed with the trial's parameters as
-  MLflow params and the AutoML metric as the tracked metric: one MLflow run per
-  trial, named `<run_id>/<part>/trial-<trial_id>`, so the Osiris fan-out and the
-  local loop produce the same tree. Tracking URI and experiment come from the
-  config; when no URI is configured the callback is not constructed and nothing
-  is logged. AutoML's own `progress.py` reporting stays as it is — MLflow is in
-  addition to it, not instead.
-- **N16 — four reliability defects of the remote path are fixed before trial
-  fan-out is built on top of it.** They come from an independent audit
-  (`obligatory.md`) and were re-verified against this branch on 2026-09-17.
-  Trial fan-out replaces one or two jobs per operation with K, which moves each
-  of them from "rare annoyance" to "loses a night of training":
-
-  - **An operation must not be terminal before it is finalized.** `status()`
-    writes `state=aggregate` — i.e. `succeeded` — at
-    `tasks/operations.py:382`, *then* calls `_finalize_remote_train` (:388),
-    and the polling loop skips operations already in
-    `succeeded`/`failed`/`partial_failed` (:374-380). A crash in between leaves an
-    operation that is terminal and unfinished, and no later `status()` will
-    touch it again. Fix: a non-terminal `finalizing` state written before
-    finalization, `succeeded` only after it, and finalization itself
-    idempotent so a resumed driver can repeat it. This is the same failure the
-    persisted search state of N14 exists for, one step later in time — for
-    tabnn, "finalization" *is* "collect K trial results and pick the best".
-  - **Job ids are persisted per submit, not per batch.** `_start_remote_train`
-    appends to a local `jobs` list and calls `update_operation` once after the
-    loop (`tasks/operations.py:178-208`), so a failure on submit *k* loses the
-    ids of jobs 1..k-1 while they keep running and keep holding cards. Fix:
-    `update_operation(..., jobs=jobs)` after **every** successful `submit`.
-    N14's write-ahead `run_dir` and `trial_id`-bearing job name then cover the
-    remaining window — a crash *between* `submit` and the write leaves a
-    findable orphan instead of a silent duplicate.
-  - **`unknown` needs a finite policy.** A job missing from `osiris.list()`
-    polls as `unknown` (`environment.py:345`), the aggregate becomes `unknown`
-    (:372), and `status(wait=True)` counts that as active forever
-    (`tasks/operations.py:428`). With K trial jobs the chance of meeting it is
-    K times higher, and the cost is a run that hangs all night *and* withholds
-    the results that did arrive. Fix: `unknown` is tolerated for
-    `unknown_job_grace_seconds` (default 900) and then becomes a terminal
-    `lost` with diagnostics; a `lost` trial is `tell(state=FAIL)` like any
-    other failure and the search finishes with the trials it has.
-  - **`CUDA_VISIBLE_DEVICES` stops leaking, and stops being `"0"` for tabnn.**
-    `run_local` sets it for every backend and never restores it
-    (`environment.py:142`; the `finally` at :165 only closes log handlers), so
-    one AutoML call permanently narrows the notebook kernel to one card. Two
-    separate corrections, and only the first applies to boosting:
-    **(i)** the variable is set through a context manager that restores the
-    previous value in `finally` — inside the callback nothing changes, so the
-    parity gate stays green; **(ii)** the pinning applies **only to
-    `backend="boosting"`**, exactly as `submit` already does for remote jobs
-    (`environment.py:268-271`). The `"0"` is deliberate and stays: CatBoost
-    with `task_type="GPU"` and no explicit `devices`
-    (`backends/boosting/binary.py:41`) spreads over every visible card, and
-    `tests/automl/test_environment.py:159` asserts the current behaviour. For
-    tabnn, visibility follows `num_gpus` — without that the multi-GPU
-    subprocess runner of N4b cannot see a second card, and `num_gpus` as
-    "cards per trial" (N14) would be a lie locally.
-
-  A fifth audit item — unsynchronized read-modify-write on `operation.json`
-  (`lifecycle.py:183-193`, with a shared `operation.json.tmp` temp name) — is
-  **not** a concurrency problem in this design: the driver is the only writer
-  of that file, and trial jobs write `result.json` inside their own `run_dir`.
-  It becomes one through N14's recovery story, where "the container died, I run
-  `status()` again" can put two drivers on one operation. The answer is a
-  single-writer check rather than a lock: the record already carries
-  `owner.{hostname,pid,token}` (`lifecycle.py:173-178`) and
-  `reconcile_local_operations` (`lifecycle.py:244`) already implements the
-  liveness test, so a second driver either takes ownership or refuses.
-
-## 4. Target layout
-
-```
-avatar/automl/backends/
-  __init__.py
-  interface.py        ModelBackend, TrainableBackend  (ModelBackend from
-                      boosting/interface.py, where it is BoostingBackend; the
-                      Trainable half is factored out of boosting/base.py)
-  search.py           FitResult, fit_model, suggest_params  (from boosting/hyperopt.py)
-  boosting/           unchanged except the three imports above
+```text
+fmlib/automl/backends/
+  interface.py        ModelBackend, TrainableBackend
+                      (ModelBackend из boosting/interface.py, где он BoostingBackend;
+                       Trainable-половина выделяется из boosting/base.py)
+  search.py           FitResult, fit_model, suggest_params (из boosting/hyperopt.py)
+  boosting/           без изменений, кроме трёх импортов выше
   tabnn/
     __init__.py
-    data.py           one cache contract, both directions: TabularPreprocessor fit,
-                      packed-parquet write, TabularDataset + TabularCollateFn read (N12)
-    assembly.py       build model/optimizer/scheduler/dataloaders/EarlyStopping
-    metric.py         AutoMLMetric(ScalarMetric) adapter (N4c)
-    runner.py         trial runners: in-process / torchrun subprocess / Osiris job (N4b)
+    data.py           один контракт кэша в обе стороны: fit препроцессора,
+                      запись packed-parquet, чтение TabularDataset + TabularCollateFn
+    assembly.py       модель/оптимизатор/шедулер/лоадеры/EarlyStopping из параметров
+    metric.py         AutoMLMetric(ScalarMetric) — мост метрик (§6.4)
+    runner.py         трейл-раннеры: in-process / torchrun subprocess / Osiris job
     base.py           BaseTabNNBackend (prepare_fit_data / fit_prepared / save / load)
-                      + Binary / Response / Regression / Multiclass adapters
-    uplift.py         UpliftTabNNBackend        (SLearner, wave 2)
-    spaces.py         default_search_space(engine, preset)
+                      + адаптеры Binary / Response / Regression / Multiclass
+    uplift.py         UpliftTabNNBackend (SLearner)
+    spaces.py         default_search_space(engine)
 ```
 
-No `registry.py` (N3): the family→class mapping is a dict in
-`Task._backend_class_for()`.
+---
 
-Why these eight and not the twelve of the first draft (N1):
+## 5. Препроцессинг и обработанные данные
 
-- **No tabnn `interface.py`.** The shared ABCs move *up* to
-  `backends/interface.py`, so a second file of that name inside `tabnn/` would
-  be both redundant and confusing, and the boundary the draft drew through it
-  ("device handling" vs "persistence") is not a boundary anything follows.
-- **`loader.py` folded into `data.py`.** Reading and writing the cache are two
-  sides of one contract: change `identity_cols` on the write side and
-  `hidden_state_columns` must change on the read side. Splitting them invites
-  exactly the drift that would silently produce wrong features.
-- **The per-task modules folded into `base.py`.** The adapters are still
-  classes — the task layer binds one as a class attribute (`tasks/binary.py:49`,
-  `tasks/regression.py:44`, read again when an artifact is loaded at
-  `tasks/base.py:849`) — but each is 10-20 lines, and multiclass adds only
-  `class_order` persistence. `base.py` then lands around 250-350 lines, still
-  smaller than `boosting/base.py` (440).
-- **What stays separate, and why.** `uplift.py`: a different model (`SLearner`),
-  treatment handling, a later wave, and the place that grows if S/T/X parity is
-  ever wanted — `boosting/uplift.py` is 649 lines for that reason. `metric.py`:
-  small, but it is the single point where torch meets AutoML's metric registry,
-  and its separateness is what documents that boundary. `runner.py`: two of its
-  three implementations arrive later and none of them belong inside a backend.
-  `spaces.py`: data, not logic.
+Препроцессинг не является отдельным публичным действием: пользователь передаёт
+сырые данные в существующие `train()`/`predict()`.
 
-## 5. Data path: sources -> encoded cache -> `TabularBatch`
+### 5.1. Контракт train/valid/test
 
-Nothing is materialized. The three passes over the data are:
-
-```
-1. schema        scan().collect_schema()          parquet footers only, no rows
-                 + hidden-state widths            from the schema, not the rows
-2. encoder fit   TabularPreprocessor.fit(source)  streaming, batch_rows=250k
-                   categorical_columns=schema.categorical
-                   numeric_columns=schema.numerical
-                   spec_tokens={"unk": 0}
-3. encode        .transform(source, out, output="packed",
-                            identity_cols=[target, treatment, group, date,
-                                           *hidden_state_columns])
-                 -> <cache_dir>/<key>/{train,valid}/part-*.parquet
+```text
+train:   preprocessor.fit(raw train) -> transform(raw train) + transform(raw valid)
+predict: load fitted preprocessor    -> transform(raw input)
 ```
 
-Hidden-state columns pass through untouched (N13): they are identity columns in
-the cache, `LayerNorm`-ed as whole vectors inside the model, never standardized
-per coordinate and never expanded into scalar features.
+Valid и test в `fit` не участвуют. Препроцессор не переобучается никогда.
 
-Each trial then reads the cache with the classes that already exist:
+### 5.2. Препроцессинг выполняется до `model_layout`
+
+Один фит на полном train, один transform полных train/valid, и только потом
+`model_layout` режет **уже обработанные** данные (Q2).
+
+```text
+raw train / raw valid
+   -> fit на полном train
+   -> transform полных train + valid
+   -> processed train / processed valid
+   -> model_layout routing (global или per_group; см. ниже)
+   -> model parts
+```
+
+Все части делят один словарь категорий и одно масштабирование. Следствия,
+которые надо знать:
+
+- эмбеддинги групп сравнимы между собой, редкие категории маленьких групп не
+  теряются;
+- **семантика отличается от бустинга**, где схема считается по части; это
+  осознанное расхождение, а не недосмотр;
+- кодирование выполняется **один раз** независимо от числа частей.
+
+**Как часть читает свои строки, и почему `global_and_per_group` запрещён.**
+
+Батч собирается из одного файла. `BaseShardedParquetDataset._iter_sharded_impl`
+(`avatar/data/base/iterable.py:450-472`) идёт сегмент за сегментом, где сегмент —
+кусок **одного** файла; `shuffle_files` перемешивает порядок сегментов,
+`shuffle_pq` — записи внутри сегмента, а буфера перемешивания между файлами нет.
+При файле в 500 тыс. строк и `batch_size=4096` это ~122 подряд идущих батча из
+одного файла.
+
+Отсюда правило раскладки:
+
+| `model_layout` | раскладка | почему так |
+|---|---|---|
+| `global` | плоская, без партиционирования | одна модель учится на всех группах, и батчи обязаны быть перемешанными |
+| `per_group` | партиционированная `<processed>/train/group=<value>/part-*.parquet` | часть читает свой подкаталог; батч однороден по группе, но модель на эту группу одна — так и задумано |
+| `global_and_per_group` | **не поддерживается для tabnn** | требует обеих раскладок одновременно |
+
+`global_and_per_group` отвергается на валидации конфига с
+`UnsupportedBackendError`, называющим причину, — а не падает где-то в глубине.
+Если бы он был разрешён, `global`-часть читала бы партиционированные данные и
+каждый шаг оптимизатора видел бы одну группу: градиенты скоррелированы, моменты
+Adam мотает от группы к группе — то же самое, что учиться на данных,
+отсортированных по категориальному признаку. Корректность не ломается, качество
+ломается.
+
+**Цена:** паритет с бустингом здесь меньше — он `global_and_per_group`
+поддерживает. Это записано в README и оговаривается в бенчмарке: такую
+конфигурацию сравнить нельзя.
+
+**Остаточная оговорка, не связанная с группами:** раз батч приходит из одного
+файла, любой порядок, унаследованный от исходного parquet (например,
+отсортированность по дате), протекает в обучение и на плоской раскладке.
+Лечится буфером перемешивания между сегментами — см. §14.
+
+### 5.3. Путь к обработанным данным и безопасное переиспользование
+
+Путь задаётся полем **`processed_data_path`** (по умолчанию —
+`<output_dir>/processed/`). Внутри — каталог, **адресуемый content-key**:
+
+```text
+<processed_data_path>/<key>/train/...          key = хэш(манифест train + манифест valid
+                     /<key>/valid/...                + fingerprint конфига препроцессора
+                     /<key>/_manifest.json            + fingerprint схемы + версия контракта)
+                     /index.json
+```
+
+Почему и то и другое: хэш — это **имя** каталога, манифест — **проверка** его
+содержимого, и проверка нужна в любом случае. Явный путь даёт одно видимое
+место, которое можно положить на размеченный том, шарить между запусками и
+чистить. Ключ снимает необходимость ошибки в типовом сценарии «данные
+поменялись» — это просто другой каталог. `index.json` хранит
+`key -> {train source, valid source, создан, строк, байт}`, чтобы каталоги не
+были нечитаемыми и было видно, что можно удалить.
+
+**`_manifest.json`** — маркер завершённости, который пишется последним:
+
+```text
+complete: true
+parts: [...]                  ожидаемый список файлов
+rows, contract_version
+preprocessor fingerprint, schema fingerprint
+train/valid source manifests
+```
+
+Он нужен потому, что transform пишет пачку `part-*.parquet` (и параллельно, см.
+5.4). После падения в каталоге лежит, скажем, 17 файлов из 40, и отличить это от
+«датасет из 17 файлов» невозможно: недописанный кусок сам по себе валиден.
+Оборванный файл ещё поймается — у parquet футер пишется при закрытии; а
+**недостающий** файл не даст никакой ошибки, обучение молча пройдёт по половине
+данных. Поэтому маркер перечисляет ожидаемые файлы.
+
+**Публикация атомарная:** пишем в `<key>.tmp-<pid>/`, после закрытия всех файлов
+`os.rename` в `<key>/`. Недописанный каталог никогда не виден под настоящим
+именем. Побочный выигрыш — конкурентная запись безопасна: два процесса,
+начавшие кодировать один ключ, пишут каждый в свой temp, один rename выигрывает,
+проигравший видит готовую цель, удаляет свой temp и читает опубликованное.
+
+**Чтение:** маркер есть и всё сошлось → переиспользуем; маркера нет → кэша нет,
+кодируем. Манифест **внутри совпавшего ключа** не сошёлся (битый каталог,
+недописанный, другая версия контракта) → **ошибка без перезаписи**, с
+объяснением и предложением удалить каталог или задать другой
+`processed_data_path`.
+
+**Удаление — операция, а не настройка.** Обработанные данные не удаляются
+автоматически: они нужны `calibrate()` (отдельный вызов после `train()`),
+отчёту, повторному `evaluate` и возобновлённому или расширенному поиску.
+Очистка — метод **`task.clear_cache()`**.
+
+**Размещение.** На Osiris обработанные данные лежат на **NFS, не на HDFS**:
+исходный parquet читается из HDFS один раз, во время кодирования, пока
+kerberos-тикет свежий; дальше джобы, которые стримят батчи часами, читают только
+NFS и не упираются в протухший токен. Объём: строки × (числовые + ширины
+эмбеддингов) × 4 байта — 768-мерный эмбеддинг это ~3 КБ на строку, то есть
+100 млн строк ≈ 300 ГБ, и том под `processed_data_path` выбирается осознанно.
+
+**Слабое место, которое надо знать:** ключ строится на `path + size +
+modified_ns` (`DataPreparation.source_manifest`, `tasks/preparation.py:53`).
+Источник, перезаписанный файлом того же размера и с той же mtime, ключ не
+изменит. Где источник даёт etag/version/checksum (HDFS) — берём их вместо пары
+size+mtime; для локального parquet остаётся оговорка в документации.
+
+**Возобновления недокодированного кэша нет.** Упало на 80% — кодируем с нуля.
+Докодировать мешало бы хранение состояния аккумуляторов и доказательство, что
+словарь собран по всем шардам; ради редкого случая это не окупается, а
+кодирование — один потоковый проход, который 5.4 делает недолгим.
+
+### 5.4. Параллельный препроцессинг — обязателен
+
+Кодирование блокирует каждый трейл, поэтому последовательный проход — это
+простаивающая карта: на 100 млн строк × ~200 признаков однопроцессный
+`NumCatPipeline.fit` (`avatar/preprocessing/local/pipeline/base_pipe.py:70-105`,
+один последовательный цикл по `iter_record_batches`) измеряется часами до
+первого шага первого трейла.
+
+```text
+fit:        shards -> пул процессов -> частичные MeanStd / ValueCount
+                   -> детерминированный merge -> fitted TabularPreprocessor
+transform:  shard_i -> worker -> part-00i.parquet
+```
+
+Никакого distributed-фреймворка: пул процессов поверх существующих
+аккумуляторов. Добавить нужно немного, и код на удивление дружелюбен:
+
+- `MeanStdAccumulator.update` уже комбинирует `(n, mean, m2)` батча с текущим
+  состоянием по формуле Чана
+  (`avatar/preprocessing/base/accumulators.py:49-68`), так что `merge(other)` —
+  те же три строки со вторым состоянием вместо батча;
+- `ValueCountAccumulator` хранит `{колонка: {значение: счётчик}}` — merge это
+  сложение словарей;
+- **словарь не зависит от порядка шардов**: ids присваиваются в
+  `finalize(order="sorted")` — это дефолт (`avatar/preprocessing/local/label_encoder.py:41`), — а
+  count-descending порядки разбивают ничьи по значению
+  (`avatar/preprocessing/base/accumulators.py:136-176`). Параллельный фит воспроизводит последовательный
+  артефакт побитово. **`order="first_seen"` в параллельном режиме запрещён** —
+  это единственный порядок, зависящий от обхода;
+- единица параллелизма — `NumCatPipeline.fit`, а не отдельный аккумулятор: оба
+  обновляются за один проход по тем же батчам, разделять их значит читать
+  источник дважды.
+
+Выход обязан состоять из **нескольких** файлов: сейчас
+`TabularPreprocessor.transform` открывает один
+`pq.ParquetWriter(output_path, tbl.schema)`
+(`avatar/preprocessing/local/pipeline/tabular_pipe.py:154`). Корректность
+шардинга от этого не зависит — `ShardPlanner` режет по записям, а не по файлам
+(`avatar/data/base/iterable.py`), — но параллельность чтения и гранулярность
+перемешивания зависят, а на NFS один файл это точка конкуренции для K джоб.
+
+### 5.5. Out-of-core по построению
+
+Ничего не материализуется в память целиком. Три прохода по данным:
+
+```text
+1. схема       scan().collect_schema()   только футеры parquet, без строк
+                                          + ширины hidden states из схемы
+2. фит         TabularPreprocessor.fit(source)   потоково, batch_rows=250k, пул процессов
+3. кодирование .transform(source, out, output="packed",
+                          identity_cols=[target, treatment, group, date, *hidden_states])
+```
+
+Трейлы стримят результат через `TabularDataset` + `TabularCollateFn`; пиковая
+память — один батч. Отдельного «быстрого пути в памяти» для маленьких сплитов
+**нет**: два пути данных в одном бэкенде стоят дороже, чем один.
+
+Это требует одного изменения общего кода: `TrainingCoordinator` сейчас зовёт
+`DataPreparation.read_source` и отдаёт `_fit_one` два материализованных фрейма
+(`tasks/training.py:83-84`). Для tabnn он передаёт дескриптор источника; у
+бустинга `_fit_one` открывается двумя строками материализации, так что его
+поведение не меняется, а `partition_by` (`tasks/training.py:143`) для tabnn не
+используется вовсе — разделение по группам выполняется партиционированием на
+записи (5.2).
+
+---
+
+## 6. Связка AutoML → fmlib Trainer
+
+Используются существующие компоненты: `fmlib.preprocessing.local.TabularPreprocessor`,
+`fmlib.pipeline.tabular.SupervisedLearner` и `SLearner`,
+`fmlib.data.tabular.TabularDataset` / `TabularBatch` / `TabularCollateFn`,
+`fmlib.train.Trainer`, существующие колбэки, чекпоинты и `fmlib.train.predict`.
+
+AutoML добавляет ровно четыре вещи: сборку модулей из параметров трейла, мост
+метрик, трейл-раннер и нормализацию скоров. Своего цикла обучения, менеджера
+чекпоинтов, конструирования оптимизатора и цикла инференса у него нет.
+
+### 6.1. Соответствие задач
+
+```text
+Binary      -> SupervisedLearner, бинарная классификация
+Response    -> SupervisedLearner, бинарная классификация (treatment — обычный признак)
+Regression  -> SupervisedLearner, регрессия
+Multiclass  -> SupervisedLearner, K классов (+ class_order в артефакте)
+Uplift      -> SLearner, только S-Learner
+```
+
+T/X-метаобучатели в scope не входят; неподдерживаемая комбинация даёт
+`UnsupportedBackendError`, ограничение отражено в `examples/automl/README`.
+
+### 6.2. Маппинг конфига: train и predict
+
+Интеграционный слой покрывает **оба** backend-специфичных пути. Бустинговые
+`prepare_data()`/нативный предикт для сети не используются.
 
 ```python
-# avatar/data/tabular/
-TabularDataset(path=str(cache / "train"), shuffle_files=True, shuffle_pq=True,
-               hidden_state_columns=[…], shard=True, drop_tail=True)
+build_tabnn_train_config(task_config, model_part, trial_params, processed_data)
+build_tabnn_predict_config(task_config, model_artifact, processed_input, runtime)
 ```
 
-`shard=True` splits the record stream across ranks and workers, and
-`drop_tail=True` drops `total % world_size` records so every rank produces the
-same number of steps. `predict_score` must score every row exactly once, so it
-reads the cache with `shard=False` — single-process today (N4d), and
-`avatar.train.predict`'s `local` reduction mode when a distributed prediction
-path is added.
+Train переводит: тип задачи → `SupervisedLearner`/`SLearner`; роли колонок →
+конфиг входа; пути обработанных данных → лоадеры; метаданные hidden states →
+late-fusion; `model_params` + параметры трейла → конфиг модели и обучения;
+`random_state` → seed; `optimization_metric` → валидационная метрика и
+направление ранней остановки; device/ресурсы → runtime.
 
-Late fusion is wired and the bug the first draft found is fixed:
-`TabularClassification.forward` used to run `tab_features.hidden_states.isnan()`
-unconditionally and raise on `hidden_states=None`;
-`SupervisedLearner._external_embeddings` now returns `None` when there is
-nothing to fuse. So the backend only has to pass `hidden_state_dim` (or
-`normalize_hidden_states`, which layer-normalises each named embedding
-separately) and let the pipeline concatenate after pooling — no pipeline change
-at all.
+Predict собирает существующий inference-путь из сохранённого конфига модели,
+fitted препроцессора и метаданных схемы, обработанного входа, весов чекпоинта,
+метаданных model part и runtime-ресурсов.
 
-## 6. Training: what the backend hands to `avatar.train.Trainer`
+### 6.3. Один трейл в разных окружениях
 
-No loop of our own (N4). One trial is:
+Логика трейла одна, отличается только запуск. Интерфейс один:
+`run_trial(spec) -> TrialResult`, формат спеки — тот же `run_spec.json`, который
+уже использует `fmlib.automl.run`.
+
+| раннер | когда | как возвращается метрика |
+|---|---|---|
+| in-process | `num_gpus <= 1` или CPU — **сегодня единственный исполняемый** | `trainer.state.best_metric` |
+| `torch.distributed.run` subprocess | `num_gpus > 1` на одной ноде | воркер пишет `result.json`, драйвер читает |
+| Osiris job | `env_type="osiris"` | джоба пишет `result.json`, `status()` собирает |
+
+Четвёртого варианта нет: запускать **весь процесс AutoML** под `torchrun`
+отвергнуто — из ноутбука это невозможно, и каждый ранг исполнял бы polars,
+отчёты и работу с артефактами.
+
+`num_gpus` означает **число карт на один trial** (на одну джобу). Докстрока
+`EnvironmentConfig`, называющая их «GPU для операции», исправляется.
+`trials_per_job` не вводится: один трейл на джобу — это суть схемы.
+
+### 6.4. Мост метрик
+
+`Trainer` ранжирует объектами `fmlib.metrics`, AutoML — своим реестром
+(`resolve_metric(...).compute(MetricInput)`). **Один** класс `ScalarMetric` в
+`backends/tabnn/metric.py` соединяет их **композицией**: держит разрешённую
+метрику AutoML, накапливает таргеты и скоры в `update()`, а `compute()` отдаёт
+`{имя: значение}` для настроенной `optimization_metric`.
+
+Классы метрик AutoML не трогаются и ничего не наследуют: `Metric` —
+структурный `Protocol`, `METRIC_REGISTRY` хранит экземпляры, и
+`fmlib/automl/**` сегодня не импортирует torch — свойство, которое держит
+бустинговый путь лёгким и которое сохраняется.
+
+Адаптер выставляет `needs_full_population = True` (ROC-AUC и Qini не суммируются
+по батчам) и называет свои `required_inputs`/`required_outputs`, чтобы
+распределённый прогон собирал два тензора, а не целые батчи.
+`EarlyStopping(main_metric=<это имя>, strategy=direction)` ведёт остановку ровно
+по тому числу, которое AutoML потом покажет.
+
+### 6.5. Что именно передаётся в Trainer
 
 ```python
-model     = SupervisedLearner(                          # avatar/pipeline/tabular
+model     = SupervisedLearner(
                 embedding=TabularEmbedding(num_numerical_features=n_num,
                                            vocab_size=preprocessor.vocab_size,
                                            hidden_size=params["hidden_size"]),
@@ -610,452 +612,514 @@ model     = SupervisedLearner(                          # avatar/pipeline/tabula
                 aggregation_config={"name": params["aggregation"]},
                 num_classes=…, task_type=…, dropout_p=params["dropout_p"],
                 normalize_hidden_states=schema.hidden_states or None)
-loaders   = DataLoader(TabularDataset(str(cache / "train"), shuffle_files=True, …),
-                       collate_fn=TabularCollateFn(target_column="target", …))
-optimizer = AdamW(model.parameters(), lr=…, weight_decay=…)
-scheduler = get_cosine_schedule_with_warmup(…)
-stopping  = EarlyStopping(main_metric=metric_name,
-                          patience=defaults["patience"], strategy=direction)
-
-trainer = Trainer(
-    model=model, optimizer=optimizer, scheduler=scheduler,
-    train_dataloader=train_loader, valid_dataloader=valid_loader,
-    training_arguments=TrainingArguments(num_epochs=defaults["max_epochs"],
-                                         steps_before_evaluation=eval_every,
-                                         seed=config.random_state,
-                                         clip_grad_norm=params.get("clip_grad_norm")),
-    run_config=RunConfig(amp=amp),                       # fixed, not searched
-    valid_metrics=[AutoMLMetric(config.optimization_metric, task)],
-    callbacks=[EarlyStoppingCallback(stopping),          # order matters: it
-               CheckpointCallback(trial_dir,             # vetoes the next one
-                                  max_checkpoints=1),
-               *mlflow_callback],                        # N15, when configured
-    checkpoint_dir=trial_dir)
+trainer   = Trainer(model=model, optimizer=AdamW(...), scheduler=...,
+                    train_dataloader=..., valid_dataloader=...,
+                    training_arguments=TrainingArguments(
+                        num_epochs=defaults["max_epochs"],
+                        steps_before_evaluation=eval_every,
+                        seed=config.random_state,
+                        clip_grad_norm=params.get("clip_grad_norm")),
+                    run_config=RunConfig(amp=amp),          # фиксировано, не ищется
+                    valid_metrics=[AutoMLMetric(config.optimization_metric, task)],
+                    callbacks=[EarlyStoppingCallback(stopping),   # порядок важен
+                               CheckpointCallback(trial_dir, max_checkpoints=1),
+                               *mlflow_callback],
+                    checkpoint_dir=trial_dir)
 trainer.train()
 objective = trainer.state.best_metric
 ```
 
-Five properties of that call are worth stating, because the design depends on
-them:
+Шесть свойств этого вызова, на которых держится дизайн:
 
-- **The objective is not guessed.** `EarlyStoppingCallback.on_evaluate` writes
-  `ctx.state.best_metric` on every evaluation, so `trainer.state.best_metric`
-  is the best value of AutoML's own metric over the run. `train()`'s return
-  value is the *test* score and stays `None` here — `test_dataloader` is never
-  passed, because AutoML evaluates through its own `evaluate()`, on its own
-  metrics and reports.
-- **The selected weights are the last checkpoint under `trial_dir`** (§12, B5).
-  The loop sets `control.should_save = True` before firing `on_evaluate` and
-  lets callbacks veto it; `EarlyStoppingCallback` clears the flag whenever the
-  metric did not improve. So a checkpoint exists only for an improvement, and
-  `max_checkpoints=1` keeps exactly one step directory per trial
-  (`avatar/train/callbacks/checkpoint.py:26`).
-- **Callback order is a contract, not a style choice.** Early stopping must run
-  before the checkpoint callback, or the veto arrives after the write.
-- **Evaluation cadence is a function of data size** (N9). On a 3 M-row split,
-  once per epoch; on 100 M rows, every N steps with patience counted in
-  evaluations.
-- **Nothing else is switched on.** `build_default_callbacks` needs a Hydra
-  `DictConfig` and brings the profiler, throughput and progress bars; AutoML
-  builds its callbacks directly and keeps its own `progress.py` reporting.
-- **A trial returns a path and a number, never a model.** `TrialResult` carries
-  the `trial_id`, the objective and the checkpoint directory; the fitted module
-  stays on disk, and the search loop holds no torch object between trials.
-  Boosting does the opposite — `best_backend = backend`
-  (`backends/boosting/hyperopt.py:313`) keeps the best fitted estimator in the
-  coordinator's RAM — which is affordable for a booster and is not for a
-  network, on top of being impossible for two of the three runners: a
-  subprocess and an Osiris job cannot hand back a Python object. After the
-  search the backend is rebuilt once, from the winning checkpoint. The boosting
-  behaviour is left alone (constraint 1); it stays a separate backlog item.
+- **Целевая метрика не угадывается.** `EarlyStoppingCallback.on_evaluate` пишет
+  `ctx.state.best_metric` на каждой валидации. Возвращаемое значение `train()` —
+  это *тестовый* скор, и здесь оно `None`: `test_dataloader` не передаётся,
+  потому что AutoML оценивает своим `evaluate()`.
+- **Выбранные веса — последний чекпоинт в `trial_dir`.** Цикл ставит
+  `control.should_save = True` перед `on_evaluate` и позволяет колбэкам его
+  отменить; early stopping снимает флаг, когда метрика не улучшилась. Значит
+  чекпоинт существует только для улучшения, а `max_checkpoints=1` оставляет один
+  каталог шага (`avatar/train/callbacks/checkpoint.py:26`).
+- **Порядок колбэков — контракт, а не стиль.** Early stopping обязан отработать
+  до чекпоинт-колбэка, иначе вето приходит после записи.
+- **Каденция валидации зависит от размера данных.** На 3 млн строк — раз в
+  эпоху; на 100 млн одна эпоха это часы, и `patience=5` означало бы «остановись
+  через неделю», поэтому выставляется
+  `TrainingArguments.steps_before_evaluation` (`avatar/training_arguments.py:46`,
+  используется в `avatar/train/loop.py:315`), а терпение считается в валидациях.
+  Дефолт: каждые `ceil(rows / batch_size / 8)` шагов, но не реже раза в эпоху.
+- **Трейл возвращает путь и число, а не модель** (P8). Между трейлами в памяти
+  не остаётся ни одного torch-объекта.
+- **Больше ничего не включено.** `build_default_callbacks` требует Hydra-конфиг и
+  тащит профайлер, прогресс-бары и логирование пропускной способности; AutoML
+  строит колбэки сам и сохраняет своё `progress.py`-логирование. MLflow — в
+  дополнение к нему: один run на трейл с именем
+  `<run_id>/<part>/trial-<trial_id>`; если tracking URI не настроен, колбэк не
+  создаётся.
 
-What AutoML contributes on top, and nothing more:
+---
 
-- **assembly** — modules, optimizer, scheduler and dataloaders from the trial's
-  parameters (`assembly.py`);
-- **the metric bridge** (N4c) so the ranking number is AutoML's;
-- **the trial runner** (N4b) so where a trial executes is not the backend's
-  concern;
-- **prediction** — `predict_score` streams the test source through the fitted
-  preprocessor and the model. `avatar.train.predict` already does exactly this
-  loop, including the three reduction modes and the `drop_tail` warning, so the
-  backend calls it with `metrics=None` and collects the scores: the one array
-  allowed to be O(rows).
+## 7. Поиск гиперпараметров
 
-**What this costs above the backend — two shared-code changes, not one.**
+### 7.1. Поля конфига
 
-1. `TrainingCoordinator` currently calls `DataPreparation.read_source` and hands
-   `_fit_one` two materialized frames (`tasks/training.py:83`). For
-   `consumes="sources"` it passes a part descriptor (source + group predicate +
-   schema) instead; the boosting `_fit_one` opens with two lines that
-   materialize, so its behaviour is unchanged and only the call site of
-   `read_source` moves. The plan step needs no new code —
-   `ParquetSource.unique_column_values` already exists for exactly this reason
-   (`tasks/base.py:229`, used by the remote path).
-2. Schema construction must stop expanding hidden states for tabnn (N13), and
-   `TabularSchema` must carry their widths as a field.
+Используются существующие `hyperopt`, `search_space`, `n_trials`,
+`random_state` (`avatar/automl/config/base.py:230-238`). Резолв `search_space`
+становится **backend-aware**: поле одно, но допустимые ключи, валидация и дефолт
+зависят от бэкенда.
 
-Both land in S2b, both gated on S0.
+**Новых полей ровно два**, и оба не про поиск:
 
-## 7. Config surface
-
-No new required fields for the network itself. `model_params` (without hyperopt)
-and `search_space` (with) carry the network settings, exactly as for boosting.
-Defaults are calibrated for one A100 80 GB and splits of 3–100 M rows (§12,
-F1–F3):
-
-| parameter | default | searched? |
-|---|---|---|
-| `hidden_size` | 256 | categorical 128 / 256 / 512 |
-| `num_layers` | 3 | int 1–6 |
-| `num_heads` | 8 | categorical 4 / 8 / 16 (divisor of `hidden_size`) |
-| `attn_dropout` | 0.15 | float 0.0–0.4 |
-| `dropout_p` (head) | 0.2 | float 0.0–0.5 |
-| `out_head_hidden_dim` | 256 | categorical 128 / 256 / 512 |
-| `aggregation` | `mean` | categorical mean / sum_layernorm / linear |
-| `lr` | 3e-4 | float 1e-5–3e-3, log |
-| `weight_decay` | 1e-2 | float 1e-6–1e-1, log |
-| `batch_size` | 4096 | categorical 1024 / 4096 / 8192 |
-| `max_epochs` | 30 | **fixed** (N9) |
-| `patience` | 5 | **fixed** (N9) |
-| `amp` | `bf16` if `torch.cuda.is_bf16_supported()` else `no`; always `no` on CPU | **fixed** (§12, D4) |
-
-`amp` is a launch parameter, not a search axis: the metric difference between
-`bf16` and `no` is noise, it is coupled to `batch_size` through memory, trials
-in different precision are not strictly comparable, and bf16 requires Ampere+
-so a searched value does not travel with the artifact. The chosen value is
-recorded in `backend.json`.
-
-Two presets answer F3's "a night or two, with a small grid and a large one":
-`search_preset: "fast" | "deep"` selects `n_trials` and the width of the ranges
-above (`fast` ≈ 12 trials on the narrow ranges, `deep` ≈ 40 on the full ones).
-`search_space` overrides still win over both.
-
-New operational fields:
-
-| field | meaning |
+| поле | смысл |
 |---|---|
-| `cache_dir` | where the encoded cache lives; default `<output_dir>/cache/`, NFS on Osiris (N12) |
-| `cache_policy` | `keep` (default) or `delete` (N12) |
-| `search_strategy` | `tpe` (local default) / `random` (Osiris default) / `grid` / `explicit` (N14) |
-| `search_preset` | `fast` / `deep` |
-| `max_parallel_jobs` | optional cap on concurrently submitted trial jobs (N14) |
-| `num_gpus` | **cards per trial**, i.e. per job — docstring corrected (N14); locally it also sets `CUDA_VISIBLE_DEVICES` for tabnn (N16) |
-| `unknown_job_grace_seconds` | how long a job missing from the scheduler listing stays `unknown` before it becomes `lost`; default 900 (N16) |
+| `processed_data_path` | где лежат обработанные данные; по умолчанию `<output_dir>/processed/`, на Osiris — NFS (5.3) |
+| `max_parallel_jobs` | необязательный предел одновременно сабмиченных trial-джоб; при его наличии сабмит идёт чанками и обязан быть **возобновляемым** |
 
-The existing `task_owned_model_params` guard (which rejects `device`, `seed`,
-`verbose`, … inside `model_params`) applies unchanged.
+Не вводятся и почему: `cache_policy` (удаление — это `task.clear_cache()`, а не
+настройка, которая сработает через месяц), `search_preset` (`n_trials` уже есть,
+а ширина диапазонов — это и есть дефолтное пространство), `search_strategy`
+(стратегия определяется бэкендом, см. 7.3), таймауты планировщика (константы
+модуля, P4). Существующий guard `task_owned_model_params`, отвергающий `device`,
+`seed`, `verbose` внутри `model_params`, действует без изменений.
 
-## 8. Artifact
+### 7.2. Дефолтное пространство TabNN
 
-`<model part>/` gains, next to the existing `backend.json`:
+Все оси **категориальные** — это делает пространство перечислимым и включает
+правило полного перебора из 7.3. Имена ключей **плоские**, как у бустинга
+(`depth`, `learning_rate`): публичный конфиг AutoML не должен протекать
+внутренним устройством модели, перевод в конфиг fmlib — работа маппера из 6.2.
 
+| параметр | значения по умолчанию |
+|---|---|
+| `hidden_size` | 128, 256 |
+| `num_layers` | 2, 3, 4 |
+| `lr` | 1e-4, 3e-4, 1e-3 |
+| `dropout_p` | 0.1, 0.2 |
+
+Произведение — 36 комбинаций, что при `n_trials=50` (дефолт при
+`hyperopt=True`) даёт полный перебор за ночь на одной A100.
+
+Фиксированные, **не ищутся**: `batch_size=4096`, `num_heads=8`,
+`attn_dropout=0.15`, `out_head_hidden_dim=256`, `aggregation="mean"`,
+`weight_decay=1e-2`, `max_epochs=30`, `patience=5`, `amp`.
+
+`max_epochs`/`patience` не ищутся потому, что при живой ранней остановке больший
+потолок эпох не покупает метрику — он покупает время; эта ось меняет бюджет
+поиска ни на что. `amp` — параметр запуска: разница метрики между `bf16` и `no`
+это шум, он связан с `batch_size` через память, трейлы в разной точности строго
+не сравнимы, а bf16 требует Ampere+, поэтому найденное значение не путешествует
+вместе с артефактом. Значение выбирается по железу
+(`bf16`, если `torch.cuda.is_bf16_supported()`, иначе `no`; на CPU всегда `no`)
+и записывается в `backend.json`.
+
+Пользовательский `search_space` переопределяет дефолт целиком и **может**
+содержать непрерывные оси — тогда работает обычное сэмплирование (7.3).
+
+### 7.3. Алгоритм
+
+**Стратегия определяется бэкендом, полем не задаётся:**
+
+```text
+backend="boosting" -> TPE, как сейчас (backends/boosting/hyperopt.py:334), поля нет
+backend="tabnn"    -> random, поля нет
 ```
+
+Почему для tabnn всегда random: иначе один и тот же конфиг искал бы по-разному
+в зависимости от места запуска (локально живой драйвер позволяет адаптивность,
+на кластере — нет), результаты локального и кластерного прогонов были бы
+несравнимы, а воспроизвести кластерный запуск локально стало бы невозможно.
+Переход на TPE позже — одна строка смены сэмплера, поле для этого не нужно.
+TPE бустинга не трогаем не из-за качества поиска, а потому что смена сэмплера
+меняет `best_params` и ломает парити-гейт.
+
+**Все K наборов сэмплируются до первого запуска:**
+
+```text
+search_space + n_trials + random_state -> trial 0 .. trial K-1
+```
+
+Два правила поверх:
+
+1. **Полный перебор вместо сэмплирования.** Если **все** оси категориальные
+   **и** размер декартова произведения ≤ `n_trials` — гоняем всю сетку целиком,
+   без случайного выбора. Случайная выборка из маленького дискретного множества
+   тратит бюджет на повторы и не гарантирует покрытия. Хотя бы одна непрерывная
+   ось — произведение бесконечно, работает сэмплирование.
+2. **Дедупликация.** Наборы-дубликаты отбрасываются: дубль это впустую
+   потраченная джоба на A100. Если уникальных наборов меньше `n_trials`, гоним
+   сколько есть.
+
+**`n_trials` — это потолок, а не количество.** При сетке из 36 комбинаций и
+`n_trials=50` фактически выполняется 36 трейлов. Это должно быть явно написано
+в логе и отчёте, иначе выглядит как потерянные трейлы.
+
+Optuna может использоваться как утилита сэмплирования и хранения истории, но не
+управляет исполнением и не использует результаты предыдущих трейлов.
+
+Метаданные трейла хранит lifecycle AutoML: `trial_id`, params, state,
+validation metric, checkpoint, диагностика ошибки.
+
+### 7.4. Локальный поиск
+
+Трейлы выполняются последовательно поверх готовых обработанных данных.
+Препроцессинг не повторяется. Падение одного трейла не завершает поиск (P7):
+если успешно завершился хотя бы один, выбирается лучший по
+`optimization_metric` и его направлению.
+
+### 7.5. Fan-out на Osiris
+
+Один трейл = одна джоба. Все наборы известны до первого сабмита, поэтому **волн
+нет**: драйверу остаётся сабмитить и потом собрать. Это важно потому, что
+драйвер — контейнер ноутбука, который может умереть, а **из джобы джобу
+запустить нельзя**, то есть внутрикластерного драйвера не существует. Любая
+схема, требующая живого ноутбука между волнами, хрупка; отказ от адаптивности
+покупает «драйвер может не дожить».
+
+Каждая джоба делает только: загрузить обработанные данные своей части →
+собрать конфиг fmlib → `Trainer` → чекпоинт → `result.json` с метрикой.
+
+Состояние поиска персистится рядом с джобами: `trial_id`, параметры, состояние,
+метрика. **Параметры пишутся до сабмита**, метрики — после опроса; при
+возобновлении исследование восстанавливается `add_trial` в том же порядке, а
+сэмплер засеян, иначе возобновлённый прогон разойдётся с непрерывным.
+
+`max_parallel_jobs` включает сабмит чанками, и он обязан быть **возобновляемым**:
+`status()` находит трейлы в состоянии `planned` без `job_id` и сабмитит их.
+
+Упавший или потерянный (P4) трейл — это `tell(state=FAIL)` и продолжение:
+операция успешна, если хотя бы один трейл дал модель; счётчики и причины
+попадают в `operation.json` и отчёт.
+
+**Бустинг остаётся на своём пути исполнения.** Fan-out по трейлам — только для
+tabnn: бустинговый трейл занимает минуты, накладные расходы на джобу того не
+стоят, и первое ограничение дизайна — не трогать этот путь.
+
+**Воспроизводимость ограничена явно.** Побитовое совпадение утверждается и
+тестируется только для локального последовательного CPU-пути. На кластере
+арифметика GPU недетерминирована, набор завершённых трейлов может отличаться
+из-за падений, а разница 0.7231 против 0.7230 меняет, чьи параметры попадут в
+артефакт — поэтому утверждается равенство метрики в пределах допуска, а
+равенство `best_params` не утверждается. Сам **поиск** воспроизводим: засеянный
+random даёт те же наборы от запуска к запуску.
+
+---
+
+## 8. Предикт, калибровка и оценка
+
+```text
+Task.predict(raw)
+    -> загрузка fitted TabularPreprocessor из артефакта
+    -> transform входа
+    -> routing model_layout на обработанных данных
+    -> загрузка чекпоинта -> inference fmlib
+    -> нормализация скоров к контракту AutoML
+    -> существующая сборка PredictionResult
+    -> существующие calibration / evaluation / отчёты
+```
+
+Отдельных реализаций калибровки и оценки для TabNN не создаётся.
+
+**Предикт распределённый, управляется `num_gpus`** (Q9). `fmlib.train.predict`
+(`avatar/train/evaluate.py:161`, экспортируется как `fmlib.train.predict`) уже
+умеет распределённый скоринг с тремя режимами редукции, `DistEnv` разносит ранги
+по картам, `TabularDataset` умеет шардинг. При `num_gpus=1` путь вырождается в
+однопроцессный. Обязательное свойство, которое проверяется тестом:
+**каждая строка отскорена ровно один раз и порядок восстановлен**, включая
+поведение `drop_tail`.
+
+**Калибровка uplift требует изменения общего кода.** `calibrate` калибрует не
+сам uplift, а компоненты: каждую колонку из `UPLIFT_SCORE_COLUMNS` отдельно, по
+веткам layout'а (`tasks/calibration.py:105`). Но `UPLIFT_SCORE_COLUMNS` — это
+кортеж из **десяти** колонок (`backends/boosting/uplift.py:33-44`: `score_s`,
+`score_s_control`, `score_s_treatment`, `score_t`, `score_t_control`,
+`score_t_treatment`, `score_x`, `score_x_control`, `score_x_treatment`,
+`score_x_propensity`), который **общий** слой задач импортирует из бустингового
+модуля (`tasks/calibration.py:12`, `tasks/uplift.py:15`), а
+`_validate_score_matrix` (`tasks/uplift.py:296`) требует ровно десять колонок
+**и** `np.isfinite(values).all()` — то есть добить недостающее NaN'ами нельзя.
+S-Learner физически не выдаёт колонки T и X, поэтому константа и проверка формы
+переезжают в нейтральный модуль и становятся зависящими от бэкенда.
+
+---
+
+## 9. Артефакт
+
+`ArtifactRepository` уже делегирует персистентность: зовёт
+`item.backend.save(dir)` / `backend_class.load(dir)` и читает из `backend.json`
+только поле `engine` (`tasks/artifacts.py:50-90`). Поэтому бэкенд, который пишет
+тот же файл метаданных, **не требует изменений артефактного слоя**.
+
+```text
 backend.json        engine, params, random_state, verbose, task_state,
                     preprocessor (TabularPreprocessor.dump()),
                     dims {n_cat, n_num, vocab_size, hidden_states},
-                    class_order, amp
-preprocessor.yaml   the same preprocessor state as a standalone file (§12, D5),
-                    loadable with TabularPreprocessor.load() without parsing the
-                    AutoML artifact — for hand-written training and inference
-model.safetensors   state_dict of the winning trial's checkpoint, re-saved by
-                    `save()`: `CheckpointCallback` writes the full training
-                    state (optimizer, scheduler, RNG) per step directory, and
-                    the artifact keeps only the weights (the `embedding`,
-                    `tabular_backbone`, `agg_layer`, `proj`, `out_head` key
-                    prefixes SupervisedLearner fixes, so a checkpoint trained
-                    by hand and one trained by AutoML are interchangeable)
+                    class_order, amp, выбранная метрика
+preprocessor.yaml   тот же препроцессор отдельным файлом, поднимается
+                    TabularPreprocessor.load() без разбора артефакта AutoML
+model.safetensors   веса победившего трейла, пересохранённые save():
+                    CheckpointCallback пишет полное состояние обучения
+                    (оптимизатор, шедулер, RNG) в каталог шага, а в артефакт
+                    попадают только веса
 ```
 
-No pickle: `.pt` / TorchScript / ONNX are not produced (§12, D5). `engine` keeps
-its meaning for the manifest check, so `ArtifactRepository`, `lifecycle.py` and
-the remote `run.py` spec need no change. Loading builds the module from
-`params` + `dims` and then loads the tensors, and hidden-state widths are
-validated on predict the same way `feature_order` is.
+Префиксы ключей (`embedding`, `tabular_backbone`, `agg_layer`, `proj`,
+`out_head`), которые фиксирует `SupervisedLearner`, делают чекпоинт, обученный
+руками, и чекпоинт из AutoML взаимозаменяемыми.
 
-## 9. Staged plan
+**Без pickle:** `.pt`, TorchScript и ONNX не производятся. Загрузка собирает
+модуль из `params` + `dims` и затем грузит тензоры; ширины hidden states
+проверяются на предикте так же, как `feature_order`.
 
-Every stage ends green on `pytest` **and** on the boosting parity harness.
-The backbone order was confirmed in §12 (E4); three stages were added after it
-and do not disturb it — **S2c** (parallel encoding, §13) can run beside S3,
-**S4a** (remote reliability, N16) is a prerequisite of **S4b** (trial fan-out,
-N14) and depends on nothing tabnn-specific, so it may land any time after S0.
+---
 
-- **S0 — lock boosting.** Land the migration's V2 harness as
-  `tests/automl/test_boosting_parity.py` (marked `slow`): the six
-  train/save/load/predict/evaluate configurations, asserted against a checked-in
-  JSON of metrics, `best_params` and score digests. This is the regression gate
-  for everything below; without it the refactors are unverifiable.
-- **S1 — backend-neutral seams.** N2 + N3 + the `fit_model` generalization. Pure
-  refactor, no aliases, no new behaviour; parity must be byte-identical.
-- **S2 — config.** N6 + N8 + N9: `engine="tabular_transformer"`, CPU allowed,
-  hyperopt allowed for tabnn. Guards replaced by `UnsupportedBackendError`
-  where a combination truly is unsupported. Also the `CUDA_VISIBLE_DEVICES`
-  correction of N16 — scoped and restored, boosting-only pinning — because it
-  is environment-layer work, it is covered by an existing test, and every local
-  GPU run from S3 on depends on it.
-- **S2b — the lazy data path and the un-expanded schema** (N12, N13, §6): the
-  part descriptor on the backend contract, `TrainingCoordinator` passing
-  sources, the lazy sibling of `prepare_data`, and `TabularSchema` carrying
-  hidden-state widths. No tabnn code yet — this is the shared-code change and
-  lands on its own, with parity byte-identical and boosting still taking
-  materialized frames.
-- **S2c — parallel encoding** (N12): `merge()` on both accumulators, a
-  process pool over shards for `fit` and `transform`, one output file per
-  shard, `order="first_seen"` rejected in that mode. It is `avatar.preprocessing`
-  work with its own unit tests (a parallel fit must reproduce the serial
-  `dump()` byte for byte) and touches no AutoML code, so it can land in
-  parallel with S3. It is on the critical path to the first honest run on real
-  data: without it every trial waits hours behind a single-process encode.
-- **S3a — leak test: 50 sequential `Trainer` runs in one process** (§12, E3).
-  With `accelerate` gone there is no global state to corrupt (N4b), so this is
-  no longer a correctness question: it asserts that RSS, open file descriptors
-  and CUDA memory stay flat across trials and that `state.best_metric` comes
-  back for each. It runs before any tabnn code, because the in-process runner
-  is the one that actually executes on the current hardware — if it leaks, the
-  subprocess runner becomes mandatory instead of optional.
-- **S3 — encoder cache + assembly + `BinaryTabNNBackend`,** `hyperopt=False`,
-  CPU, global layout, late fusion (N13). First end-to-end
-  `train -> save -> load -> predict -> evaluate` on synthetic data, with a
-  memory assertion: peak RSS stays flat as the synthetic train split grows 10x.
-  **This is v1** (§12, E5): the first result shown.
-- **S4 — hyperopt for tabnn** (`fit_model` with the tabnn default space and the
-  two presets), then `per_group` / `global_and_per_group`.
-- **S4a — remote reliability** (N16): the `finalizing` state and idempotent
-  finalization, job ids persisted per submit, the `unknown` deadline, the
-  single-writer check on `operation.json`. This lands **before** S4b: trial
-  fan-out multiplies every one of these by K, and the boosting fan-out that
-  exists today gets the fixes for free. Parity is unaffected — none of it
-  touches how a model is fitted.
-- **S4b — Osiris trial fan-out** (N14): Optuna in the driver, persisted search
-  state, job per trial, resumable submission, `FAIL` handling. Boosting is not
-  touched.
-- **S5 — regression + multiclass + response**, including `class_order`
-  persistence and the multiclass metric path.
-- **S6 — uplift via `SLearner`** (N10 wave 2).
-- **S7 — docs + `examples/automl/tabnn_pipeline.ipynb`**, and a benchmark table
-  boosting vs tabnn on the same splits, stating that the two see hidden states
-  differently (N13).
+## 10. Hidden states
 
-## 10. Risks
+Для TabNN hidden states доходят до модели **векторами** и идут в существующий
+late-fusion путь `SupervisedLearner`. Они **не** разворачиваются в скалярные
+числовые колонки.
 
-| risk | mitigation |
-|---|---|
-| a refactor silently changes boosting results | S0 parity harness is the gate for every stage |
-| GPU memory accumulates across Optuna trials | one model per trial, explicit `del` + `torch.cuda.empty_cache()` between trials; the best trial keeps CPU weights; S3a measures it |
-| something global does not survive N sequential `Trainer` runs | there is nothing global left (N4b); S3a measures RSS, file descriptors and CUDA memory, and the subprocess runner is already specified (N4b) |
-| AutoML's needs slowly bend `avatar.train` out of shape | the backend passes only what `Trainer` already accepts and adds nothing to it; a need that cannot be expressed as a callback is a design review, not a patch |
-| `avatar` keeps moving under this design | it already did once, between the draft and this revision, and every seam it touched got better; the seams are named here (N4, N5, N12) so the next divergence is a diff, not a rewrite |
-| the kept cache fills the disk | content-keyed directories, `cache_policy`, `cache_dir` on a sized volume; size it as rows × (numericals + embedding widths) × 4 B — a 768-dim embedding alone is 3 KB/row, so 100 M rows is 300 GB |
-| encoding is a serial bottleneck in front of every trial | process pool over shards, mergeable accumulators, one file per shard (N12, S2c) |
-| NFS cannot feed the cards | write the cache as many files, not one; if the split fits, copy it to node-local disk once at job start and read locally |
-| an expired Kerberos ticket kills a long job | training jobs never read HDFS: the source is read once during encoding, the cache lives on NFS (N12) |
-| the scheduler contract is assumed, not verified: `create(**kwargs)` and the state strings behind `_STATE_ALIASES` (`environment.py:346`) | all contact with the client stays in three methods (`create`, `list`, `failure_logs`); a contract test asserts the stub accepts exactly what `submit` sends; the strings themselves are V3 on the cluster (§14) |
-| a crash between submit and recording a job id duplicates work | deterministic per-trial `run_dir` (`mkdir(exist_ok=False)`) and `trial_id` in the job name, so an orphan is found instead of resubmitted (N14) |
-| tabnn scales past data the boosting backend cannot load | real asymmetry, and it is the boosting side that is wrong — logged as a separate follow-up (chunked pool construction / lazy `prepare_data` for boosting), not smuggled into this design |
-| NN results are not reproducible run to run | seed everything; byte-identical parity is claimed only for the local sequential CPU path, cluster runs assert metrics within tolerance (N14) |
-| CatBoost GPU and torch GPU in one process | they never run in the same task; `device` is resolved per operation |
-| `tabnn` quietly becomes the default | no: `backend` is a required explicit field |
-| the driver dies between `succeeded` and finalization, losing a finished run | non-terminal `finalizing` state, idempotent finalization, `succeeded` written last (N16, S4a) |
-| a trial job disappears from the scheduler and `wait=True` hangs all night | `unknown_job_grace_seconds` then terminal `lost` + `tell(FAIL)`; the surviving trials still finalize (N16) |
-| an AutoML call narrows the notebook's GPU visibility for good | the variable is scoped to the call and restored, and pinned only for boosting (N16) |
-| one OOM trial aborts a whole local tabnn search | per-trial exceptions are caught for tabnn and recorded as failed trials (N14) |
+`_expand_hidden_states` (`avatar/automl/data/schema.py:162`, вызов на строке 306)
+превращает 256-мерный эмбеддинг в 256 скалярных колонок и вливает их в
+`numerical`/`feature_order`. Это единственное, что может съесть бустер, и
+неправильная вещь для сети: эмбеддинг начинает доминировать во внимании числом
+колонок, каждая координата стандартизуется отдельно (разрушая геометрию, которую
+произвела исходная модель) и получает свою входную проекцию.
 
-## 11. Decisions taken (2026-09-16)
+Поэтому:
 
-1. **Engine name.** `"ste"` is rejected outright; see N6 (the chosen name was
-   revised to `tabular_transformer` in §12).
-2. **CPU — supported, with a warning.** See N8. `env_type="osiris"` stays GPU-only.
-3. **Task order — binary -> regression/multiclass/response -> uplift,** i.e. the
-   two waves of N10 as written. S6 (uplift via `SLearner`) stays last.
-4. **Streaming — required.** Real datasets already exceed RAM under the boosting
-   backend, so the NN backend is out-of-core by construction (N12): sources in,
-   packed parquet cache, one batch resident. This is what S2b and §6 are for,
-   and it is the largest piece of shared-code work in the plan.
-5. **Training reuse — `avatar.train.Trainer`, not a private loop** (N4).
-   `Trainer` takes plain arguments and provides DDP, AMP, early stopping,
-   checkpoint-on-improvement and resume; everything else is a callback. AutoML
-   contributes assembly, a metric adapter, a trial runner and prediction. On
-   `master` this cost three fixes to `train.py`; on `refactor/data-sharding-hdfs`
-   it costs none (N4a).
+- `SupervisedLearner(hidden_state_dim=…, normalize_hidden_states={имя: ширина},
+  proj_hiddens_to_dim=…)` (`avatar/pipeline/tabular/supervised.py:154-175`,
+  ширина учитывается на строках 233-234);
+- `TabularDataset(hidden_state_columns=[…])` читает list-колонку нативно
+  (`avatar/data/tabular/dataset.py:62`);
+- схема для TabNN хранит `{колонка -> ширина}` отдельным полем и **не
+  разворачивает**; поведение схемы бустинга не меняется;
+- в обработанных данных колонка проходит как `identity_col` — препроцессор её не
+  стандартизует, потому что эмбеддинг нормализуется целиком `LayerNorm`'ом
+  внутри модели.
 
-## 12. Review answers applied (2026-09-17)
+Ранний фьюжн (эмбеддинг как дополнительный токен, `hidden_state_aggregator`) в
+первую версию не входит — он трогает энкодер — и остаётся кандидатом в оси
+поиска.
 
-The questionnaire behind this section is kept outside the repository. What was
-answered, and where it landed:
+**Следствие для сравнения с бустингом:** паритета признаков нет **по построению**
+— бустинг видит 256 скалярных колонок, tabnn один вектор. Сравнение метрик
+честное (те же данные, та же метрика), но сравниваются **пайплайны**, а не только
+архитектуры, и бенчмарк обязан это оговаривать.
 
-| id | answer | effect |
-|---|---|---|
-| A1 | one package | N1 — one package; its internal layout revised later the same day (§4) |
-| A2 | rename without aliases | N2 rewritten |
-| A3 | dict, no registry module | N3 rewritten, `registry.py` dropped from §4 |
-| A4 | `engine="tabular_transformer"` | N6, S2 |
-| B1 | `Trainer`, callbacks only | N4 |
-| B2, B2a, B2b | in-process on one card, `torch.distributed.run` subprocess on several, Osiris job per trial — one interface | N4b and N4d rewritten, `runner.py` added |
-| B3 | one metric adapter, by composition | N4c |
-| B5 | best weights = last checkpoint | §6 |
-| B6 | MLflow per trial | **N15 added**, N4 amended |
-| C1 | out-of-core always, no in-memory fast path | N12; the fast-path risk row removed |
-| C2 | keep the cache, content-keyed, configurable `cache_dir` | N12, §7 |
-| C3 | `TabularPreprocessor`, dumped beside the artifact | N7, §8 |
-| C4 | late fusion only, never expanded | **N13 added**, §5, §6, S2b, S3 |
-| C5 | per-group by scan predicate | N11 |
-| C6 | coordinator passes sources | §6, S2b |
-| D1 | CPU allowed with a warning | N8 |
-| D2 | epochs fixed + early stopping; steps on large splits | N9 rewritten, §7 |
-| D3 | keep the default space | §7, minus the two axes D2 fixed |
-| D4 | `amp` fixed, chosen by hardware | §7 |
-| D5 | safetensors + standalone preprocessor file, no pickle | §8 |
-| E1–E5 | wave split, S0 first, spike kept, order kept, v1 = S3 | §9 |
-| F1–F3 | 3–100 M rows, ~200 features, 1×A100 80 GB, a night or two | §7 defaults and presets, N9 evaluation cadence |
-| G1–G7 | Optuna in the driver with persisted state; no waves under `random`; `num_gpus` per trial; resumable submission; `FAIL` and continue; tabnn only; scoped reproducibility; cache on NFS | **N14 added**, S4b, §7, risks |
+---
 
-### Audit items required for tabnn (`obligatory.md`, 2026-09-17)
+## 11. Тестирование без кластера
 
-An independent audit listed eight items as prerequisites for the NN backend.
-Each was re-checked against this branch; seven reproduce in the current code.
+Osiris на машине разработки нет, и пакет `osiris` в venv **не установлен** —
+`_load_osiris` (`avatar/automl/environment.py:51-61`) бросает исключение, так что
+ни один тест не доберётся до настоящего планировщика случайно. Это ограничение на
+то, откуда берётся доказательство, а не на то, сколько remote-пути доказуемо:
+контракт джобы — это JSON-файл и entrypoint, поэтому локальная заглушка может его
+**исполнять**.
 
-| audit item | verified at | where it lands |
-|---|---|---|
-| operation `succeeded` before finalization | `tasks/operations.py:375,381,388` | **N16**, S4a |
-| partial submit loses job ids | `tasks/operations.py:178-208` | **N16**, S4a; the remaining window by N14 |
-| no synchronization of shared lifecycle state | `lifecycle.py:183-193`, `write_json` :48 | **N16** — single-writer check, not a lock; not a parallel-jobs problem here |
-| `status(wait=True)` waits forever on `unknown` | `environment.py:345,372`, `tasks/operations.py:428` | **N16**, S4a |
-| `CUDA_VISIBLE_DEVICES` mutates the user's process | `environment.py:142`, no restore at :165 | **N16**, S2 |
-| backend boundary hard-wired to boosting | `config/base.py`, `tasks/supervised.py` | N2, N3, N6, N8, N9; S1, S2 |
-| the boosting Optuna loop is the wrong orchestrator | `hyperopt.py:336` (no `catch=`) | N14 (job per trial, driver-side Optuna) + per-trial `catch` for tabnn |
-| the best NN model cannot live in coordinator RAM | `hyperopt.py:313` (`best_backend = backend`) | §6 — a trial returns a checkpoint path and a metric |
+### 11.1. Три уровня заглушек
 
-### Still open
+`EnvironmentRunner.__init__(osiris_client=None)` — шов для внедрения, в докстроке
+которого уже написано «primarily for tests» (`environment.py:68-93`).
 
-- **V3** — what genuinely needs the cluster, now that §14 says what does not:
-  the real `osiris.create` signature and the real state strings, pool and
-  resource semantics, Kerberos/HDFS, shared-filesystem latency under K jobs,
-  and a second GPU.
-- **Early fusion** of hidden states as a search axis (N13 defers it).
-- **Wave-based TPE on the cluster** — supported by the persistence in N14,
-  switched on only if a live driver turns out to be acceptable.
+1. **Записывающий клиент** — существует: `_FakeOsiris`
+   (`tests/automl/test_environment.py:24`) отдаёт сценарные состояния `list()` и
+   записывает `create(**kwargs)`. Доказывает содержимое сабмита, имя джобы,
+   создание `run_dir` и агрегацию опроса. Ничего не исполняется.
+2. **Исполняющий локальный планировщик** — новый, и именно он делает fan-out
+   проверяемым насквозь. `submit` уже пишет полный `run_spec.json`, команда
+   джобы — `python -m fmlib.automl.run --spec <spec>`, а `execute_spec(spec_path)`
+   это обычная функция, которую `tests/automl/test_run.py` уже вызывает напрямую.
+   Заглушка достаёт спеку из сабмиченной команды и исполняет её — в процессе для
+   скорости юнитов или через `subprocess.Popen` для одного более честного теста, —
+   а `list()` выводит `queued`/`running`/`succeeded`/`failed` из реальных
+   состояний задач. Результаты ложатся в ту же раскладку `run_dir`, что и на
+   кластере. K трейлов, K `result.json`, сбор и выбор — всё под `tmp_path`; при
+   128 ядрах K маленьких CPU-трейлов стоят секунды.
+3. **Инъекция сбоев** — единственный способ доказать P1–P4, потому что здоровый
+   кластер этих состояний по заказу не произведёт:
 
-## 13. Cross-check against an independent design (2026-09-17)
-
-A second design for the same migration was written independently
-(`tabnn_design.md`, kept outside the repository). It reaches the same
-architecture from the same starting point, which is worth recording because the
-agreement was not coordinated: reuse the Avatar training stack rather than build
-a second one; dispatch on `backend` and leave boosting untouched; fit the
-preprocessor on train only and persist it beside the artifact; **hand hidden
-states to Avatar the way Avatar takes them instead of expanding them into scalar
-columns** (our N13); encode once and reuse across trials; one Osiris job per
-trial, submitted without waiting, a failed trial not cancelling the others,
-selection by the existing `optimization_metric`; uplift restricted to `SLearner`
-or deferred; the `obligatory.md` fixes as a prerequisite (our N16).
-
-What was taken from it:
-
-- **Parallel encoding** (N12, S2c). The strongest idea in it and a genuine gap
-  here: this design specified a streaming single-process fit and said nothing
-  about its throughput, although it blocks every trial.
-- **`search_strategy="grid"`** (N14): a deterministic expansion of an explicit
-  finite space, which needs no persisted search state at all.
-
-Where the two differ, and why this design keeps its choice:
-
-- **Naming.** The other design leaves `BaseBoostingTask` and friends in place
-  to keep the diff small and clean up later. N2 renames outright, without
-  aliases, as decided in §12 (A2): it is a pure refactor under the S0 parity
-  gate, and a rename that leaves both spellings alive tends to stay that way.
-- **The artifact seam.** It proposes a `fit_model` / `predict_model` function
-  pair plus teaching the repository to load a tabnn payload. `ArtifactRepository`
-  already delegates to `item.backend.save(dir)` / `backend_class.load(dir)` and
-  reads only `engine` from `backend.json` (`tasks/artifacts.py:50-90`), so
-  following the `ModelBackend` contract leaves the artifact layer untouched —
-  which better serves that design's own minimal-diff principle.
-- **Optuna.** It drops Optuna for tabnn entirely. This design keeps it as
-  bookkeeping under `random` (one `search_space` format for both families, one
-  trial history in the report, TPE later as a one-line sampler change) and adds
-  `grid` as the Optuna-free mode for the case where it is enough.
-
-What it does not cover, and this design does: the in-memory assumption of
-`TrainingCoordinator` (`tasks/training.py:83-84`) that makes every path start by
-materializing both splits, which is the actual blocker at 100 M rows (S2b); the
-metric bridge between `avatar.metrics` and AutoML's registry without importing
-torch into `avatar/automl/**` (N4c); launcher and multi-GPU (N4b, N4d); target
-hardware and the defaults derived from it (§7); cache lifetime, keying, sizing
-and NFS-vs-HDFS under an expiring Kerberos ticket (N12); epochs versus steps for
-early stopping on large splits (N9). Its `engine="ste"` also predates the
-`STEv2 -> TabularTransformer` rename (N6).
-
-## 14. Testing without a cluster
-
-No Osiris exists on the development machine, and `osiris` is not even installed
-in the venv — `_load_osiris` (`avatar/automl/environment.py:51-61`) raises, so no
-test can reach a real scheduler by accident. That is a constraint on where the
-proof comes from, not on how much of the remote path is provable: the job
-contract is a JSON file and an entrypoint, so a local stub can execute it.
-
-### Three levels of stub
-
-`EnvironmentRunner.__init__(osiris_client=None)` is an injection seam whose
-docstring already says "primarily for tests" (`environment.py:68-93`).
-
-1. **Recording client** — exists today: `_FakeOsiris`
-   (`tests/automl/test_environment.py:24`) returns scripted `list()` states and
-   records `create(**kwargs)`. Tasks can also stub one level higher
-   (`monkeypatch.setattr(task._runner(), "submit", ...)`,
-   `tests/automl/tasks/test_calibration.py:386`). It proves the submit payload,
-   the job name, `run_dir` creation and the poll aggregation — nothing runs.
-2. **Executing local scheduler** — new, and the one that makes trial fan-out
-   testable end to end. `submit` already writes a complete `run_spec.json` and
-   the job command is `python -m avatar.automl.run --spec <spec>`, while
-   `execute_spec(spec_path)` is a plain function that
-   `tests/automl/test_run.py` already calls directly. So the stub's `create()`
-   takes the spec out of the submitted command and runs it — in-process for
-   unit speed, or through `subprocess.Popen` for one slower and more honest
-   test — and its `list()` derives `queued`/`running`/`succeeded`/`failed` from
-   the real task states. Results land in the same `run_dir` layout the cluster
-   uses. K trials, K `result.json`, collection and selection, all under
-   `tmp_path`; with 128 cores, K tiny CPU trials cost seconds.
-3. **Fault injection** — the only way N16 is provable at all, because these are
-   the states a healthy cluster will not produce on demand:
-
-   | scripted failure | what it proves |
+   | сценарий | что доказывает |
    |---|---|
-   | a job stops appearing in `list()` | `unknown` -> `unknown_job_grace_seconds` -> terminal `lost` -> `tell(FAIL)`, and the surviving trials still finalize |
-   | `create()` raises on call *k* | the ids of jobs 1..k-1 are already in `operation.json` |
-   | the driver dies between `succeeded` and finalization | `finalizing` is not terminal, a later `status()` finishes the job idempotently |
-   | two `status()` loops on one operation | the single-writer check on `owner.{hostname,pid,token}` |
-   | a trial exits non-zero, or writes an unreadable `result.json` | the search continues, the reason reaches `operation.json` and the report |
-   | `max_parallel_jobs` with the driver killed mid-submission | trials in state `planned` without a `job_id` are re-submitted, not duplicated |
+   | джоба перестаёт появляться в `list()` | `missing` → grace → `lost` → `tell(FAIL)`, остальные трейлы финализируются |
+   | `create()` бросает на k-м вызове | id джоб 1..k-1 уже в `operation.json` (P2) |
+   | драйвер умирает между `succeeded` и финализацией | `finalizing` не терминально, повторный `finalize()` доводит дело (P1) |
+   | два драйвера на одной операции | проверка единственного писателя (P3) |
+   | трейл падает или пишет нечитаемый `result.json` | поиск продолжается, причина в `operation.json` и отчёте |
+   | `max_parallel_jobs` и убитый посреди сабмита драйвер | трейлы в состоянии `planned` досабмичиваются, дублей нет |
+   | транзиентный `container ... is not available` | состояние `submitting`, пересабмита нет |
 
-### What the development machine can and cannot prove
+### 11.2. Что доказывает машина разработки
 
-The box is, as it happens, the target hardware of §7: one **A100 80 GB**
-(torch 2.9.0+cu128, `device_count() == 1`), 128 cores, 243 GB RAM, and
-`/home/jovyan` on NFS with ~1.3 TB free.
+Машина — это целевое железо §1.1: одна **A100 80 GB** (torch 2.9.0+cu128,
+`device_count() == 1`), 128 ядер, 243 ГБ RAM, `/home/jovyan` на NFS с ~1.3 ТБ
+свободного места при 80% занятости.
 
-- **The GPU path is real here**, on the card the defaults are calibrated for.
-  What S3 asserts about memory, AMP and throughput is measured, not assumed.
-- **The multi-GPU launcher is testable without a second card.**
-  `tests/train/test_distributed_training.py:40-80` already spawns a real
-  `python -m torch.distributed.run` with `--nnodes` / `--nproc_per_node` on
-  gloo with `CUDA_VISIBLE_DEVICES=""`. That is exactly the harness the N4b
-  subprocess runner needs: it proves the launch, the spec round-trip, the
-  `result.json` hand-back and rank agreement — everything except the second
-  device. It is reused rather than rewritten.
-- **Out-of-core is proved by shape, not by size.** The assertion is that peak
-  RSS stays flat as the synthetic split grows 10x (1 M -> 10 M rows); filling
-  243 GB proves nothing extra.
-- **MLflow (N15)** runs against a file `tracking_uri` under `tmp_path`.
-- **Tests never write the encoding cache outside `tmp_path`.** The cache is
-  kept by default (N12) and a 768-dim embedding is ~3 KB/row, so a careless
-  test is a disk-filling test on a shared NFS volume that is already 80% full.
+- **GPU-путь здесь настоящий**, на той карте, под которую откалиброваны дефолты:
+  память, AMP и пропускная способность измеряются, а не предполагаются.
+- **Multi-rank проверяется без второй карты.**
+  `tests/train/test_distributed_training.py:40-80` уже поднимает настоящий
+  `python -m torch.distributed.run` с `--nnodes`/`--nproc_per_node` на gloo с
+  `CUDA_VISIBLE_DEVICES=""`. Это и есть харнесс для subprocess-раннера и для
+  распределённого предикта: проверяются запуск, круговорот спеки, возврат
+  `result.json`, согласие рангов и — для предикта — что каждая строка отскорена
+  ровно один раз. **Не проверяются:** настоящие NCCL-коллективы, раскладка рангов
+  по картам, гонки за память GPU. Записывается честно как «проверено на
+  CPU-рангах», а не «multi-GPU покрыт».
+- **Out-of-core доказывается формой, а не размером:** пиковый RSS не растёт при
+  увеличении синтетического сплита в 10 раз (1 млн → 10 млн строк); заполнять
+  243 ГБ незачем.
+- **MLflow** — файловый `tracking_uri` под `tmp_path`, сервер не нужен.
+- **Тесты никогда не пишут обработанные данные вне `tmp_path`:** они не
+  удаляются по умолчанию, 768-мерный эмбеддинг это ~3 КБ на строку, а том общий и
+  занят на 80%.
 
-### Suite layout
+### 11.3. Раскладка сьюта
 
-- default run stays CPU-only and fast: `addopts = "-m 'not slow'"` is the gate
-  for every commit;
-- a new `gpu` marker with `skipif(not torch.cuda.is_available())` — today no
-  test in the suite touches CUDA, and that must remain true off this box;
-- `slow` keeps the S0 parity harness and the S3a leak test;
-- the boosting engines are an optional extra (`avatar[boosting]`), so tabnn
-  tests must not import them and vice versa.
+- дефолтный прогон остаётся CPU-only и быстрым: `addopts = "-m 'not slow'"` —
+  гейт на каждый коммит;
+- новый маркер `gpu` со `skipif(not torch.cuda.is_available())`: сегодня ни один
+  тест не трогает CUDA, и вне этой машины так должно остаться;
+- `slow` держит парити-харнесс S0 и длинный прогон трейлов из S10;
+- бустинговые движки — необязательный extra (`fmlib[boosting]`), поэтому
+  tabnn-тесты не должны их импортировать, и наоборот.
+
+---
+
+## 12. Порядок реализации
+
+Каждый этап заканчивается зелёным `pytest` **и** зелёным парити-гейтом.
+
+Порядок выбран так, чтобы **главный риск проверялся рано**. Риск не в
+remote-надёжности — там все дефекты диагностированы поимённо, это понятная
+работа с известным объёмом; риск в том, работает ли связка вообще: препроцессор
+→ обработанные данные → `TabularDataset` → `Trainer` → метрика AutoML →
+артефакт.
+
+| | этап | содержание |
+|---|---|---|
+| **S0** | парити-харнесс бустинга | `tests/automl/test_boosting_parity.py` (маркер `slow`): шесть конфигураций `train→save→load→predict→evaluate`, метрики / `best_params` / sha256 скоров против вкоммиченного JSON. Гейт для всего ниже, включая переименование |
+| **S1** | переименование `avatar → fmlib` | §3, затем smoke, полный сьют и парити |
+| **S2** | backend-neutral швы | P6 + обобщение `fit_model`. Чистый рефактор, без алиасов, парити побитово |
+| **S3** | конфиг и окружение | `backend="tabnn"`, `engine="tabular_transformer"`, CPU разрешён, hyperopt разрешён, backend-aware `search_space`, **P5** (`CUDA_VISIBLE_DEVICES`) — он нужен на первом же локальном GPU-запуске |
+| **S4** | ленивые данные и схема | дескриптор источника вместо материализованных фреймов (5.5), `TabularSchema` с ширинами hidden states (§10). Кода tabnn ещё нет, парити побитово |
+| **S5** | параллельный препроцессинг | 5.4: `merge()` у обоих аккумуляторов, пул процессов на `fit` и `transform`, файл на шард, запрет `first_seen`. Работа в `fmlib.preprocessing`, кода AutoML не касается — может идти параллельно с S6 |
+| **S6** | **первое обучение: binary + multiclass** | локально, `global`, без поиска: обработанные данные → сборка → `Trainer` → `train→save→load→predict`. Плюс проверка памяти: пиковый RSS не растёт при росте сплита в 10 раз |
+| **S7** | мок-планировщик | 11.1: исполняющая заглушка + сценарии инъекции сбоев. **Идёт до починки remote**, потому что это стенд для её проверки, а не её тест |
+| **S8** | надёжность remote | P1–P4, каждый под сценарием из S7 |
+| **S9** | response + regression, полный lifecycle | calibrate/evaluate end-to-end, отчёт |
+| **S10** | локальный поиск | дефолтное пространство, полный перебор при малой сетке, дедуп, терпимость к падению трейла, выбор лучшего чекпоинта. Плюс проверка отсутствия утечек: за 50 последовательных трейлов в одном процессе RSS, число дескрипторов и память CUDA остаются ровными, а `state.best_metric` приходит для каждого — in-process раннер сегодня единственный исполняемый, и если он течёт, subprocess-раннер становится обязательным, а не опциональным |
+| **S11** | multi-rank корректность | обучение и предикт под `torch.distributed.run` на CPU-рангах: согласие рангов, каждая строка отскорена ровно один раз, порядок восстановлен |
+| **S12** | fan-out на Osiris | 7.5 поверх починенного S8: джоба на трейл, персист состояния, возобновляемый сабмит, `FAIL` и продолжение, тесты перезапуска |
+| **S13** | layout `per_group` | партиционированная раскладка обработанных данных (5.2), модель на группу; `global_and_per_group` остаётся отвергнутым на валидации конфига |
+| **S14** | uplift | `SLearner`, перенос `UPLIFT_SCORE_COLUMNS` в нейтральный модуль (§8), полный lifecycle с калибровкой |
+| **S15** | документация | `examples/automl/README` (использование `backend="tabnn"`, `processed_data_path` и переиспользование, семантика поиска, fan-out, восстановление через `finalize()` и что в happy path он не нужен, uplift = только S-Learner, `global_and_per_group` для tabnn не поддерживается), пример-ноутбук, бенчмарк бустинг против tabnn с оговоркой §10 |
+
+**Три изменения общего кода** за пределами нового пакета, все под парити-гейтом:
+(1) координатор передаёт источники, а не материализованные фреймы (5.5);
+(2) схема не разворачивает hidden states и несёт их ширины (§10);
+(3) `UPLIFT_SCORE_COLUMNS` и проверка формы становятся backend-зависимыми (§8).
+
+---
+
+## 13. Критерии приёмки
+
+У каждого критерия должен быть назван тест, который его доказывает. Критерий без
+теста не считается выполненным.
+
+**Паритет и API**
+
+1. Паритет бустинга не изменился.
+2. Один публичный AutoML API работает с `backend="boosting"` и `backend="tabnn"`.
+
+**Prerequisites**
+
+3. Все восемь prerequisites P1–P8 реализованы и покрыты тестами.
+4. Публичный `finalize()` восстанавливает remote-результат после смерти
+   исходного процесса, при этом happy path не требует ручного вызова.
+5. Частичный сабмит не теряет уже созданные джобы.
+6. `container ... is not available` отображается как `submitting` и никогда не
+   вызывает пересоздание джобы; `pending` остаётся `queued`; `NotFound` после
+   grace становится терминальным `lost` с диагностикой и `tell(FAIL)`;
+   настоящий `unknown` не приводит к бесконечному молчаливому ожиданию.
+7. `CUDA_VISIBLE_DEVICES` пользовательского процесса восстанавливается после
+   локального запуска; пин на GPU 0 применяется только к бустингу.
+8. Лучшая NN-модель не хранится как долгоживущий Python-объект в координаторе
+   поиска.
+
+**Данные**
+
+9. Препроцессор фитится только на полном train и применяется к valid/test без
+   утечки.
+10. `model_layout` делит **уже обработанные** данные; `global` читает плоскую
+    раскладку, `per_group` — партиционированную, а `global_and_per_group`
+    отвергается на валидации конфига с внятной причиной.
+11. Обработанные данные переиспользуются только при полном совпадении identity
+    источника, конфига препроцессинга, схемы и версии контракта.
+12. Прерванное кодирование никогда не переиспользуется: без маркера
+    завершённости каталог считается отсутствующим, публикация атомарная.
+13. Параллельный препроцессинг воспроизводит последовательный `dump()`
+    побитово.
+14. Out-of-core работает: пиковый RSS не растёт при увеличении сплита в 10 раз.
+15. Hidden states доходят до модели векторами: ни одной развёрнутой скалярной
+    колонки, ширины лежат в схеме отдельным полем.
+
+**Обучение и поиск**
+
+16. Ранжирование идёт по метрике AutoML, а не по метрике `Trainer`; бустинговый
+    путь по-прежнему не импортирует torch.
+17. TabNN использует существующие поля `search_space`, `n_trials`,
+    `random_state`; новых полей ровно два (`processed_data_path`,
+    `max_parallel_jobs`), и оба не про поиск.
+18. Локальный поиск выбирает лучший чекпоинт и переживает падение отдельных
+    трейлов.
+19. При полностью категориальном пространстве размером ≤ `n_trials` выполняется
+    полный перебор без повторов; `n_trials` ведёт себя как потолок и это видно в
+    логе и отчёте.
+20. Osiris запускает независимые trial-джобы и переживает перезапуск драйвера.
+21. **Обучение через AutoML эквивалентно обучению руками через FMLib:** одни
+    данные, одни гиперпараметры, один сид, два пути — вручную через `Trainer` и
+    через `BinaryTask(backend="tabnn", hyperopt=False, model_params=...)` — дают
+    одинаковую метрику **с точностью 1e-6** на детерминированном CPU-пути.
+    Расхождение выше означает, что обёртка изменила порядок батчей, каденцию
+    валидации, AMP или метрику. Для GPU — отдельная нестрогая проверка с явно
+    названным допуском.
+22. Область воспроизводимости названа: локальный последовательный CPU-путь
+    побитово, кластер — метрики в пределах допуска.
+
+**Задачи и жизненный цикл**
+
+23. Binary, response, regression, multiclass проходят
+    `train → save/load → predict → calibrate → evaluate`.
+24. **Uplift tabnn проходит полный e2e** через `SLearner`, включая калибровку;
+    ограничение «только S-Learner» отражено в `examples/automl/README`.
+25. Предикт скорит каждую строку ровно один раз и в исходном порядке, включая
+    multi-rank.
+26. Артефакт не содержит pickle; препроцессор поднимается отдельным файлом через
+    `TabularPreprocessor.load()`.
+27. Standalone-обучение и предикт через FMLib продолжают работать без AutoML.
+
+---
+
+## 14. Вне области первой версии
+
+- **Ранний фьюжн** hidden states как ось поиска (§10).
+- **TPE и волновой адаптивный поиск** на кластере: персистентность из 7.5 их
+  поддерживает, включается, если живой драйвер окажется приемлемым.
+- **T/X-метаобучатели** для uplift.
+- **Fan-out по трейлам для бустинга**: общий селектор трейлов делает это
+  включением конфига, но сейчас не включается.
+- **Ленивая подготовка данных для бустинга**: он материализует сплиты в память, и
+  это его ограничение, а не tabnn; отдельный пункт бэклога, в этот дизайн не
+  протаскивается.
+- **Буфер перемешивания между сегментами** в `BaseShardedParquetDataset`
+  (round-robin по нескольким сегментам или буфер на N записей). Он снял бы
+  зависимость батча от порядка файлов и **открыл бы `global_and_per_group` для
+  tabnn**: `global`-часть смогла бы читать партиционированные данные с
+  перемешанными батчами. Это ~30 строк в общем слое данных FMLib и полезно не
+  только AutoML, но в scope первой версии не входит.
+- **Настоящая проверка multi-GPU** (NCCL, раскладка рангов по картам) — до
+  появления многокарточной ноды.
+- **Верификация на живом Osiris:** реальная сигнатура `create`, реальные строки
+  состояний, семантика пулов, kerberos/HDFS, латентность общей ФС под K джобами.
