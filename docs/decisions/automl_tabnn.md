@@ -284,7 +284,7 @@ save/load payload, маппинг конфига.
 (`backends/boosting/regression.py:26-45` выбирает между `CatBoostRegressor` и
 `XGBRegressor`); у TabNN модель всегда `SupervisedLearner`, а задачи отличаются
 только `num_classes`/`task_type`, лоссом и постобработкой скора — это таблица, а
-не четыре модуля.
+не четыре модуля и, как показывает 4.2, даже не четыре класса.
 
 ```text
 fmlib/automl/backends/
@@ -300,9 +300,10 @@ fmlib/automl/backends/
     assembly.py       AutoML-конфиг + параметры трейла -> DictConfig для fmlib.train
     metric.py         AutoMLMetric(ScalarMetric) — мост метрик (§6.4)
     runner.py         трейл-раннеры: in-process / torchrun subprocess / Osiris job
-    base.py           BaseTabNNBackend (prepare_fit_data / fit_prepared / save / load)
-                      + адаптеры Binary / Response / Regression / Multiclass
-    uplift.py         UpliftTabNNBackend (SLearner)
+    base.py           TabNNBackend — ОДИН класс на binary/response/regression/multiclass
+    templates/        binary.yaml, response.yaml, regression.yaml, multiclass.yaml,
+                      uplift.yaml — чем задачи отличаются друг от друга
+    uplift.py         UpliftTabNNBackend (SLearner, другой протокол скоринга)
     spaces.py         default_search_space(engine)
 ```
 
@@ -405,7 +406,7 @@ build_train_config(task_config, model_part, trial_params, processed, schema) -> 
 кто досабмичивает `planned` — это `backends/search.py`. `runner.py` умеет только
 «исполни вот эту одну спеку».
 
-#### `base.py` — бэкенд и четыре адаптера
+#### `base.py` — один бэкенд на четыре задачи, различия в шаблонах
 
 ```python
 prepare_fit_data(part, *, reuse) -> Prepared
@@ -422,20 +423,63 @@ feature_importance(schema) -> None  у сети её нет; отчёт это �
 can_reuse_prepared(space) -> True   кроме случая, когда пространство трогает кодирование
 ```
 
-Адаптеры по 10–20 строк, различаются четырьмя вещами — `task_name`,
-`num_classes`, `task_type`, лосс и постобработка скора:
+**Отдельных классов на задачу нет.** Раз `assembly.py` всё равно генерирует
+конфиг, различие задач естественно живёт в конфиге, а не в иерархии классов, —
+это тот же довод, которым в 4.1 схлопывались файлы, доведённый до конца.
+Бустингу классы нужны потому, что у каждой задачи свой нативный estimator; у
+tabnn модель всегда `SupervisedLearner`, и разница сводится к четырём значениям.
 
-```text
-BinaryTabNNBackend        num_classes=1,  classification, sigmoid
-ResponseTabNNBackend      то же; treatment — обычный признак
-RegressionTabNNBackend    num_classes=1,  regression, identity
-MulticlassTabNNBackend    num_classes=K,  softmax; плюс class_order и его проверка
+Задача приходит в бэкенд через **существующий хук**
+`_backend_options()` — тот самый, которым multiclass уже передаёт `num_classes`
+(`avatar/automl/tasks/multiclass.py:191`). Это не изобретение, а имеющийся
+паттерн; `_backend_class` при этом используется ровно в одном месте —
+`ArtifactRepository(cls._task_name, cls._artifact_directory, cls._backend_class)`
+(`tasks/base.py:849`), и только чтобы позвать `backend_class.load(...)`, а
+`isinstance` по бэкендам за пределами `backends/` не делает никто.
+
+**Шаблон задачи** — YAML в пакете, который `assembly.py` накрывает путями к
+данным и параметрами трейла:
+
+```yaml
+# templates/binary.yaml
+model:
+  _target_: fmlib.pipeline.tabular.SupervisedLearner
+  num_classes: 1
+  task_type: classification
+  loss: {_target_: fmlib.losses.ClassificationLoss, ...}
+score_transform: sigmoid
 ```
+
+`response.yaml` — копия binary; `regression.yaml` — `task_type: regression`,
+`score_transform: identity`; `multiclass.yaml` — `num_classes: K`, `softmax`.
+Добавить задачу = добавить файл. Прецедент в репозитории есть:
+`avatar/automl/config/defaults/boosting_search_space.yaml` — дефолты уже лежат
+YAML-ом внутри пакета. **Гоча:** в `pyproject.toml` нет ни
+`include-package-data`, ни `package-data`, поэтому попадание шаблонов в колесо
+надо проверить, а не предположить.
+
+Кодом в классе остаются три вещи:
+
+- `score_transform` — три ветки по строке из шаблона, десяток строк;
+- **`class_order` для multiclass** — сохранение и проверка на предикте. У сети
+  нет «своего порядка классов», как у CatBoost: модель выдаёт K логитов в том
+  порядке, в котором обучена, то есть в порядке, зафиксированном при
+  кодировании. Поэтому вместо сверки с порядком эстиматора нужна только
+  персистентность и валидация, ~10 строк под `if num_classes > 1`;
+- всё остальное из контракта выше — оно от задачи не зависит.
+
+**Что теряется и чем закрывается.** Сегодня идентичность класса неявно
+гарантирует, что `BinaryTask` не загрузит артефакт multiclass: репозиторий
+создан с конкретным классом. С одним классом гарантия исчезает, поэтому
+**`task_name` пишется в `backend.json` и сверяется при `load()`** — иначе
+несовпадение задачи вылезет позже и в непонятном месте. Побочно: дженерик
+`_backend_class: type[_BackendT]` (`tasks/base.py:69`) перестаёт что-либо
+различать для tabnn — это косметика, «чинить» её не нужно.
 
 #### `uplift.py` — S-Learner
 
 ```python
-UpliftTabNNBackend(BaseTabNNBackend)
+UpliftTabNNBackend(TabNNBackend)
     конфиг строит SLearner (separate_heads, treatment_interaction, loss_fn)
     вместо SupervisedLearner; за образец берётся
     examples/uplift_modeling/s_learner/configs/train.yaml
@@ -450,10 +494,12 @@ UpliftTabNNBackend(BaseTabNNBackend)
 ровно их и все конечные. S-Learner столько выдать не может, поэтому константа и
 проверка формы переезжают в нейтральный модуль и становятся backend-зависимыми.
 
-Отдельный файл потому, что это другая модель, другая семантика колонки
-treatment, другая волна реализации (S14) — и именно это место вырастет, если
-понадобится паритет по T/X: у бустинга `uplift.py` это 649 строк против 69 у
-`binary.py`.
+**Почему uplift остаётся классом, хотя остальные четыре задачи — шаблоны:** у
+него отличается не значение, а **протокол**. Обучение прогоняет батч один раз с
+реальным treatment, скоринг делает два прохода и считает разницу, на выходе
+матрица, а не вектор. Это код, а не поле в YAML. Плюс другая волна реализации
+(S14) и именно это место вырастет, если понадобится паритет по T/X: у бустинга
+`uplift.py` это 649 строк против 69 у `binary.py`.
 
 ---
 
