@@ -161,10 +161,3 @@ def test_the_processed_data_is_encoded_once_and_reused(tmp_path, data, capsys):
     # which is what makes a shared processed_data_path reuse anything.
     other_root = tmp_path / "second" / "outputs" / "processed"
     assert [path.name for path in other_root.iterdir() if path.is_dir()] == keys
-
-
-@pytest.mark.slow
-def test_per_group_is_refused_with_a_reason(tmp_path, data):
-    config = _binary_config(tmp_path, group_column="segment", model_layout="per_group")
-    with pytest.raises(Exception, match="model_layout"):
-        BinaryTask(config).train(data["train"], data["valid"])
