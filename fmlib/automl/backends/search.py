@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from itertools import product
 from time import perf_counter
 from typing import Any, Generic, Literal, TypeVar
 
@@ -402,3 +403,140 @@ def fit_model(
         best_value,
     )
     return FitResult(best_backend, best_params, best_value)
+
+
+@dataclass(frozen=True)
+class TrialPlan:
+    """The parameter sets a search will try, decided before the first one runs.
+
+    Attributes:
+        params: One mapping per trial, in the order they will be executed.
+        exhaustive: Whether this is the whole grid rather than a sample of it.
+        requested: The trial budget that was asked for.
+    """
+
+    params: tuple[Mapping[str, Any], ...]
+    exhaustive: bool
+    requested: int
+
+    def __len__(self) -> int:
+        return len(self.params)
+
+    @property
+    def short_of_budget(self) -> bool:
+        """Whether fewer trials will run than were asked for."""
+        return len(self.params) < self.requested
+
+
+def _categorical_choices(definition: Any) -> list[Any] | None:
+    """Return the choices of a categorical axis, or ``None`` if it is not one."""
+    if isinstance(definition, list | tuple):
+        return list(definition) or None
+    if isinstance(definition, Mapping) and definition.get("type") == "categorical":
+        choices = definition.get("choices")
+        return list(choices) if choices else None
+    return None
+
+
+def plan_trials(
+    *,
+    backend: str,
+    engine: str,
+    model_params: Mapping[str, Any],
+    search_space: Mapping[str, Any] | None,
+    n_trials: int,
+    random_state: int,
+    train_frame: pl.DataFrame | None = None,
+    schema: FeatureSchema | None = None,
+) -> TrialPlan:
+    """Decide every parameter set up front, before anything is executed.
+
+    All of them, not one at a time, because a search that fans out over jobs
+    has no live driver between waves to decide what to try next -- and a
+    sampler that cannot look at earlier results has no reason to wait anyway.
+
+    Two rules sit on top of sampling:
+
+    1. **The whole grid instead of a sample.** When every axis is categorical
+       and the product is no larger than the budget, every point is run.
+       Sampling a small discrete set with replacement spends the budget on
+       repeats and still does not guarantee coverage.
+    2. **Deduplication.** A repeated parameter set is a wasted trial, and on
+       an A100 a wasted trial is expensive.
+
+    So ``n_trials`` is a **ceiling, not a count**: with a small grid, or after
+    deduplication, fewer trials run than were asked for. The caller is expected
+    to say so in the log, because otherwise it looks like trials went missing.
+
+    Args:
+        backend: Backend family, for the default space.
+        engine: Engine within that family.
+        model_params: Fixed parameters merged into every trial.
+        search_space: Explicit space, or ``None`` for the packaged default.
+        n_trials: The budget.
+        random_state: Seed. The same seed gives the same sets, which is what
+            makes a resumed or repeated search comparable to the original.
+        train_frame: Training frame, for a data-sized default space.
+        schema: Its schema.
+
+    Returns:
+        The plan.
+
+    Raises:
+        MissingDependencyError: If sampling is needed and optuna is missing.
+    """
+    space = (
+        resolve_default_search_space(
+            backend,
+            engine,
+            n_trials=n_trials,
+            train_frame=train_frame,
+            schema=schema,
+        )
+        if search_space is None
+        else dict(search_space)
+    )
+    choices = {name: _categorical_choices(item) for name, item in space.items()}
+    if space and all(value is not None for value in choices.values()):
+        names = list(choices)
+        grid = list(product(*(choices[name] for name in names)))
+        if len(grid) <= n_trials:
+            return TrialPlan(
+                params=tuple(
+                    dict(model_params) | dict(zip(names, point, strict=True))
+                    for point in grid
+                ),
+                exhaustive=True,
+                requested=n_trials,
+            )
+
+    try:
+        import optuna
+    except ImportError as exc:
+        msg = "Hyperparameter search requires the 'optuna' package"
+        raise MissingDependencyError(msg) from exc
+
+    optuna.logging.set_verbosity(optuna.logging.WARNING)
+    study = optuna.create_study(
+        sampler=optuna.samplers.RandomSampler(seed=random_state)
+    )
+    seen: dict[str, dict[str, Any]] = {}
+    # Sampling with replacement needs a bounded number of attempts: a space
+    # whose distinct points run out must end the loop, not spin in it.
+    attempts = 0
+    while len(seen) < n_trials and attempts < n_trials * 20:
+        attempts += 1
+        trial = study.ask()
+        params = suggest_params(
+            trial,
+            backend=backend,
+            engine=engine,
+            model_params=model_params,
+            search_space=space,
+            n_trials=n_trials,
+        )
+        study.tell(trial, 0.0)
+        seen.setdefault(
+            repr(sorted(params.items(), key=lambda item: str(item))), params
+        )
+    return TrialPlan(params=tuple(seen.values()), exhaustive=False, requested=n_trials)

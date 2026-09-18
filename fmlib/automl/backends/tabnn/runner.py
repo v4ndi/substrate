@@ -17,6 +17,7 @@ that works for a runner that cannot return a Python object at all.
 
 from __future__ import annotations
 
+import gc
 import json
 import traceback
 from collections.abc import Mapping
@@ -158,7 +159,8 @@ def run_trial(spec: TrialSpec) -> TrialResult:
     )
     spec.write()
     env = None
-    model = None
+    model = trainer = train_dataloader = valid_dataloader = None
+    optimizer = scheduler = callbacks = valid_metrics = None
     try:
         run_config = resolve_run_config(config)
         env = DistEnv.from_env(
@@ -231,7 +233,14 @@ def run_trial(spec: TrialSpec) -> TrialResult:
             duration=perf_counter() - started,
         )
     finally:
-        del model
+        # Every one of these has to go before the next trial starts. The two
+        # datasets each hold a torch shared-memory descriptor for their epoch
+        # counter, and the trainer keeps the loaders alive through its
+        # callbacks, so dropping only the model leaks two descriptors a trial
+        # -- slowly, invisibly, and for the whole length of a search.
+        model = trainer = train_dataloader = valid_dataloader = None
+        optimizer = scheduler = callbacks = valid_metrics = None
+        gc.collect()
         if env is not None:
             env.destroy()
         if torch.cuda.is_available():

@@ -13,6 +13,7 @@ from pathlib import Path
 from time import perf_counter
 from typing import Any
 
+from fmlib.automl.backends.search import plan_trials
 from fmlib.automl.data import CanonicalColumnMapper
 from fmlib.automl.exceptions import UnsupportedBackendError
 from fmlib.automl.progress import log_progress
@@ -22,7 +23,7 @@ from fmlib.automl.tasks.state import ModelEntry, TrainingInput
 from .assembly import build_train_config
 from .base import TabNNBackend
 from .data import build_schema, prepare_processed_data
-from .runner import InProcessRunner, TrialSpec
+from .runner import InProcessRunner, TrialResult, TrialSpec
 
 __all__ = ["fit_model_part"]
 
@@ -108,41 +109,85 @@ def fit_model_part(
     )
 
     part = task._model_name(layout, group_value)
-    trial_dir = Path(config.output_dir) / "tabnn" / part / trial_id
     class_order = getattr(task, "_class_order", None)
-    train_config = build_train_config(
-        config=config,
-        task_name=task._task_name,
-        processed=processed,
-        params=dict(params or config.model_params),
-        trial_dir=trial_dir,
-        backend_options=task._backend_options(),
-        class_order=class_order,
-    )
-    spec = TrialSpec(
-        trial_id=trial_id,
-        config=train_config,
-        trial_dir=str(trial_dir),
-        metric_name=train_config["automl"]["metric"],
-        direction=train_config["automl"]["direction"],
-        seed=int(config.random_state),
-        params=dict(params or config.model_params),
-    )
+    root = Path(config.output_dir) / "tabnn" / part
+    candidates = _trial_params(task, params)
     runner = InProcessRunner()
-    result = runner.collect(runner.submit(spec))
-    if not result.completed:
-        msg = f"TabNN trial {trial_id} for model part {part!r} failed: {result.error}"
+
+    results: list[tuple[TrialResult, Mapping[str, Any], Any]] = []
+    for index, trial_params in enumerate(candidates):
+        name = f"{trial_id}-{index:04d}" if len(candidates) > 1 else trial_id
+        try:
+            train_config = build_train_config(
+                config=config,
+                task_name=task._task_name,
+                processed=processed,
+                params=dict(trial_params),
+                trial_dir=root / name,
+                backend_options=task._backend_options(),
+                class_order=class_order,
+            )
+            spec = TrialSpec(
+                trial_id=name,
+                config=train_config,
+                trial_dir=str(root / name),
+                metric_name=train_config["automl"]["metric"],
+                direction=train_config["automl"]["direction"],
+                seed=int(config.random_state),
+                params=dict(trial_params),
+            )
+            result = runner.collect(runner.submit(spec))
+        except Exception as error:
+            # A parameter set the assembly rejects -- a hidden size that does
+            # not divide by the head count, say -- is a failed trial, not a
+            # failed search. The boosting path keeps today's behaviour, where
+            # the first exception ends the study.
+            result = TrialResult(
+                trial_id=name,
+                state="FAIL",
+                error=f"{type(error).__name__}: {error}",
+            )
+            train_config = None
+        results.append((result, dict(trial_params), train_config))
+        log_progress(
+            "[tabnn trial %d/%d] model=%s state=%s objective=%s",
+            index + 1,
+            len(candidates),
+            part,
+            result.state,
+            "n/a" if result.objective is None else f"{result.objective:.12g}",
+        )
+
+    completed = [item for item in results if item[0].completed]
+    if not completed:
+        errors = "; ".join(f"{item[0].trial_id}: {item[0].error}" for item in results)
+        msg = f"Every TabNN trial for model part {part!r} failed: {errors}"
         raise RuntimeError(msg)
+    direction = next(
+        item[2]["automl"]["direction"] for item in results if item[2] is not None
+    )
+    best = (max if direction == "max" else min)(
+        completed, key=lambda item: item[0].objective
+    )
+    result, best_params, train_config = best
+    if len(completed) < len(results):
+        log_progress(
+            "[tabnn fit] model=%s trials_completed=%d/%d (failed trials do not end a search)",
+            part,
+            len(completed),
+            len(results),
+        )
     log_progress(
-        "[tabnn fit] model=%s objective=%.12g duration_seconds=%.3f",
+        "[tabnn fit] model=%s best_trial=%s objective=%.12g duration_seconds=%.3f",
         part,
+        result.trial_id,
         result.objective,
         perf_counter() - started,
     )
 
     backend = TabNNBackend(
         engine=config.engine,
-        params=dict(spec.params),
+        params=dict(best_params),
         random_state=int(config.random_state),
         device=internal.resolved_device,
         verbose=bool(config.verbose),
@@ -161,7 +206,7 @@ def fit_model_part(
         backend=backend,
         schema=schema,
         hidden_dimensions=dict(schema.hidden_states),
-        best_params=dict(spec.params),
+        best_params=dict(best_params),
         validation_metric=float(result.objective),
         layout=layout,
         group_value=group_value,
@@ -172,3 +217,42 @@ def _plain(config: Any) -> dict[str, Any]:
     from omegaconf import OmegaConf
 
     return OmegaConf.to_container(config, resolve=True)
+
+
+def _trial_params(
+    task: Any, params: Mapping[str, Any] | None
+) -> list[Mapping[str, Any]]:
+    """Decide the parameter sets of this model part, before any of them runs.
+
+    Without ``hyperopt`` there is exactly one set: whatever the user fixed.
+    With it, the plan comes from :func:`plan_trials`, and how many trials it
+    actually contains is logged — a budget of ten that produces six looks like
+    four lost trials unless somebody says otherwise.
+    """
+    config = task.config
+    if params is not None:
+        return [dict(params)]
+    if not config.hyperopt:
+        return [dict(config.model_params)]
+    plan = plan_trials(
+        backend=config.backend,
+        engine=config.engine,
+        model_params=config.model_params,
+        search_space=config.search_space,
+        n_trials=int(config.n_trials),
+        random_state=int(config.random_state),
+    )
+    log_progress(
+        "[tabnn search] trials=%d budget=%d mode=%s",
+        len(plan),
+        plan.requested,
+        "full grid" if plan.exhaustive else "random sample",
+    )
+    if plan.short_of_budget:
+        log_progress(
+            "[tabnn search] fewer trials than requested: the space has %d distinct "
+            "points against a budget of %d",
+            len(plan),
+            plan.requested,
+        )
+    return [dict(item) for item in plan.params]
