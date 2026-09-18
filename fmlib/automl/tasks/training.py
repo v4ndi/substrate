@@ -5,15 +5,13 @@ from dataclasses import dataclass, replace
 from time import perf_counter
 from typing import Any
 
-import polars as pl
-
 from fmlib.automl.backends import MATERIALIZED_BACKENDS
 from fmlib.automl.data import CanonicalColumnMapper, ParquetSource
 from fmlib.automl.execution import ExecutionContext, _freeze
 from fmlib.automl.progress import log_progress
 from fmlib.automl.types import ParquetPath, TrainingResult
 
-from .planning import FrameGroupView, ModelPlan, SourceGroupView
+from .planning import FrameGroupView, GroupView, ModelPlan, SourceGroupView
 from .preparation import DataPreparation
 from .state import ModelEntry, TrainingInput
 
@@ -41,7 +39,7 @@ class TrainingCoordinator:
 
     context: ExecutionContext
     task_name: str
-    prepare_state: Callable[[pl.DataFrame, pl.DataFrame], None]
+    prepare_state: Callable[[GroupView, GroupView], None]
     fit_one: Callable[..., ModelEntry]
 
     @property
@@ -119,7 +117,7 @@ class TrainingCoordinator:
         log_progress(
             "[train 3/5] normalizing roles, validating routing, and building model plan"
         )
-        self.prepare_state(train_frame, valid_frame)
+        self.prepare_state(train_view, valid_view)
         models = []
         plan = ModelPlan.training(
             self.context,

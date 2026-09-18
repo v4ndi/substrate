@@ -31,6 +31,8 @@ dependencies = [
     "betacal",
     "torchinfo",
     "nvidia-ml-py",
+    # Artifact weights are safetensors, never a pickled state dict.
+    "safetensors",
     # fmlib.automl
     "polars>=1.43.2,<2",
     "optuna>=4.9.0,<5",
@@ -60,6 +62,12 @@ version = { attr = "fmlib._version.__version__" }
 [tool.setuptools.packages.find]
 include = ["fmlib*"]
 exclude = ["tests*", "experiments*", "examples*", "docs*"]
+
+# Packaged YAML is data the code reads at runtime — the boosting default search
+# space and the TabNN task templates — so it has to travel in the wheel.
+[tool.setuptools.package-data]
+"fmlib.automl.config" = ["defaults/*.yaml"]
+"fmlib.automl.backends.tabnn" = ["templates/*.yaml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

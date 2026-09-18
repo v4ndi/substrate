@@ -147,6 +147,7 @@ def build_schema(
     source: ParquetSource,
     config: Any,
     to_external: Mapping[str, str] | None = None,
+    categorical_role_columns: Sequence[str | None] = (),
 ) -> FeatureSchema:
     """Derive the feature schema from parquet footers, without reading rows.
 
@@ -157,6 +158,10 @@ def build_schema(
         source: The training split.
         config: Canonical (internal) task configuration.
         to_external: Canonical-to-physical role names.
+        categorical_role_columns: Role columns that count as categorical
+            features in this layout -- the group column for a global model, the
+            treatment column for a response task. The same convention the
+            boosting path applies, so the two families see the same features.
 
     Returns:
         A schema whose ``hidden_states`` carries widths and whose
@@ -177,6 +182,7 @@ def build_schema(
     required = [
         config.target_column,
         config.client_id_column,
+        *(column for column in categorical_role_columns if column is not None),
         *config.categorical_columns,
         *config.numerical_columns,
         *config.hidden_state_columns,
@@ -201,7 +207,11 @@ def build_schema(
         column: _hidden_state_width(source, external(column))
         for column in config.hidden_state_columns
     }
-    categorical = tuple(config.categorical_columns)
+    categorical = list(config.categorical_columns)
+    for column in categorical_role_columns:
+        if column and column not in categorical:
+            categorical.append(column)
+    categorical = tuple(categorical)
     numerical = tuple(config.numerical_columns)
     if not categorical and not numerical and not hidden_states:
         msg = "No features configured; set categorical_columns, numerical_columns or hidden_state_columns"

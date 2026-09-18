@@ -34,7 +34,7 @@ from fmlib.automl.tasks.operations import (
     OperationRunner,
     RemoteTrainingParts,
 )
-from fmlib.automl.tasks.planning import ModelPlan
+from fmlib.automl.tasks.planning import GroupView, ModelPlan
 from fmlib.automl.tasks.prediction import execute_prediction
 from fmlib.automl.tasks.preparation import DataPreparation
 from fmlib.automl.tasks.routing import PredictionRouter
@@ -82,19 +82,25 @@ class BaseTask(ABC, Generic[_BackendT]):
         """Initialize shared state from a validated task configuration.
 
         Args:
-            config: Task-specific configuration with ``backend='boosting'``.
+            config: Task-specific configuration.
 
         Raises:
-            ConfigError: If the configuration belongs to another task or a
-                non-boosting backend is requested.
+            ConfigError: If the configuration belongs to another task.
+            UnsupportedBackendError: If this task has no adapter for the
+                configured backend family. Raised here rather than at the first
+                fit, so a misconfigured run fails where it was written.
         """
         expected_config = type(self)._config_class
         if type(config) is not expected_config:
             msg = f"{type(self).__name__} requires {expected_config.__name__}; got {type(config).__name__}"
             raise ConfigError(msg)
-        if config.backend != "boosting":
-            msg = f"{type(self).__name__} currently implements only backend='boosting'"
-            raise ConfigError(msg)
+        if config.backend not in type(self)._backend_loaders:
+            supported = ", ".join(sorted(type(self)._backend_loaders))
+            msg = (
+                f"{type(self).__name__} does not support backend "
+                f"{config.backend!r}; supported: {supported}"
+            )
+            raise UnsupportedBackendError(msg)
         self.config = config
         self._column_mapper = CanonicalColumnMapper.from_config(config)
         self._internal_config = self._column_mapper.normalize_config(config)
@@ -131,10 +137,13 @@ class BaseTask(ABC, Generic[_BackendT]):
     def _target(self, frame: pl.DataFrame) -> np.ndarray:
         """Validate and return the task-specific target vector."""
 
-    def _prepare_training_state(
-        self, train_frame: pl.DataFrame, valid_frame: pl.DataFrame
-    ) -> None:
-        """Resolve task-specific fitted state before model parts are trained."""
+    def _prepare_training_state(self, train: GroupView, valid: GroupView) -> None:
+        """Resolve task-specific fitted state before model parts are trained.
+
+        The two views answer questions about a split -- which columns it has,
+        what values a column takes -- without requiring the rows to be in
+        memory, because a streaming backend never materializes them.
+        """
         return None
 
     def _context(self) -> ExecutionContext:

@@ -11,6 +11,7 @@ from fmlib.automl import MulticlassTask, MulticlassTaskConfig, PredictionResult
 from fmlib.automl.backends.boosting import MulticlassBoostingBackend
 from fmlib.automl.exceptions import ArtifactError, ConfigError, SchemaError
 from fmlib.automl.metrics import binary_top_k_metrics, multiclass_class_metrics
+from fmlib.automl.tasks.planning import FrameGroupView
 
 
 def test_multiclass_documentation_is_self_contained_and_base_is_task_neutral():
@@ -344,7 +345,7 @@ def test_multiclass_target_validation(tmp_path, target, message):
     task = MulticlassTask(_config(tmp_path))
     frame = pl.DataFrame({"target": target}, strict=False)
     with pytest.raises(SchemaError, match=message):
-        task._prepare_training_state(frame, frame)
+        task._prepare_training_state(FrameGroupView(frame), FrameGroupView(frame))
 
 
 def test_per_class_top_k_metrics_match_binary_fmlib_contract(tmp_path):

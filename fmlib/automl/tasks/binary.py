@@ -36,6 +36,13 @@ from fmlib.automl.types import (
 logger = logging.getLogger(__name__)
 
 
+def _tabnn_backend() -> type:
+    """Import the TabNN adapter only when a run asks for it; it needs torch."""
+    from fmlib.automl.backends.tabnn.base import TabNNBackend
+
+    return TabNNBackend
+
+
 class BinaryTask(SupervisedTask[BinaryBoostingBackend]):
     """Train, score, evaluate, and persist binary boosting models.
 
@@ -49,6 +56,7 @@ class BinaryTask(SupervisedTask[BinaryBoostingBackend]):
 
     _backend_loaders: ClassVar[Mapping[str, Callable[[], type]]] = {
         "boosting": lambda: BinaryBoostingBackend,
+        "tabnn": _tabnn_backend,
     }
     _config_class = BinaryTaskConfig
     _task_name = "binary"

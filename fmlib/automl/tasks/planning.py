@@ -27,6 +27,10 @@ class GroupView(Protocol):
         """Return the distinct non-null values of a column, and whether nulls exist."""
         ...
 
+    def dtype(self, column: str) -> Any:
+        """Return the polars dtype of a column, without reading its values."""
+        ...
+
 
 @dataclass(frozen=True)
 class FrameGroupView:
@@ -40,6 +44,9 @@ class FrameGroupView:
     def unique_values(self, column: str) -> tuple[list[Any], bool]:
         series = self.frame[column]
         return series.drop_nulls().unique().to_list(), bool(series.null_count())
+
+    def dtype(self, column: str) -> Any:
+        return self.frame.schema[column]
 
 
 @dataclass
@@ -69,6 +76,9 @@ class SourceGroupView:
             values, has_nulls = self.source.unique_column_values(self._physical(column))
             self._answers[column] = (list(values), has_nulls)
         return self._answers[column]
+
+    def dtype(self, column: str) -> Any:
+        return self.source.scan().collect_schema()[self._physical(column)]
 
 
 @dataclass(frozen=True)

@@ -160,15 +160,24 @@ def test_every_task_resolves_its_backend_family_through_one_dictionary():
         ResponseTask,
         UpliftTask,
     ):
-        assert set(task_class._backend_loaders) == {"boosting"}
+        assert "boosting" in task_class._backend_loaders
         adapter = task_class._backend_class_for("boosting")
         assert adapter is task_class._backend_loaders["boosting"]()
 
 
-def test_unknown_backend_family_names_the_task_and_what_is_supported():
+@pytest.mark.parametrize(
+    "task_class", [BinaryTask, MulticlassTask, RegressionTask, ResponseTask]
+)
+def test_the_supervised_tasks_can_reach_the_tabnn_adapter(task_class):
+    adapter = task_class._backend_class_for("tabnn")
+    assert adapter.__name__ == "TabNNBackend"
+
+
+def test_a_task_without_a_tabnn_adapter_says_what_it_supports():
+    """Uplift arrives later; until then the refusal names the task and the list."""
     with pytest.raises(UnsupportedBackendError) as error:
-        BinaryTask._backend_class_for("tabnn")
+        UpliftTask._backend_class_for("tabnn")
     message = str(error.value)
-    assert "'binary'" in message
+    assert "'uplift'" in message
     assert "'tabnn'" in message
     assert "boosting" in message

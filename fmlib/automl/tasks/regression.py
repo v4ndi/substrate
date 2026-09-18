@@ -35,6 +35,13 @@ from fmlib.automl.types import (
 logger = logging.getLogger(__name__)
 
 
+def _tabnn_backend() -> type:
+    """Import the TabNN adapter only when a run asks for it; it needs torch."""
+    from fmlib.automl.backends.tabnn.base import TabNNBackend
+
+    return TabNNBackend
+
+
 class RegressionTask(SupervisedTask[RegressionBoostingBackend]):
     """Train, score, evaluate, and persist continuous-target boosting models.
 
@@ -44,6 +51,7 @@ class RegressionTask(SupervisedTask[RegressionBoostingBackend]):
 
     _backend_loaders: ClassVar[Mapping[str, Callable[[], type]]] = {
         "boosting": lambda: RegressionBoostingBackend,
+        "tabnn": _tabnn_backend,
     }
     _config_class = RegressionTaskConfig
     _task_name = "regression"

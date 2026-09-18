@@ -79,6 +79,13 @@ class SupervisedTask(BaseTask[_SingleBackendT]):
         training and validation metrics; their validation split never refers to
         the path later passed to :meth:`predict` or :meth:`evaluate`.
         """
+        if self.config.backend != "boosting":
+            from fmlib.automl.backends.tabnn.fit import fit_model_part
+
+            return fit_model_part(
+                self, train, valid, layout=layout, group_value=group_value
+            )
+
         train_frame = train.require_frame()
         valid_frame = valid.require_frame()
         preparation_started = perf_counter()
@@ -186,6 +193,9 @@ class SupervisedTask(BaseTask[_SingleBackendT]):
             categorical_role_columns=categorical_roles,
             excluded_feature_columns=excluded,
             public_column_names=self._column_mapper.to_external,
+            # A network takes an embedding as a vector; only a tree needs it
+            # expanded into one scalar feature per coordinate.
+            expand_hidden_states=self.config.backend == "boosting",
         )
         return item.backend.predict_score(prepared.frame, item.schema)
 

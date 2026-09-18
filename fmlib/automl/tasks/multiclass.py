@@ -24,6 +24,7 @@ from fmlib.automl.tasks.evaluation import (
     metric_slices,
     prepare_evaluation_truth,
 )
+from fmlib.automl.tasks.planning import GroupView
 from fmlib.automl.tasks.state import TrainingInput
 from fmlib.automl.tasks.supervised import SupervisedTask
 from fmlib.automl.types import (
@@ -34,6 +35,13 @@ from fmlib.automl.types import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _tabnn_backend() -> type:
+    """Import the TabNN adapter only when a run asks for it; it needs torch."""
+    from fmlib.automl.backends.tabnn.base import TabNNBackend
+
+    return TabNNBackend
 
 
 class MulticlassTask(SupervisedTask[MulticlassBoostingBackend]):
@@ -48,6 +56,7 @@ class MulticlassTask(SupervisedTask[MulticlassBoostingBackend]):
 
     _backend_loaders: ClassVar[Mapping[str, Callable[[], type]]] = {
         "boosting": lambda: MulticlassBoostingBackend,
+        "tabnn": _tabnn_backend,
     }
     _config_class = MulticlassTaskConfig
     _task_name = "multiclass"
@@ -65,6 +74,7 @@ class MulticlassTask(SupervisedTask[MulticlassBoostingBackend]):
         self._class_order: tuple[Any, ...] | None = None
         self._target_dtype: str | None = None
         self._target_encoding: list[tuple[Any, int]] = []
+        self._valid_labels: tuple[Any, ...] = ()
 
     @property
     def class_order(self) -> tuple[Any, ...] | None:
@@ -77,23 +87,36 @@ class MulticlassTask(SupervisedTask[MulticlassBoostingBackend]):
 
     @staticmethod
     def _validate_scalar_target(series: pl.Series, public_name: str) -> None:
-        supported_dtype = (
-            series.dtype == pl.String
-            or series.dtype.is_integer()
-            or series.dtype.is_float()
+        MulticlassTask._validate_target_values(
+            series.dtype,
+            series.drop_nulls().unique().to_list(),
+            bool(series.null_count()),
+            public_name,
         )
+
+    @staticmethod
+    def _validate_target_values(
+        dtype: Any, values: list[Any], has_nulls: bool, public_name: str
+    ) -> None:
+        """Validate a target from its dtype and its distinct values alone.
+
+        Stated this way because a streaming backend never has the column as a
+        Series: the distinct values and a null flag are exactly what a scan can
+        answer, and they are all these rules need.
+        """
+        supported_dtype = dtype == pl.String or dtype.is_integer() or dtype.is_float()
         if not supported_dtype:
             msg = (
                 f"Multiclass target {public_name!r} must contain scalar string, integer or finite float labels; "
-                f"got {series.dtype}"
+                f"got {dtype}"
             )
             raise SchemaError(msg)
-        if series.null_count():
+        if has_nulls:
             msg = f"Multiclass target {public_name!r} contains null values"
             raise SchemaError(msg)
-        if series.dtype.is_float():
-            values = series.cast(pl.Float64)
-            if values.is_nan().any() or values.is_infinite().any():
+        if dtype.is_float():
+            numbers = pl.Series(values, dtype=pl.Float64)
+            if numbers.is_nan().any() or numbers.is_infinite().any():
                 msg = (
                     f"Multiclass target {public_name!r} contains NaN or infinite values"
                 )
@@ -105,20 +128,21 @@ class MulticlassTask(SupervisedTask[MulticlassBoostingBackend]):
                 return encoded
         return None
 
-    def _prepare_training_state(
-        self, train_frame: pl.DataFrame, valid_frame: pl.DataFrame
-    ) -> None:
+    def _prepare_training_state(self, train: GroupView, valid: GroupView) -> None:
         column = self._internal_config.target_column
-        if column not in train_frame.columns:
+        if not train.has_column(column):
             msg = f"Missing target column: {self.config.target_column!r}"
             raise SchemaError(msg)
-        if column not in valid_frame.columns:
+        if not valid.has_column(column):
             msg = f"Validation data is missing target column: {self.config.target_column!r}"
             raise SchemaError(msg)
-        train_target = train_frame[column]
-        self._validate_scalar_target(train_target, self.config.target_column)
+        dtype = train.dtype(column)
+        values, has_nulls = train.unique_values(column)
+        self._validate_target_values(
+            dtype, values, has_nulls, self.config.target_column
+        )
         try:
-            labels = tuple(train_target.unique().sort().to_list())
+            labels = tuple(pl.Series(values, dtype=dtype).unique().sort().to_list())
         except Exception as exc:
             msg = f"Multiclass target labels must have a deterministic sortable order: {exc}"
             raise SchemaError(msg) from exc
@@ -126,9 +150,19 @@ class MulticlassTask(SupervisedTask[MulticlassBoostingBackend]):
             msg = f"Multiclass training target requires at least three classes; got {list(labels)!r}"
             raise SchemaError(msg)
         self._class_order = labels
-        self._target_dtype = str(train_target.dtype)
+        self._target_dtype = str(dtype)
         self._target_encoding = [(label, index) for index, label in enumerate(labels)]
-        self._validate_known_target(valid_frame, split="validation")
+
+        valid_dtype = valid.dtype(column)
+        valid_values, valid_has_nulls = valid.unique_values(column)
+        self._validate_target_values(
+            valid_dtype, valid_values, valid_has_nulls, self.config.target_column
+        )
+        unknown = [value for value in valid_values if self._label_index(value) is None]
+        if unknown:
+            msg = f"Validation target contains labels absent from training class_order: {unknown!r}"
+            raise SchemaError(msg)
+        self._valid_labels = tuple(valid_values)
 
     def _validate_known_target(self, frame: pl.DataFrame, *, split: str) -> None:
         column = self._internal_config.target_column
@@ -144,6 +178,24 @@ class MulticlassTask(SupervisedTask[MulticlassBoostingBackend]):
         ]
         if unknown:
             msg = f"{split.capitalize()} target contains labels absent from training class_order: {unknown!r}"
+            raise SchemaError(msg)
+
+    def _check_labels_of_part(self, part: str) -> None:
+        """The multiclass preconditions, from label sets rather than from rows.
+
+        Raises:
+            SchemaError: If validation cannot rank this model part.
+        """
+        expected = set(self._class_order or ())
+        observed = set(self._valid_labels or ())
+        if len(observed) < 2:
+            msg = f"Multiclass validation for model part {part!r} must contain at least two classes"
+            raise SchemaError(msg)
+        if self.config.optimization_metric == "roc_auc_ovr_macro" and (
+            observed != expected
+        ):
+            missing = sorted(expected - observed, key=str)
+            msg = f"roc_auc_ovr_macro is undefined for validation model part {part!r}; missing classes: {missing!r}"
             raise SchemaError(msg)
 
     def _target(self, frame: pl.DataFrame) -> np.ndarray:
@@ -166,6 +218,14 @@ class MulticlassTask(SupervisedTask[MulticlassBoostingBackend]):
         group_value: Any | None = None,
     ) -> _ModelEntry:
         part = self._model_name(layout, group_value)
+        if train.frame is None:
+            # A streaming backend never holds the rows. Every check below is
+            # about which labels a split carries, and the scan in
+            # _prepare_training_state already answered that.
+            self._check_labels_of_part(part)
+            return super()._fit_one(
+                train, valid, layout=layout, group_value=group_value
+            )
         train_codes = self._target(train.require_frame())
         present = set(np.unique(train_codes).tolist())
         expected = set(range(len(self._class_order or ())))
