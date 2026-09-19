@@ -46,6 +46,14 @@ anything past five minutes is hung. Tests that launch subprocesses set their
 own, shorter, timeout — so the failure says what hung rather than only that
 something did.
 
+## Reading in a second process
+
+`tests/automl/test_fresh_interpreter.py` writes in the test process and reads in
+a subprocess started from scratch, with `cwd=/`. It covers scoring from a saved
+artifact (both backend families), reattaching to an entity the way the recovery
+docs say to, calibration, and the refusal to load an artifact with a file
+missing. Nothing here passes objects between the two sides — only a path.
+
 ## Frozen documents
 
 `tests/automl/test_contracts.py` snapshots every document that crosses a
