@@ -23,24 +23,22 @@ Marked ``slow``: it trains twice.
 
 from __future__ import annotations
 
-import hashlib
-import json
-import os
-import subprocess
-import sys
 from pathlib import Path
 
 import numpy as np
 import polars as pl
 import pytest
 import torch
-from omegaconf import OmegaConf
 
+from automl.backends.tabnn.handwritten import (
+    digest,
+    handwritten_config,
+    only_checkpoint,
+    run_handwritten,
+)
 from fmlib.automl import BinaryTask, BinaryTaskConfig
 
 pytestmark = pytest.mark.slow
-
-REPO_ROOT = Path(__file__).resolve().parents[4]
 
 PARAMS = {
     "max_epochs": 2,
@@ -112,73 +110,22 @@ def _run_automl(output_dir: Path, data: dict[str, Path]) -> tuple[float, Path]:
     return float(result.validation_metrics["global"]), specs[0]
 
 
-def _handwritten_config(spec_path: Path, target: Path) -> Path:
-    """The trial's own config, pointed somewhere else and named for MLflow."""
-    config = json.loads(spec_path.read_text(encoding="utf-8"))["config"]
-    assert isinstance(config, dict), (
-        f"run_spec.json holds a {type(config).__name__}: a rank reading this "
-        "file back would get a string instead of a run"
-    )
-    target.mkdir(parents=True, exist_ok=True)
-    for entry in config["callbacks"]:
-        if entry["_target_"].endswith("CheckpointCallback"):
-            entry["directory"] = str(target / "checkpoints")
-    config["mlflow"] = {"experiment_name": "train_parity", "run_name": "debug"}
-    path = target / "cfg.yaml"
-    OmegaConf.save(OmegaConf.create(config), path)
-    return path
-
-
-def _run_handwritten(config_path: Path) -> None:
-    environment = dict(os.environ)
-    environment["PYTHONPATH"] = os.pathsep.join([
-        str(REPO_ROOT),
-        environment.get("PYTHONPATH", ""),
-    ]).rstrip(os.pathsep)
-    completed = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "fmlib.train",
-            f"--config-dir={config_path.parent}",
-            f"--config-name={config_path.stem}",
-        ],
-        cwd=config_path.parent,
-        env=environment,
-        capture_output=True,
-        text=True,
-        timeout=240,
-        check=False,
-    )
-    assert completed.returncode == 0, (
-        f"fmlib.train exited {completed.returncode}\n{completed.stderr[-4000:]}"
-    )
-
-
-def _only_checkpoint(root: Path) -> Path:
-    steps = sorted(p.parent for p in root.rglob("checkpoint.pt"))
-    assert len(steps) == 1, f"expected one checkpoint under {root}, found {steps}"
-    return steps[0]
-
-
 def test_automl_trains_the_same_run_as_a_handwritten_config(tmp_path, data):
     automl_dir = tmp_path / "automl"
     score, spec_path = _run_automl(automl_dir, data)
 
     handwritten_dir = tmp_path / "handwritten"
-    _run_handwritten(_handwritten_config(spec_path, handwritten_dir))
+    run_handwritten(handwritten_config(spec_path, handwritten_dir))
 
-    ours = _only_checkpoint(automl_dir)
-    theirs = _only_checkpoint(handwritten_dir)
+    ours = only_checkpoint(automl_dir)
+    theirs = only_checkpoint(handwritten_dir)
     # Same step, or the two runs did not even see the same number of batches.
     assert ours.name == theirs.name
 
     for name in ("model.bin", "checkpoint.pt"):
-        digests = [
-            hashlib.sha256((base / name).read_bytes()).hexdigest()
-            for base in (ours, theirs)
-        ]
-        assert digests[0] == digests[1], f"{name} differs between the two paths"
+        assert digest(ours / name) == digest(theirs / name), (
+            f"{name} differs between the two paths"
+        )
 
     # Byte equality already implies this; asserted separately so a failure says
     # *what* drifted rather than only that some bytes did.

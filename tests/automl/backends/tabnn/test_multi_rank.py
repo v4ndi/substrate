@@ -19,7 +19,15 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 import pytest
+import torch
 
+from automl.backends.tabnn.handwritten import (
+    cpu_ranks_env,
+    digest,
+    handwritten_config,
+    only_checkpoint,
+    run_handwritten,
+)
 from fmlib.automl import BinaryTaskConfig
 from fmlib.automl.backends.tabnn.assembly import build_train_config
 from fmlib.automl.backends.tabnn.data import build_schema, prepare_processed_data
@@ -133,25 +141,19 @@ def test_spec_survives_the_trip_to_disk(tmp_path, prepared):
     config, processed = prepared
     spec = _spec(config, processed, tmp_path / "trial-0", num_gpus=1)
 
-    assert isinstance(spec.config, dict), "the spec must normalise the assembly's config"
+    assert isinstance(spec.config, dict), (
+        "the spec must normalise the assembly's config"
+    )
 
     path = spec.write()
     restored = TrialSpec.from_dict(json.loads(path.read_text(encoding="utf-8")))
 
     assert isinstance(restored.config, dict)
     assert restored.config == spec.config
-    assert restored.config["model"]["_target_"] == "fmlib.pipeline.tabular.SupervisedLearner"
-
-
-def _cpu_ranks_env() -> dict[str, str]:
-    return {
-        "CUDA_VISIBLE_DEVICES": "",
-        "OMP_NUM_THREADS": "1",
-        "PYTHONPATH": os.pathsep.join([
-            str(REPO_ROOT),
-            os.environ.get("PYTHONPATH", ""),
-        ]).rstrip(os.pathsep),
-    }
+    assert (
+        restored.config["model"]["_target_"]
+        == "fmlib.pipeline.tabular.SupervisedLearner"
+    )
 
 
 @pytest.mark.parametrize("ranks", [1, 2])
@@ -159,7 +161,7 @@ def test_a_trial_runs_under_torchrun_and_comes_back_through_result_json(
     tmp_path, prepared, ranks
 ):
     config, processed = prepared
-    runner = TorchrunRunner(timeout=240.0, env=_cpu_ranks_env())
+    runner = TorchrunRunner(timeout=240.0, env=cpu_ranks_env())
     spec = _spec(config, processed, tmp_path / f"trial-{ranks}", ranks)
 
     result = runner.collect(runner.submit(spec))
@@ -174,7 +176,7 @@ def test_a_trial_runs_under_torchrun_and_comes_back_through_result_json(
 
 
 def test_a_trial_that_cannot_start_is_a_failed_trial_not_an_exception(tmp_path):
-    runner = TorchrunRunner(timeout=120.0, env=_cpu_ranks_env())
+    runner = TorchrunRunner(timeout=120.0, env=cpu_ranks_env())
     spec = TrialSpec(
         trial_id="broken",
         config={"model": {"_target_": "nope.NotAThing"}},
@@ -232,7 +234,7 @@ def test_every_record_is_read_exactly_once_across_ranks(tmp_path, prepared):
             str(processed.valid.path),
             str(out),
         ],
-        env={**os.environ, **_cpu_ranks_env()},
+        env={**os.environ, **cpu_ranks_env()},
         capture_output=True,
         text=True,
         cwd=str(REPO_ROOT),
@@ -250,3 +252,79 @@ def test_every_record_is_read_exactly_once_across_ranks(tmp_path, prepared):
     assert sorted(everything) == sorted(expected)
     # And the order is recoverable, which is what the identity column is for.
     assert sorted(everything) == sorted(set(expected))
+
+
+# --------------------------------------------------------------------------- #
+# T4: the number two ranks produce, not the fact that they finished            #
+# --------------------------------------------------------------------------- #
+def _run_ranks(config, processed, tmp_path: Path, ranks: int) -> tuple[Path, float]:
+    """Run one trial through AutoML on ``ranks`` ranks; return checkpoint and score."""
+    runner = TorchrunRunner(timeout=240.0, env=cpu_ranks_env())
+    spec = _spec(config, processed, tmp_path / f"automl-{ranks}", ranks)
+    result = runner.collect(runner.submit(spec))
+    assert result.state == "COMPLETE", result.error
+    return Path(spec.trial_dir), float(result.objective)
+
+
+def test_two_ranks_produce_the_same_run_as_a_handwritten_torchrun(tmp_path, prepared):
+    """Same claim as the single-rank parity, on the path that was broken.
+
+    Until the spec fix, a rank read a string where the run should have been, so
+    everything here would have failed at launch. What it asserts now is the
+    thing the earlier multi-rank test did not: that two ranks under AutoML take
+    the same steps as two ranks a person would have launched, rather than
+    merely that they finish and return a number.
+
+    Both sides are pinned to one thread by `cpu_ranks_env`, because bit
+    identity holds at a matched thread count and not otherwise.
+    """
+    config, processed = prepared
+    ours, objective = _run_ranks(config, processed, tmp_path, ranks=2)
+
+    handwritten = tmp_path / "handwritten-2"
+    run_handwritten(handwritten_config(ours / "run_spec.json", handwritten), ranks=2)
+
+    mine = only_checkpoint(ours)
+    theirs = only_checkpoint(handwritten)
+    assert mine.name == theirs.name, "the two runs stopped at different steps"
+    for name in ("model.bin", "checkpoint.pt"):
+        assert digest(mine / name) == digest(theirs / name), (
+            f"{name} differs between AutoML and a hand-written torchrun"
+        )
+
+    state = torch.load(mine / "checkpoint.pt", map_location="cpu", weights_only=False)
+    assert state["state"]["best_metric"] == pytest.approx(objective)
+
+
+def test_one_rank_and_two_ranks_agree_on_the_metric_without_agreeing_on_the_bits(
+    tmp_path, prepared
+):
+    """Two ranks is a different computation, not a faster identical one.
+
+    Each rank sees half the shards, so the batches differ, the gradient
+    reductions differ and the weights differ -- expecting bit identity here
+    would be wrong, and a test that demanded it would be deleted the first time
+    it failed. What must hold is that the two agree on the answer, so the
+    assertion is the metric within a stated tolerance, and the inequality of
+    the weights is asserted too so that a silent collapse to one rank cannot
+    pass as success.
+    """
+    config, processed = prepared
+    one, objective_one = _run_ranks(config, processed, tmp_path, ranks=1)
+    two, objective_two = _run_ranks(config, processed, tmp_path, ranks=2)
+
+    # Wide on purpose: this is agreement between two computations, not noise
+    # around one. A model this small on 800 rows has real run-to-run spread.
+    assert objective_two == pytest.approx(objective_one, abs=0.15)
+
+    left = torch.load(
+        only_checkpoint(one) / "model.bin", map_location="cpu", weights_only=True
+    )
+    right = torch.load(
+        only_checkpoint(two) / "model.bin", map_location="cpu", weights_only=True
+    )
+    assert list(left) == list(right)
+    assert any(not torch.equal(left[key], right[key]) for key in left), (
+        "two ranks produced bit-identical weights, which means the second rank "
+        "saw the same data as the first"
+    )
