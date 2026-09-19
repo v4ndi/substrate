@@ -8,6 +8,7 @@ two-line dispatch rather than a second training implementation.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from pathlib import Path
 from time import perf_counter
@@ -160,7 +161,14 @@ def fit_model_part(
             "n/a" if result.objective is None else f"{result.objective:.12g}",
         )
 
-    completed = [item for item in results if item[0].completed]
+    # `completed` means the trial finished *and* reported a score that is a
+    # score: a non-finite objective compares False against everything, so
+    # `max` would return the first such trial and discard every better one.
+    completed = [
+        item
+        for item in results
+        if item[0].completed and math.isfinite(item[0].objective)
+    ]
     if not completed:
         errors = "; ".join(f"{item[0].trial_id}: {item[0].error}" for item in results)
         msg = f"Every TabNN trial for model part {part!r} failed: {errors}"

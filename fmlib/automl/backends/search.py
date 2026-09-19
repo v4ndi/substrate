@@ -12,6 +12,7 @@ passed in and :func:`resolve_default_search_space` branches on it once.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from itertools import product
@@ -365,8 +366,14 @@ def fit_model(
             valid_target,
             candidate.predict_prepared_score(prepared.valid_prediction_features),
         )
+        # A non-finite objective is not a score, and must never be selected.
+        # `nan` compares False against everything, so without this the first
+        # trial to produce one is kept as best -- `best_backend is None` --
+        # and every later, better trial fails the `improved` test and is
+        # thrown away. The search then reports a nan as its best value.
+        scored = math.isfinite(value)
         improved = value > best_value if direction == "maximize" else value < best_value
-        if best_backend is None or improved:
+        if scored and (best_backend is None or improved):
             best_backend = candidate
             best_params = params
             best_value = value
@@ -392,7 +399,13 @@ def fit_model(
     )
     study.optimize(objective, n_trials=n_trials, show_progress_bar=bool(verbose))
     if best_backend is None:
-        msg = "Hyperparameter search completed without a fitted model"
+        msg = (
+            "Hyperparameter search completed without a model that scored: "
+            "every trial returned a non-finite optimization metric on the "
+            "validation split"
+            if n_trials
+            else "Hyperparameter search completed without a fitted model"
+        )
         raise RuntimeError(msg)
     log_progress(
         "[optuna %d/%d] engine=%s search completed duration_seconds=%.3f best_value=%.12g",

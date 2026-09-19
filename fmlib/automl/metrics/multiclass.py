@@ -28,7 +28,7 @@ def multiclass_objective(
     labels = np.arange(probabilities.shape[1])
     if name == "roc_auc_ovr_macro":
         try:
-            return float(
+            value = float(
                 roc_auc_score(
                     target,
                     probabilities,
@@ -40,6 +40,21 @@ def multiclass_objective(
         except ValueError as exc:
             msg = f"roc_auc_ovr_macro is undefined for the validation split: {exc}"
             raise SchemaError(msg) from exc
+        if not np.isfinite(value):
+            # sklearn does not raise when a class is absent from the split: it
+            # warns and averages a nan into the macro. Returning that nan is
+            # worse than failing, because this number ranks trials and a nan
+            # compares False against everything -- the first trial to produce
+            # one wins the search and every better trial is rejected.
+            missing = sorted(set(labels.tolist()) - set(np.unique(target).tolist()))
+            detail = (
+                f"classes missing from the split: {[class_order[i] for i in missing]!r}"
+                if missing
+                else "the one-vs-rest average is not finite"
+            )
+            msg = f"roc_auc_ovr_macro is undefined for the validation split: {detail}"
+            raise SchemaError(msg)
+        return value
     predicted = probabilities.argmax(axis=1)
     if name == "accuracy":
         return float(accuracy_score(target, predicted))

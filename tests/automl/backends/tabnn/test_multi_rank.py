@@ -29,6 +29,7 @@ from automl.backends.tabnn.handwritten import (
     run_handwritten,
 )
 from fmlib.automl import BinaryTaskConfig
+from fmlib.automl.backends.tabnn import worker
 from fmlib.automl.backends.tabnn.assembly import build_train_config
 from fmlib.automl.backends.tabnn.data import build_schema, prepare_processed_data
 from fmlib.automl.backends.tabnn.runner import TorchrunRunner, TrialSpec
@@ -328,3 +329,48 @@ def test_one_rank_and_two_ranks_agree_on_the_metric_without_agreeing_on_the_bits
         "two ranks produced bit-identical weights, which means the second rank "
         "saw the same data as the first"
     )
+
+
+# --------------------------------------------------------------------------- #
+# The rank entrypoint, called directly                                         #
+# --------------------------------------------------------------------------- #
+def test_the_worker_returns_zero_for_a_trial_that_completed(tmp_path, prepared):
+    """`worker.main` is what every rank runs; here it is called, not launched.
+
+    Measured through torchrun it reports as uncovered, because coverage does
+    not follow a subprocess. Calling it directly is both the honest measurement
+    and the faster test: the exit code a launcher reads is an ordinary return
+    value.
+    """
+    config, processed = prepared
+    spec = _spec(config, processed, tmp_path / "direct", num_gpus=1)
+    spec.write()
+
+    assert worker.main(["--spec", str(Path(spec.trial_dir) / "run_spec.json")]) == 0
+
+    result = json.loads((Path(spec.trial_dir) / "result.json").read_text())
+    assert result["state"] == "COMPLETE"
+
+
+def test_the_worker_returns_one_for_a_trial_that_failed(tmp_path):
+    """A failed trial is an exit code and a result file, never an exception."""
+    spec = TrialSpec(
+        trial_id="broken",
+        config={"model": {"_target_": "nope.NotAThing"}},
+        trial_dir=str(tmp_path / "broken"),
+        metric_name="roc_auc",
+        direction="max",
+    )
+    spec.write()
+
+    assert worker.main(["--spec", str(Path(spec.trial_dir) / "run_spec.json")]) == 1
+
+    result = json.loads((Path(spec.trial_dir) / "result.json").read_text())
+    assert result["state"] == "FAIL"
+    assert result["error"]
+
+
+def test_the_worker_requires_a_spec():
+    """Argparse, not a traceback halfway through a run."""
+    with pytest.raises(SystemExit):
+        worker.main([])
