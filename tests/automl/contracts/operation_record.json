@@ -1,0 +1,20 @@
+{
+  "action": "train",
+  "artifact_path": "<tmp>/outputs/automl/<hex32>/artifact",
+  "dataset_key": null,
+  "dataset_path": null,
+  "error": null,
+  "jobs": "<1 job(s), see osiris_job_handle>",
+  "result_path": null,
+  "run_id": "<hex32>",
+  "runtime": {
+    "device": "gpu",
+    "effective_pool": null,
+    "env_type": "osiris",
+    "num_gpus": 1,
+    "num_nodes": 1,
+    "original_pool": "common",
+    "resource_profile": "batch"
+  },
+  "state": "queued"
+}

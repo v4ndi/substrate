@@ -1,0 +1,29 @@
+{
+  "job_id": "job-1",
+  "job_name": "fmlib-train-<hex8>-part-0000",
+  "request": {
+    "args": [
+      "--spec",
+      "<tmp>/outputs/automl/<hex32>/operations/train/<hex32>/job-0000/run_spec.json"
+    ],
+    "command": [
+      "<tmp>/venv/bin/python",
+      "-m",
+      "fmlib.automl.run"
+    ],
+    "envs": {
+      "NCCL_DEBUG": "INFO",
+      "OMP_NUM_THREADS": "7"
+    },
+    "image": "registry.ca.sbrf.ru/ci02684173/ci02697916/notebooks/python3.12/cuda12.4/d-03.000.00:d-03.000.00-gigachat",
+    "name": "fmlib-train-<hex8>-part-0000",
+    "num_gpus": 1,
+    "num_nodes": 1,
+    "restart": false,
+    "type": "pytorchjob"
+  },
+  "response": {
+    "job_id": "job-1"
+  },
+  "run_id": "<hex32>"
+}

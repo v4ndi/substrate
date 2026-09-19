@@ -1,0 +1,154 @@
+{
+  "config": {
+    "amp": "no",
+    "automl": {
+      "backend": "tabnn",
+      "direction": "max",
+      "engine": "tabular_transformer",
+      "metric": "roc_auc",
+      "params": {
+        "batch_size": 128,
+        "evaluations_per_epoch": 1,
+        "hidden_size": 16,
+        "max_epochs": 1,
+        "num_heads": 2,
+        "num_layers": 1,
+        "num_workers": 0,
+        "patience": 1
+      },
+      "processed_key": "<hex32>",
+      "score_transform": "sigmoid",
+      "task": "binary"
+    },
+    "callbacks": [
+      {
+        "_target_": "fmlib.train.callbacks.EarlyStoppingCallback",
+        "early_stopping": {
+          "_target_": "fmlib.train.early_stopping.EarlyStopping",
+          "main_metric": "roc_auc",
+          "patience": 1,
+          "strategy": "max"
+        }
+      },
+      {
+        "_target_": "fmlib.train.callbacks.CheckpointCallback",
+        "directory": "<tmp>/outputs/tabnn/global/trial-0",
+        "max_checkpoints": 1
+      }
+    ],
+    "contract_version": "1",
+    "ddp": {
+      "find_unused_parameters": false
+    },
+    "distributed": {
+      "backend": null,
+      "gradient_accumulation_steps": 1
+    },
+    "logging": {
+      "enable": false
+    },
+    "metrics": {
+      "valid_metrics": {
+        "_target_": "fmlib.automl.backends.tabnn.metric.AutoMLMetric",
+        "class_order": null,
+        "metric_name": "roc_auc",
+        "score_transform": "sigmoid",
+        "target_key": "targets",
+        "task_name": "binary"
+      }
+    },
+    "model": {
+      "_target_": "fmlib.pipeline.tabular.SupervisedLearner",
+      "aggregation_config": {
+        "name": "mean"
+      },
+      "dropout_p": "<float>",
+      "embedding": {
+        "_target_": "fmlib.nn.embedding.TabularEmbedding",
+        "hidden_size": 16,
+        "num_numerical_features": 1,
+        "vocab_size": null
+      },
+      "num_classes": 1,
+      "out_head_hidden_dim": 256,
+      "tabular_encoder": {
+        "_target_": "fmlib.nn.tabular.TabularTransformer",
+        "attn_dropout": "<float>",
+        "hidden_size": 16,
+        "num_heads": 2,
+        "num_layers": 1
+      },
+      "task_type": "classification"
+    },
+    "optimizer": {
+      "_partial_": true,
+      "_target_": "torch.optim.AdamW",
+      "lr": "<float>",
+      "scale_lr_multigpu": false,
+      "weight_decay": "<float>"
+    },
+    "scheduler": {
+      "_partial_": true,
+      "_target_": "transformers.optimization.get_scheduler",
+      "name": "constant"
+    },
+    "train": {
+      "clip_grad_norm": null,
+      "num_epochs": 1,
+      "seed": 42,
+      "steps_before_evaluation": 4
+    },
+    "train_dataloader": {
+      "_target_": "torch.utils.data.DataLoader",
+      "batch_size": 128,
+      "collate_fn": {
+        "_target_": "fmlib.data.TabularCollateFn",
+        "is_regression": false,
+        "target_column": "target"
+      },
+      "dataset": {
+        "_target_": "fmlib.data.TabularDataset",
+        "path": "<tmp>/outputs/processed/<hex32>/train",
+        "shuffle_files": true,
+        "shuffle_pq": true
+      },
+      "drop_last": false,
+      "num_workers": 0,
+      "pin_memory": false
+    },
+    "valid_dataloader": {
+      "_target_": "torch.utils.data.DataLoader",
+      "batch_size": 128,
+      "collate_fn": {
+        "_target_": "fmlib.data.TabularCollateFn",
+        "is_regression": false,
+        "target_column": "target"
+      },
+      "dataset": {
+        "_target_": "fmlib.data.TabularDataset",
+        "path": "<tmp>/outputs/processed/<hex32>/valid",
+        "shuffle_files": false,
+        "shuffle_pq": false
+      },
+      "drop_last": false,
+      "num_workers": 0,
+      "pin_memory": false
+    }
+  },
+  "direction": "max",
+  "metric_name": "roc_auc",
+  "num_gpus": 1,
+  "params": {
+    "batch_size": 128,
+    "evaluations_per_epoch": 1,
+    "hidden_size": 16,
+    "max_epochs": 1,
+    "num_heads": 2,
+    "num_layers": 1,
+    "num_workers": 0,
+    "patience": 1
+  },
+  "seed": 42,
+  "trial_dir": "<tmp>/outputs/tabnn/global/trial-0",
+  "trial_id": "trial-0"
+}

@@ -1,0 +1,12 @@
+{
+  "category_values": {},
+  "engine": "catboost",
+  "params": {
+    "depth": 2,
+    "iterations": 5,
+    "thread_count": 1
+  },
+  "random_state": 42,
+  "task_state": {},
+  "verbose": false
+}

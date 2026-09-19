@@ -1,0 +1,72 @@
+{
+  "complete": true,
+  "contract_version": "1",
+  "hidden_states": {},
+  "identity_columns": [
+    "target",
+    "epk_id",
+    "report_month"
+  ],
+  "key": "<hex32>",
+  "num_numerical": 1,
+  "partition_by": null,
+  "preprocessing": {
+    "categorical_columns": [],
+    "identity_cols": [
+      "target",
+      "epk_id",
+      "report_month"
+    ],
+    "numeric_columns": [
+      "feature"
+    ],
+    "partition_by": null
+  },
+  "schema": {
+    "categorical": [],
+    "client_id_column": "epk_id",
+    "dtypes": {
+      "feature": "Float64"
+    },
+    "feature_order": [
+      "feature"
+    ],
+    "group_column": null,
+    "hidden_states": {},
+    "numerical": [
+      "feature"
+    ],
+    "target_column": "target",
+    "treatment_column": null
+  },
+  "sources": {
+    "train": [
+      {
+        "modified_ns": "<volatile>",
+        "path": "<tmp>/train.parquet",
+        "size": 6085
+      }
+    ],
+    "valid": [
+      {
+        "modified_ns": "<volatile>",
+        "path": "<tmp>/valid.parquet",
+        "size": 3974
+      }
+    ]
+  },
+  "target_column": "target",
+  "train": {
+    "parts": [
+      "part-00000.parquet"
+    ],
+    "rows": 400
+  },
+  "valid": {
+    "parts": [
+      "part-00000.parquet"
+    ],
+    "rows": 200
+  },
+  "vocab_size": 0
+}

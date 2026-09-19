@@ -1,0 +1,8 @@
+{
+  "checkpoint_dir": "<tmp>/outputs/tabnn/global/trial-0",
+  "duration": "<float>",
+  "error": null,
+  "objective": "<float>",
+  "state": "COMPLETE",
+  "trial_id": "trial-0"
+}

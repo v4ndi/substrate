@@ -1,0 +1,26 @@
+{
+  "backend": "tabnn",
+  "batch_size": 128,
+  "class_order": null,
+  "column_names": {
+    "date": "report_month"
+  },
+  "config_contract_version": "1",
+  "engine": "tabular_transformer",
+  "hidden_states": {},
+  "num_classes": 1,
+  "params": {
+    "batch_size": 128,
+    "evaluations_per_epoch": 1,
+    "hidden_size": 16,
+    "max_epochs": 1,
+    "num_heads": 2,
+    "num_layers": 1,
+    "num_workers": 0,
+    "patience": 1
+  },
+  "random_state": 42,
+  "score_transform": "sigmoid",
+  "task_name": "binary",
+  "validation_metric": "<float>"
+}

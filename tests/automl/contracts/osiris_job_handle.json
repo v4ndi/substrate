@@ -1,0 +1,72 @@
+{
+  "action": "train",
+  "effective_pool": null,
+  "env_type": "osiris",
+  "group_value": null,
+  "index": 0,
+  "job_id": "job-1",
+  "job_name": "fmlib-train-<hex8>-part-0000",
+  "layout": "global",
+  "num_gpus": 1,
+  "num_nodes": 1,
+  "original_pool": "common",
+  "payload": {
+    "artifact_path": "<tmp>/outputs/automl/<hex32>/.remote_parts/<hex32>/part-0000",
+    "entity_config": {
+      "backend": "boosting",
+      "categorical_columns": [],
+      "client_id_column": "epk_id",
+      "date_column": "report_month",
+      "device": "gpu",
+      "engine": "catboost",
+      "env_type": "osiris",
+      "environment": {
+        "env": {
+          "NCCL_DEBUG": "INFO",
+          "OMP_NUM_THREADS": "7"
+        },
+        "image": "registry.ca.sbrf.ru/ci02684173/ci02697916/notebooks/python3.12/cuda12.4/d-03.000.00:d-03.000.00-gigachat",
+        "log_dir": null,
+        "num_gpus": null,
+        "num_nodes": null,
+        "poll_interval_seconds": "<float>",
+        "pool": "common",
+        "venv_path": "<tmp>/venv"
+      },
+      "group_column": "group",
+      "hidden_state_columns": [],
+      "hyperopt": false,
+      "max_parallel_jobs": null,
+      "model_layout": "global",
+      "model_params": {
+        "depth": 2,
+        "iterations": 5,
+        "thread_count": 1
+      },
+      "n_trials": null,
+      "numerical_columns": [
+        "feature"
+      ],
+      "optimization_metric": "roc_auc",
+      "output_dir": "<tmp>/outputs",
+      "processed_data_path": null,
+      "random_state": 42,
+      "search_space": null,
+      "target_column": "target",
+      "verbose": false
+    },
+    "remote_group_value": null,
+    "remote_layout": "global",
+    "train_path": "<tmp>/train.parquet",
+    "valid_path": "<tmp>/train.parquet"
+  },
+  "remote_log_path": "<tmp>/outputs/automl/<hex32>/operations/train/<hex32>/job-0000/remote.log",
+  "resource_profile": "batch",
+  "result_path": "<tmp>/outputs/automl/<hex32>/operations/train/<hex32>/job-0000/result.json",
+  "run_dir": "<tmp>/outputs/automl/<hex32>/operations/train/<hex32>/job-0000",
+  "run_id": "<hex32>",
+  "spec_path": "<tmp>/outputs/automl/<hex32>/operations/train/<hex32>/job-0000/run_spec.json",
+  "state": "queued",
+  "submit_log_path": "<tmp>/outputs/automl/<hex32>/operations/train/<hex32>/job-0000/submit.log",
+  "trial": null
+}

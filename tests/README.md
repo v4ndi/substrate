@@ -46,6 +46,21 @@ anything past five minutes is hung. Tests that launch subprocesses set their
 own, shorter, timeout — so the failure says what hung rather than only that
 something did.
 
+## Frozen documents
+
+`tests/automl/test_contracts.py` snapshots every document that crosses a
+boundary — the Osiris run spec and create request, the submit log, the job
+handle, the operation record, a trial's spec and result, the processed-data
+completion marker, and both artifact layouts. Each snapshot is produced by the
+real producer, never assembled by the test.
+
+```bash
+AUTOML_CONTRACT_RECORD=1 pytest -m "" tests/automl/test_contracts.py
+```
+
+Re-recording is a reviewable diff. Floats are normalised to `<float>` on
+purpose: what a model scored is the parity gate's question, not this one's.
+
 ## What needs what
 
 | area                     | requires                              | without it                    |
