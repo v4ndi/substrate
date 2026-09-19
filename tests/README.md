@@ -46,6 +46,18 @@ anything past five minutes is hung. Tests that launch subprocesses set their
 own, shorter, timeout — so the failure says what hung rather than only that
 something did.
 
+## The Osiris contract
+
+There is no cluster here, so the remote path is tested against a stand-in. A
+stand-in written alongside the producer shares its assumptions, so the contract
+lives on its own in `tests/automl/osiris_contract.py` and both fakes call it
+before recording anything. Every test that submits a job checks the request
+shape as a side effect.
+
+The contract is read off the submit path, not off a live Osiris. It freezes what
+we believe and catches drift; confirming the belief needs cluster access, and
+the checklist for that is in `docs/decisions/testing_plan.md`.
+
 ## The built package
 
 `tests/test_packaging.py` builds a wheel and checks it carries every data file

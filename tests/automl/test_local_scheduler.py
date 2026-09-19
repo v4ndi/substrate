@@ -15,6 +15,7 @@ import numpy as np
 import polars as pl
 import pytest
 
+from automl.osiris_contract import minimal_request
 from automl.scheduler_stub import (
     ContainerNotAvailable,
     LocalScheduler,
@@ -178,8 +179,11 @@ def test_a_corrupt_result_is_left_for_the_driver_to_find(tmp_path):
 
 
 def test_a_job_whose_spec_cannot_run_is_reported_failed(tmp_path):
-    scheduler = LocalScheduler()
-    scheduler.create(name="broken", args=["--spec", str(tmp_path / "missing.json")])
+    # A real scheduler accepts this submission -- it never reads our spec -- and
+    # the job fails inside the container. `check_spec=False` reproduces that
+    # split: the request is valid, the file it names is not there.
+    scheduler = LocalScheduler(check_spec=False)
+    scheduler.create(**minimal_request(tmp_path / "missing.json", name="broken"))
     assert scheduler.jobs[0].state == "failed"
     assert "FileNotFoundError" in scheduler.jobs[0].error
 

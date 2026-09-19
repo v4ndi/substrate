@@ -11,6 +11,7 @@ from types import SimpleNamespace
 import polars as pl
 import pytest
 
+from automl.osiris_contract import validate_create_request
 from fmlib.automl import BinaryTask, BinaryTaskConfig, EnvironmentConfig
 from fmlib.automl.environment import EnvironmentRunner
 from fmlib.automl.exceptions import (
@@ -28,6 +29,9 @@ class _FakeOsiris:
         self.list_calls = 0
 
     def create(self, **kwargs):
+        # The recording client validates too: these tests are about pools,
+        # profiles and job names, and the contract check rides along for free.
+        validate_create_request(kwargs)
         self.create_calls.append(kwargs)
         return {"job_id": f"job-{len(self.create_calls)}"}
 

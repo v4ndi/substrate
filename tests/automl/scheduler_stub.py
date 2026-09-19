@@ -26,6 +26,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
+from automl.osiris_contract import validate_create_request
 from fmlib.automl.run import execute_spec
 
 
@@ -65,9 +66,12 @@ class LocalScheduler:
             transient container error instead of a state.
         corrupt_result: Job names whose ``result.json`` is overwritten with
             unreadable content after the job runs.
+        check_spec: Also validate the spec file each submission names. On by
+            default; off only for a test that submits without one on purpose.
     """
 
     execute: bool = True
+    check_spec: bool = True
     fail_create_on: int | None = None
     vanish: Sequence[str] = ()
     container_unavailable_for: Sequence[str] = ()
@@ -87,6 +91,12 @@ class LocalScheduler:
             SchedulerFault: When this call is the configured failing one. The
                 job is *not* recorded, exactly as a rejected submit behaves.
         """
+        # Checked before anything is recorded: a submission a real scheduler
+        # would refuse must not become a job here either, or the stand-in
+        # agrees with a mistake instead of catching it. Every test that submits
+        # gets this for free, which is the point -- the one that mattered was
+        # not about the request shape at all.
+        validate_create_request(kwargs, check_spec=self.check_spec)
         self.create_calls.append(kwargs)
         index = len(self.create_calls)
         if self.fail_create_on is not None and index == self.fail_create_on:
