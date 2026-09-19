@@ -19,7 +19,6 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 import pytest
-from omegaconf import OmegaConf
 
 from fmlib.automl import BinaryTaskConfig
 from fmlib.automl.backends.tabnn.assembly import build_train_config
@@ -109,13 +108,39 @@ def _spec(config, processed, trial_dir: Path, num_gpus: int) -> TrialSpec:
         world_size=num_gpus,
     )
     return TrialSpec(
+        # The DictConfig the assembly returns, exactly as `fit_model_part`
+        # hands it over. Converting it here instead would test a shape
+        # production never produces -- which is how a stringified spec reached
+        # the ranks unnoticed.
         trial_id=trial_dir.name,
-        config=OmegaConf.to_container(train_config, resolve=True),
+        config=train_config,
         trial_dir=str(trial_dir),
         metric_name=train_config["automl"]["metric"],
         direction=train_config["automl"]["direction"],
         num_gpus=num_gpus,
     )
+
+
+def test_spec_survives_the_trip_to_disk(tmp_path, prepared):
+    """What a rank reads back has to be the run, not a picture of it.
+
+    ``build_train_config`` returns a ``DictConfig``, and a ``DictConfig`` is not
+    a ``dict``: written naively it lands in ``run_spec.json`` as its own repr,
+    and every runner that reads the spec instead of holding it -- torchrun,
+    Osiris -- gets a string. The in-process runner cannot catch this, so the
+    round trip is asserted here.
+    """
+    config, processed = prepared
+    spec = _spec(config, processed, tmp_path / "trial-0", num_gpus=1)
+
+    assert isinstance(spec.config, dict), "the spec must normalise the assembly's config"
+
+    path = spec.write()
+    restored = TrialSpec.from_dict(json.loads(path.read_text(encoding="utf-8")))
+
+    assert isinstance(restored.config, dict)
+    assert restored.config == spec.config
+    assert restored.config["model"]["_target_"] == "fmlib.pipeline.tabular.SupervisedLearner"
 
 
 def _cpu_ranks_env() -> dict[str, str]:

@@ -29,7 +29,7 @@ from pathlib import Path
 from time import perf_counter
 from typing import Any, Literal
 
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig, ListConfig, OmegaConf
 
 from fmlib.automl.progress import log_progress
 
@@ -49,6 +49,17 @@ RESULT_NAME = "result.json"
 TrialState = Literal["COMPLETE", "FAIL", "LOST"]
 
 
+def _plain(value: Any) -> Any:
+    """Return ``value`` as plain Python containers, resolving any OmegaConf node."""
+    if isinstance(value, DictConfig | ListConfig):
+        return OmegaConf.to_container(value, resolve=True)
+    if isinstance(value, Mapping):
+        return {str(k): _plain(v) for k, v in value.items()}
+    if isinstance(value, list | tuple):
+        return [_plain(v) for v in value]
+    return value
+
+
 @dataclass(frozen=True)
 class TrialSpec:
     """Everything one trial needs, in a form that survives a JSON round trip.
@@ -65,6 +76,17 @@ class TrialSpec:
     seed: int = 42
     num_gpus: int = 1
     params: Mapping[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        # The config arrives as a DictConfig from the assembly, and a DictConfig
+        # is not a dict: `dataclasses.asdict` walks straight past it and
+        # `json.dumps(default=str)` then writes its *repr* into run_spec.json.
+        # The in-process runner never notices -- it holds the object -- but a
+        # rank reading the spec back gets a string where the run should be.
+        # Normalising here rather than at each call site keeps the guarantee
+        # the spec claims: what is written is what is run.
+        object.__setattr__(self, "config", _plain(self.config))
+        object.__setattr__(self, "params", _plain(self.params))
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
