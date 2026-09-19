@@ -46,6 +46,15 @@ anything past five minutes is hung. Tests that launch subprocesses set their
 own, shorter, timeout — so the failure says what hung rather than only that
 something did.
 
+## The built package
+
+`tests/test_packaging.py` builds a wheel and checks it carries every data file
+the tree has, carries nothing outside the package, and trains and scores in a
+process where the working copy is not importable. The build starts from a clean
+`build/` **and** a clean `*.egg-info` — a stale source listing inside the egg-info will
+otherwise ship data whose declaration has been removed, and the test passes while the
+package is broken.
+
 ## Reading in a second process
 
 `tests/automl/test_fresh_interpreter.py` writes in the test process and reads in
