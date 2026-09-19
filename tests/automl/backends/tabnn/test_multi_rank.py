@@ -159,7 +159,7 @@ def test_a_trial_runs_under_torchrun_and_comes_back_through_result_json(
     tmp_path, prepared, ranks
 ):
     config, processed = prepared
-    runner = TorchrunRunner(timeout=900.0, env=_cpu_ranks_env())
+    runner = TorchrunRunner(timeout=240.0, env=_cpu_ranks_env())
     spec = _spec(config, processed, tmp_path / f"trial-{ranks}", ranks)
 
     result = runner.collect(runner.submit(spec))
@@ -174,7 +174,7 @@ def test_a_trial_runs_under_torchrun_and_comes_back_through_result_json(
 
 
 def test_a_trial_that_cannot_start_is_a_failed_trial_not_an_exception(tmp_path):
-    runner = TorchrunRunner(timeout=300.0, env=_cpu_ranks_env())
+    runner = TorchrunRunner(timeout=120.0, env=_cpu_ranks_env())
     spec = TrialSpec(
         trial_id="broken",
         config={"model": {"_target_": "nope.NotAThing"}},
@@ -236,7 +236,7 @@ def test_every_record_is_read_exactly_once_across_ranks(tmp_path, prepared):
         capture_output=True,
         text=True,
         cwd=str(REPO_ROOT),
-        timeout=900,
+        timeout=240,
     )
     assert process.returncode == 0, process.stdout + process.stderr
 

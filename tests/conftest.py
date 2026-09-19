@@ -8,6 +8,10 @@ Two groups:
   **skipped** (not errored) when no such JDK / ``pyspark`` is available.
 * ``synth_sequence_dataset`` — a pure pandas/pyarrow generator for synthetic
   event-sequence parquet (no Spark), replacing the removed ``fmlib.synth``.
+* ``environment_skips`` / ``pytest_collection_modifyitems`` — the same "skip,
+  do not fail" rule the Spark fixtures follow, applied to the ``gpu`` and
+  ``cluster`` markers. Both are deselected by default; asking for them on a
+  machine that cannot run them is a skip with a reason, not a red run.
 """
 
 from __future__ import annotations
@@ -21,6 +25,48 @@ import tempfile
 import numpy as np
 import pandas as pd
 import pytest
+
+
+# --------------------------------------------------------------------------- #
+# Environment-gated markers                                                    #
+# --------------------------------------------------------------------------- #
+def environment_skips() -> dict[str, str]:
+    """Return ``{marker: reason}`` for what this machine cannot run.
+
+    A marker absent from the mapping is runnable here. Kept as a plain function
+    so the rule can be asserted directly instead of only through collection.
+
+    Returns:
+        Reasons to skip, keyed by marker name.
+    """
+    skips: dict[str, str] = {}
+
+    try:
+        import torch
+
+        if not torch.cuda.is_available():
+            skips["gpu"] = "no CUDA device is available"
+    except ImportError:  # pragma: no cover - torch is a hard dependency
+        skips["gpu"] = "torch is not installed"
+
+    if os.environ.get("FMLIB_OSIRIS_TESTS") != "1":
+        skips["cluster"] = (
+            "needs a real Osiris scheduler; set FMLIB_OSIRIS_TESTS=1 to run"
+        )
+    return skips
+
+
+def pytest_collection_modifyitems(config, items):
+    """Skip marked tests the environment cannot run, rather than failing them."""
+    skips = environment_skips()
+    if not skips:
+        return
+    for item in items:
+        for marker, reason in skips.items():
+            if marker in item.keywords:
+                item.add_marker(pytest.mark.skip(reason=reason))
+                break
+
 
 _JDK_CANDIDATES = [
     os.environ.get("SPARK_JDK", ""),

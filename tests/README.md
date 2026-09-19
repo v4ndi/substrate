@@ -2,8 +2,49 @@
 
 ```bash
 python -m pytest                    # everything runnable here without extra setup
-python -m pytest -m slow            # long multi-worker sharding sweeps (deselected by default)
+python -m pytest -m ""              # the lot: clears the default deselection
+python -m pytest -m slow            # long multi-worker sharding sweeps only
 ```
+
+## Run modes
+
+Three markers are deselected by default, so the bare `pytest` stays runnable on
+a laptop with no hardware and no cluster access. `-m ""` clears the expression
+and selects everything; whatever the machine still cannot do is **skipped with
+a reason**, never failed.
+
+| marker    | what it needs                | selected by            | without it |
+|-----------|------------------------------|------------------------|------------|
+| _(none)_  | core deps                    | always                 | —          |
+| `slow`    | minutes, several processes   | `-m slow`, `-m ""`     | deselected |
+| `gpu`     | a CUDA device                | `-m gpu`, `-m ""`      | skipped    |
+| `cluster` | a real Osiris scheduler      | `FMLIB_OSIRIS_TESTS=1` | skipped    |
+
+`--strict-markers` is on: a marker that is not declared in `pyproject.toml` is
+an error, not a marker that silently does nothing.
+
+## When to run what
+
+| moment          | command                                        | time    |
+|-----------------|------------------------------------------------|---------|
+| while editing   | `pytest tests/<area>`                          | seconds |
+| before a commit | `pytest`                                       | ~2.5 min |
+| before a push   | `pytest -m ""`                                 | ~9.5 min |
+| before a release| `FMLIB_OSIRIS_TESTS=1 pytest -m ""` + wheel smoke | ~15 min |
+
+The boosting parity gate is part of `-m slow` and can be run alone:
+
+```bash
+python -m pytest -m slow tests/automl/test_boosting_parity.py
+```
+
+## Timeouts
+
+Every test has a 300-second ceiling (`pytest-timeout`). It is a deadlock
+catcher, not a budget: the slowest test in the repo runs for 26 seconds, so
+anything past five minutes is hung. Tests that launch subprocesses set their
+own, shorter, timeout — so the failure says what hung rather than only that
+something did.
 
 ## What needs what
 

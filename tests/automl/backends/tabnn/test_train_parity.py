@@ -147,7 +147,7 @@ def _run_handwritten(config_path: Path) -> None:
         env=environment,
         capture_output=True,
         text=True,
-        timeout=1800,
+        timeout=240,
         check=False,
     )
     assert completed.returncode == 0, (

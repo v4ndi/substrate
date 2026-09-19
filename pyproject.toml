@@ -52,6 +52,7 @@ boosting = ["fmlib[catboost]", "xgboost==3.2.0"]
 dev = [
     "pytest==9.1.1",
     "pytest-cov==7.1.0",
+    "pytest-timeout==2.4.0",
     "pre-commit==4.2.0",
     "ruff==0.8.6",
 ]
@@ -71,10 +72,19 @@ exclude = ["tests*", "experiments*", "examples*", "docs*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-m 'not slow' -ra"
+# The default run is what a laptop can do with no extra setup. Everything the
+# environment may not have is deselected here and selected back explicitly;
+# `pytest -m ""` clears the expression and runs the lot.
+addopts = "-m 'not slow and not gpu and not cluster' -ra --strict-markers"
 markers = [
     "slow: long-running tests (many workers / large synthetic data); deselected by default",
+    "gpu: needs a CUDA device; deselected by default, skipped when no device is present",
+    "cluster: needs a real Osiris scheduler; deselected by default, skipped without FMLIB_OSIRIS_TESTS=1",
 ]
+# A deadlock catcher, not a time budget: the slowest test in the repo runs for
+# 26 seconds, so anything past five minutes is hung, not slow. Without this a
+# stuck subprocess (torchrun, a process pool) holds the whole run forever.
+timeout = 300
 filterwarnings = [
     "ignore:The pynvml package is deprecated:FutureWarning",
     "ignore:.*PYARROW_IGNORE_TIMEZONE.*:UserWarning",
