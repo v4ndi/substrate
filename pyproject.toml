@@ -53,6 +53,8 @@ dev = [
     "pytest==9.1.1",
     "pytest-cov==7.1.0",
     "pytest-timeout==2.4.0",
+    "pytest-randomly==4.0.1",
+    "pytest-xdist==3.8.0",
     "pre-commit==4.2.0",
     "ruff==0.8.6",
 ]
@@ -85,6 +87,11 @@ markers = [
 # 26 seconds, so anything past five minutes is hung, not slow. Without this a
 # stuck subprocess (torchrun, a process pool) holds the whole run forever.
 timeout = 300
+# Test order is randomised per run (pytest-randomly), so a dependency between
+# two tests cannot settle in unnoticed. Every run prints its seed; reproduce a
+# failure with `--randomly-seed=<seed>`, or turn the whole thing off for one
+# run with `-p no:randomly`. Verified over eight runs — five of the default
+# selection and three of everything — before this was switched on.
 filterwarnings = [
     "ignore:The pynvml package is deprecated:FutureWarning",
     "ignore:.*PYARROW_IGNORE_TIMEZONE.*:UserWarning",
