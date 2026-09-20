@@ -106,3 +106,92 @@ def test_lazy_projection_preserves_hive_union_nulls_and_physical_precedence(
         "x": [1.0, None, None],
         "group": ["a", "a", "physical"],
     }
+
+
+# --------------------------------------------------------------------------- #
+# What a source refuses, and the partition-only column path                    #
+# --------------------------------------------------------------------------- #
+def test_a_directory_without_parquet_is_refused_by_name(tmp_path):
+    """Pointing at the parent of the data instead of the data is a common slip."""
+    empty = tmp_path / "nothing"
+    empty.mkdir()
+    (empty / "readme.txt").write_text("not parquet", encoding="utf-8")
+
+    with pytest.raises(SchemaError, match="No parquet files found under"):
+        ParquetSource.resolve(empty)
+
+
+def test_a_file_that_is_not_parquet_is_refused(tmp_path):
+    """The suffix is the check, so a renamed csv fails here rather than later."""
+    path = tmp_path / "data.csv"
+    path.write_text("a,b\n1,2\n", encoding="utf-8")
+
+    with pytest.raises(SchemaError, match="not a parquet file"):
+        ParquetSource.resolve(path)
+
+
+def test_a_corrupt_shard_names_the_source_it_could_not_read(tmp_path):
+    """Polars' own message is kept, but wrapped so the caller learns which source."""
+    root = tmp_path / "broken"
+    root.mkdir()
+    pl.DataFrame({"a": [1]}).write_parquet(root / "good.parquet")
+    (root / "bad.parquet").write_bytes(b"PAR1 definitely not a parquet file")
+
+    source = ParquetSource.resolve(root)
+    with pytest.raises(SchemaError, match="Failed to read parquet source"):
+        source.read()
+
+
+def test_a_column_missing_from_every_shard_is_refused(tmp_path):
+    root = tmp_path / "data"
+    root.mkdir()
+    pl.DataFrame({"a": [1, 2]}).write_parquet(root / "part-0.parquet")
+
+    source = ParquetSource.resolve(root)
+    with pytest.raises(SchemaError, match="Column 'missing' is missing"):
+        source.unique_column_values("missing")
+
+
+def test_a_partition_only_column_yields_its_values_without_reading_the_data(tmp_path):
+    """A Hive key is a column even though no shard contains it.
+
+    Group routing asks for the distinct values of the group column, and when
+    the data is partitioned by that column the answer lives in the path, not in
+    the file. Returning nothing here would silently route every row to the
+    global model.
+    """
+    root = tmp_path / "data"
+    for group in ("retail", "corp"):
+        directory = root / f"group={group}"
+        directory.mkdir(parents=True)
+        pl.DataFrame({"a": [1, 2]}).write_parquet(directory / "part-0.parquet")
+
+    values, has_nulls = ParquetSource.resolve(root).unique_column_values("group")
+
+    assert values == ("corp", "retail")
+    assert has_nulls is False
+
+
+def test_a_shard_outside_the_partition_layout_counts_as_a_null(tmp_path):
+    """One stray file without the key means the column is not complete."""
+    root = tmp_path / "data"
+    (root / "group=retail").mkdir(parents=True)
+    pl.DataFrame({"a": [1]}).write_parquet(root / "group=retail" / "part-0.parquet")
+    pl.DataFrame({"a": [2]}).write_parquet(root / "loose.parquet")
+
+    values, has_nulls = ParquetSource.resolve(root).unique_column_values("group")
+
+    assert values == ("retail",)
+    assert has_nulls is True
+
+
+def test_a_percent_encoded_partition_value_is_decoded(tmp_path):
+    """Hive escapes what it cannot put in a path; the value must come back whole."""
+    directory = root_directory = tmp_path / "data" / "group=retail%2Fnorth"
+    directory.mkdir(parents=True)
+    pl.DataFrame({"a": [1]}).write_parquet(directory / "part-0.parquet")
+
+    values, _ = ParquetSource.resolve(root_directory.parent).unique_column_values(
+        "group"
+    )
+    assert values == ("retail/north",)
