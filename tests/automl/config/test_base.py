@@ -648,3 +648,115 @@ def test_static_validation_rejects_arguments_without_effect():
         ConfigError, match="model_params cannot be configured when hyperopt=True"
     ):
         _config(hyperopt=True, model_params={"depth": 2})
+
+
+# --------------------------------------------------------------------------- #
+# T7: refusals a user reaches by writing a config                              #
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize(
+    "columns",
+    [
+        pytest.param(["a", ""], id="empty-name"),
+        pytest.param(["a", None], id="none-in-the-list"),
+        pytest.param(["a", 7], id="number-in-the-list"),
+        pytest.param(42, id="not-a-sequence"),
+    ],
+)
+@pytest.mark.parametrize(
+    "field", ["categorical_columns", "numerical_columns", "hidden_state_columns"]
+)
+def test_a_column_list_that_is_not_a_list_of_names_is_refused(field, columns):
+    """The message repeats the value, because the value is usually the mistake."""
+    with pytest.raises(ConfigError, match=field):
+        _config(**{field: columns})
+
+
+def test_a_column_list_may_be_an_absolute_yaml_path(tmp_path):
+    """Long feature lists live in a file; the file has to be found and parsed."""
+    path = tmp_path / "columns.yaml"
+    path.write_text("- feature_a\n- feature_b\n", encoding="utf-8")
+
+    config = _config(numerical_columns=str(path))
+
+    assert config.numerical_columns == ("feature_a", "feature_b")
+
+
+def test_a_column_yaml_that_cannot_be_read_names_the_file(tmp_path):
+    missing = tmp_path / "absent.yaml"
+    with pytest.raises(ConfigError, match=str(missing)):
+        _config(numerical_columns=str(missing))
+
+
+def test_a_column_yaml_holding_something_else_is_refused(tmp_path):
+    """A mapping is not a column list, and would otherwise iterate into keys."""
+    path = tmp_path / "columns.yaml"
+    path.write_text("feature_a: 1\nfeature_b: 2\n", encoding="utf-8")
+
+    with pytest.raises(ConfigError, match="numerical_columns"):
+        _config(numerical_columns=str(path))
+
+
+@pytest.mark.parametrize("value", [0, -1, "two", 1.5, True])
+def test_max_parallel_jobs_must_be_a_positive_integer(value):
+    """`True` is an int in Python and would mean a cap of one job."""
+    with pytest.raises(ConfigError, match="max_parallel_jobs"):
+        _config(max_parallel_jobs=value)
+
+
+def test_max_parallel_jobs_may_be_absent():
+    assert _config(max_parallel_jobs=None).max_parallel_jobs is None
+
+
+@pytest.mark.parametrize("field", ["target_column", "client_id_column"])
+@pytest.mark.parametrize("value", ["", 7, []])
+def test_a_role_column_that_is_not_a_name_is_refused(field, value):
+    with pytest.raises(ConfigError, match=field):
+        _config(**{field: value})
+
+
+@pytest.mark.parametrize("field", ["group_column", "date_column"])
+@pytest.mark.parametrize("value", ["", 7, []])
+def test_an_optional_role_column_that_is_not_a_name_is_refused(field, value):
+    with pytest.raises(ConfigError, match=field):
+        _config(**{field: value})
+
+
+@pytest.mark.parametrize("value", [0, -1.0, -0.001])
+def test_a_non_positive_poll_interval_is_refused(value):
+    """Zero would spin the driver against the scheduler with no pause."""
+    with pytest.raises(ConfigError, match="poll_interval_seconds must be positive"):
+        _config(environment={"poll_interval_seconds": value})
+
+
+@pytest.mark.parametrize(
+    "reserved",
+    ["CUDA_VISIBLE_DEVICES", "PYTHONPATH", "cuda_visible_devices", "PythonPath"],
+)
+def test_launcher_owned_environment_variables_are_refused(reserved):
+    """The launcher sets these itself; a config value would be overwritten or,
+    worse, would win and point the job at the wrong device or the wrong code.
+    The check is case-insensitive, so the near-miss spellings are refused too."""
+    with pytest.raises(ConfigError, match="managed by the fmlib launcher"):
+        _config(environment={"env": {reserved: "0"}})
+
+
+def test_an_ordinary_environment_variable_is_allowed():
+    config = _config(environment={"env": {"NCCL_DEBUG": "INFO"}})
+    assert config.environment.env["NCCL_DEBUG"] == "INFO"
+
+
+def test_model_params_and_search_space_can_never_both_be_set():
+    """Two rules that together leave no way to fix and tune the same parameter.
+
+    They also make a third check unreachable: the config used to test for an
+    overlap between the two, which needs both non-empty, which these two
+    refusals forbid. That branch is gone; these assertions are what replaced it,
+    so if either rule is relaxed the gap shows up here rather than silently.
+    """
+    with pytest.raises(ConfigError, match="search_space can be configured only"):
+        _config(
+            hyperopt=False, search_space={"depth": {"type": "int", "low": 2, "high": 6}}
+        )
+
+    with pytest.raises(ConfigError, match="model_params cannot be configured"):
+        _config(hyperopt=True, n_trials=5, model_params={"depth": 4})

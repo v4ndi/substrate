@@ -441,15 +441,6 @@ class BaseTaskConfig:
                 "use search_space to control the values Optuna may choose"
             )
             raise ConfigError(msg)
-        overlapping_parameters = sorted(
-            set(self.model_params).intersection(self.search_space or {})
-        )
-        if overlapping_parameters:
-            msg = (
-                "Parameters cannot be fixed in model_params and tuned in search_space at the same time: "
-                f"{overlapping_parameters}"
-            )
-            raise ConfigError(msg)
         if self.group_column is None:
             if self.model_layout is not None:
                 msg = f"model_layout={self.model_layout!r}: must be omitted when group_column=None"

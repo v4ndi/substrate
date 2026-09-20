@@ -24,6 +24,7 @@ from fmlib.automl import (
 )
 from fmlib.automl.backends.boosting.uplift import UPLIFT_SCORE_COLUMNS
 from fmlib.automl.exceptions import ArtifactIntegrityError, ConfigError, SchemaError
+from fmlib.automl.tasks.calibration import _branches, _required
 
 
 def _base(config_class, tmp_path, **updates):
@@ -427,3 +428,68 @@ def test_remote_calibration_plans_one_job_per_branch_and_finalizes_in_source_ord
     assert task._store.load_calibration(test_path).scores["epk_id"].to_list() == (
         test_data["epk_id"].to_list() * 2
     )
+
+
+# --------------------------------------------------------------------------- #
+# T7: what calibration refuses about the frames it is given                    #
+# --------------------------------------------------------------------------- #
+def test_a_calibration_input_missing_a_column_names_it_and_the_source():
+    """Which frame and which column: calibration takes two, and they differ."""
+    frame = pl.DataFrame({"epk_id": [1, 2], "score": [0.2, 0.8]})
+    with pytest.raises(SchemaError, match="test scores is missing.*'target'"):
+        _required(frame, {"epk_id", "score", "target"}, "test scores")
+
+
+def test_a_complete_calibration_input_is_accepted():
+    frame = pl.DataFrame({"epk_id": [1], "score": [0.5], "target": [1]})
+    _required(frame, {"epk_id", "score", "target"}, "test scores")
+
+
+def test_a_single_layout_frame_needs_no_layout_column():
+    """Nothing to disambiguate when the artifact has one branch."""
+    frame = pl.DataFrame({"epk_id": [1, 2], "score": [0.2, 0.8]})
+    branches = _branches(frame, "test scores", "global")
+    assert set(branches) == {"global"}
+    assert branches["global"].height == 2
+
+
+def test_a_combined_layout_frame_without_the_layout_column_is_refused():
+    """Two branches scored the same rows; without the column they are one heap."""
+    frame = pl.DataFrame({"epk_id": [1, 2], "score": [0.2, 0.8]})
+    with pytest.raises(SchemaError, match="must contain model_layout"):
+        _branches(frame, "test scores", "global_and_per_group")
+
+
+def test_a_null_layout_value_is_refused():
+    """A null belongs to no branch, so it would be dropped by the partition."""
+    frame = pl.DataFrame({
+        "epk_id": [1, 2],
+        "score": [0.2, 0.8],
+        "model_layout": ["global", None],
+    })
+    with pytest.raises(SchemaError, match="null model_layout"):
+        _branches(frame, "calibration scores", "global_and_per_group")
+
+
+def test_an_unknown_layout_value_is_refused_and_listed():
+    frame = pl.DataFrame({
+        "epk_id": [1, 2],
+        "score": [0.2, 0.8],
+        "model_layout": ["global", "per_client"],
+    })
+    with pytest.raises(
+        SchemaError, match="unsupported model_layout values.*per_client"
+    ):
+        _branches(frame, "calibration scores", "global_and_per_group")
+
+
+def test_both_layouts_come_back_as_separate_branches():
+    frame = pl.DataFrame({
+        "epk_id": [1, 2, 3],
+        "score": [0.2, 0.8, 0.5],
+        "model_layout": ["global", "per_group", "global"],
+    })
+    branches = _branches(frame, "test scores", "global_and_per_group")
+    assert set(branches) == {"global", "per_group"}
+    assert branches["global"].height == 2
+    assert branches["per_group"].height == 1
