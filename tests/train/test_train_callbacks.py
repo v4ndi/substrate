@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from unittest.mock import Mock
+
 import pytest
 import torch
+from omegaconf import OmegaConf
 from tiny_training import TinyModel
 
 from fmlib.train import (
@@ -18,7 +21,11 @@ from fmlib.train import (
     TrainStatsCallback,
 )
 from fmlib.train.callbacks.ema import EMACallback
-from fmlib.train.callbacks.mlflow import sanitize_param_key, sanitize_params
+from fmlib.train.callbacks.mlflow import (
+    MLflowCallback,
+    sanitize_param_key,
+    sanitize_params,
+)
 from fmlib.train.callbacks.profiler import ProfilerCallback
 from fmlib.train.loss_reduce import calculate_output_loss
 from fmlib.train.state import CallbackContext
@@ -199,6 +206,16 @@ def test_profiler_is_started_stepped_and_stopped(ctx):
     assert profiler.calls == ["start", "step", "stop"]
 
 
+def test_profiler_exposes_traces_after_training(ctx, tmp_path):
+    profiler = Mock()
+    trace = tmp_path / "trace.json"
+    callback = ProfilerCallback(profiler, trace_paths=[trace])
+    callback.on_train_begin(ctx)
+    callback.on_train_end(ctx)
+    profiler.stop.assert_called_once()
+    assert ctx.extra["profiler_traces"] == (trace,)
+
+
 # -- MLflow param sanitising -------------------------------------------------
 
 
@@ -211,6 +228,74 @@ def test_mlflow_drops_oversized_values():
     with pytest.warns(UserWarning, match="Skipping MLflow param"):
         params = sanitize_params({"short": 1, "long": "x" * 501})
     assert params == {"short": "1"}
+
+
+def test_mlflow_does_not_log_secret_params():
+    assert sanitize_params({"train.seed": 42, "auth.password": "hidden"}) == {
+        "train.seed": "42"
+    }
+
+
+def test_mlflow_logs_run_config_metrics_artifacts_and_status(
+    ctx, tmp_path, monkeypatch
+):
+    client = Mock()
+    callback = MLflowCallback(
+        experiment_name="communal",
+        run_name="trial",
+        tracking_uri="https://host/mlflow/",
+        params={"seed": 42},
+    )
+    monkeypatch.setattr(callback, "_mlflow", lambda: client)
+    ctx.config = OmegaConf.create({
+        "train": {"seed": 42}, "auth": {"password": "hidden"}
+    })
+    callback.on_train_begin(ctx)
+    client.set_tracking_uri.assert_called_once_with("https://host/mlflow/")
+    client.set_experiment.assert_called_once_with("communal")
+    client.log_params.assert_called_once_with({"seed": "42", "world_size": "1"})
+    config_text = client.log_text.call_args.args[0]
+    assert "seed: 42" in config_text
+    assert "hidden" not in config_text
+
+    ctx.logs, ctx.log_step = {"valid/loss": 0.5, "ignored": "text"}, 12
+    callback.on_log(ctx)
+    client.log_metrics.assert_called_once_with({"valid/loss": 0.5}, step=12)
+
+    checkpoint = tmp_path / "checkpoint.pt"
+    checkpoint.write_bytes(b"checkpoint")
+    ctx.state.global_step = 12
+    ctx.extra["saved_artifacts"] = (str(checkpoint),)
+    callback.on_after_save(ctx)
+    client.log_artifact.assert_called_with(
+        str(checkpoint), artifact_path="checkpoints/12"
+    )
+
+    trace = tmp_path / "trace-run" / "trace.json"
+    trace.parent.mkdir()
+    trace.write_text("{}", encoding="utf-8")
+    ctx.extra["profiler_traces"] = (trace,)
+    callback.on_after_train(ctx)
+    client.log_artifact.assert_called_with(
+        str(trace), artifact_path="profiler/trace-run"
+    )
+    client.end_run.assert_called_once_with(status="FINISHED")
+
+
+def test_mlflow_uses_ambient_tracking_uri_and_skips_non_main_rank(ctx, monkeypatch):
+    client = Mock()
+    callback = MLflowCallback(experiment_name="communal")
+    monkeypatch.setattr(callback, "_mlflow", lambda: client)
+    monkeypatch.setenv("MLFLOW_TRACKING_URI", "https://ambient/mlflow/")
+    callback.on_train_begin(ctx)
+    client.set_tracking_uri.assert_not_called()
+    callback.on_after_train(ctx)
+
+    ctx.env = DistEnv(rank=1, world_size=2, device=torch.device("cpu"))
+    callback.on_train_begin(ctx)
+    callback.on_after_save(ctx)
+    callback.on_after_train(ctx)
+    assert client.start_run.call_count == 1
 
 
 # -- loss reduction ----------------------------------------------------------

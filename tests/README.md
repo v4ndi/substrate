@@ -38,6 +38,41 @@ The boosting parity gate is part of `-m slow` and can be run alone:
 python -m pytest -m slow tests/automl/test_boosting_parity.py
 ```
 
+## Order, seeds and flakes
+
+Test order is randomised on every run. A dependency between two tests — one
+leaving state the next relies on — cannot settle in unnoticed, which matters
+here because until this was switched on the suite had only ever executed in one
+order.
+
+Every run prints its seed. Reproduce a failure exactly:
+
+```bash
+python -m pytest --randomly-seed=12345    # the seed the failing run printed
+python -m pytest -p no:randomly           # fixed order, for one run
+```
+
+Switched on only after it was shown to hold: five randomised runs of the
+default selection and three of everything, all green, plus three ordinary full
+runs the same day. Eleven clean runs, no flake.
+
+## Running it in parallel
+
+`pytest-xdist` is installed but off by default, because a sequential run is
+easier to read when something fails. Measured on this machine:
+
+| selection | sequential | `-n 4` |
+|-----------|-----------|--------|
+| default   | ~2:30     | 1:45   |
+| `-m ""`   | ~12:10    | 5:36   |
+
+```bash
+python -m pytest -m "" -n 4
+```
+
+Both were green, including the torchrun subprocess tests and the GPU tests
+sharing one card. On a smaller card four workers may not fit; drop to `-n 2`.
+
 ## Timeouts
 
 Every test has a 300-second ceiling (`pytest-timeout`). It is a deadlock

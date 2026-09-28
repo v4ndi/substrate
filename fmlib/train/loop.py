@@ -228,6 +228,7 @@ class Trainer:
 
         self.callbacks.fire("on_train_end", self.ctx)
         scores = self._final_test()
+        self.callbacks.fire("on_after_train", self.ctx)
         env.barrier()
         return scores
 
@@ -355,7 +356,9 @@ class Trainer:
         self.log({"eval/wall_sec": time.perf_counter() - started}, step=step)
 
         if control.should_save:
+            self.ctx.extra.pop("saved_artifacts", None)
             self.callbacks.fire("on_save", self.ctx)
+            self.callbacks.fire("on_after_save", self.ctx)
         env.barrier()
         control.should_evaluate = False
         self.model.train()

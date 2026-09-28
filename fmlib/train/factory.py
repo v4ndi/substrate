@@ -144,7 +144,12 @@ def build_default_callbacks(
         )
         callbacks.append(ThroughputCallback())
     if profiler_enabled:
-        callbacks.append(ProfilerCallback(init_profiler(mlflow_arguments)))
+        trace_paths = []
+        callbacks.append(
+            ProfilerCallback(
+                init_profiler(mlflow_arguments, trace_paths), trace_paths=trace_paths
+            )
+        )
 
     # Early stopping must precede the checkpointer: it is what vetoes a save.
     if early_stopping is not None:
