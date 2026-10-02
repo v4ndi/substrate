@@ -49,6 +49,12 @@ python -m fmlib.train --config-dir=examples/tabular_tasks/configs --config-name=
 python -m fmlib.inference --config-dir=examples/tabular_tasks/configs --config-name=response_inference
 ```
 
+Для запуска `response` с коммунальным MLflow заполните в `configs/response.yaml`
+поля `mlflow.tracking_uri` и `mlflow.server_cert_path`: адрес сервера и путь к
+CA-файлу. Значения `null` оставляют настройки по умолчанию. Логин и пароль
+передаются через `MLFLOW_TRACKING_USERNAME` и `MLFLOW_TRACKING_PASSWORD` в
+окружении процесса.
+
 Многокарточный запуск — та же команда под `torchrun`:
 
 ```bash

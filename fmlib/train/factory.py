@@ -119,6 +119,7 @@ def build_default_callbacks(
             experiment_name=mlflow_arguments.get("experiment_name"),
             run_name=mlflow_arguments.get("run_name"),
             tracking_uri=mlflow_arguments.get("tracking_uri"),
+            server_cert_path=mlflow_arguments.get("server_cert_path"),
             params=params,
             enabled=logging_enabled and bool(mlflow_arguments),
         ),

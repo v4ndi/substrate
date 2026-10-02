@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import warnings
 from collections.abc import Mapping
 from pathlib import Path
@@ -71,6 +72,7 @@ class MLflowCallback(TrainerCallback):
         tracking_uri: Tracking server URI; falls back to the ambient MLflow config.
         params: Parameters to record once at the start of training.
         enabled: Set False to disable logging without removing the callback.
+        server_cert_path: CA bundle used to verify the tracking server certificate.
     """
 
     def __init__(
@@ -80,11 +82,13 @@ class MLflowCallback(TrainerCallback):
         tracking_uri: str | None = None,
         params: dict[str, Any] | None = None,
         enabled: bool = True,
+        server_cert_path: str | None = None,
         **run_kwargs: Any,
     ):
         self.experiment_name = experiment_name
         self.run_name = run_name
         self.tracking_uri = tracking_uri
+        self.server_cert_path = server_cert_path
         self.params = params or {}
         self.enabled = enabled
         self.run_kwargs = run_kwargs
@@ -98,6 +102,13 @@ class MLflowCallback(TrainerCallback):
     def on_train_begin(self, ctx: CallbackContext) -> None:
         if not (self.enabled and ctx.env.is_main):
             return
+        if self.server_cert_path:
+            cert_path = Path(self.server_cert_path).expanduser().resolve()
+            if not cert_path.is_file():
+                raise FileNotFoundError(
+                    f"MLflow server CA certificate not found: {cert_path}"
+                )
+            os.environ["MLFLOW_TRACKING_SERVER_CERT_PATH"] = str(cert_path)
         mlflow = self._mlflow()
         if self.tracking_uri:
             mlflow.set_tracking_uri(self.tracking_uri)

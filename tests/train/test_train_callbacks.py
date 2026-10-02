@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from unittest.mock import Mock
 
 import pytest
@@ -27,6 +28,7 @@ from fmlib.train.callbacks.mlflow import (
     sanitize_params,
 )
 from fmlib.train.callbacks.profiler import ProfilerCallback
+from fmlib.train.factory import build_default_callbacks
 from fmlib.train.loss_reduce import calculate_output_loss
 from fmlib.train.state import CallbackContext
 
@@ -296,6 +298,50 @@ def test_mlflow_uses_ambient_tracking_uri_and_skips_non_main_rank(ctx, monkeypat
     callback.on_after_save(ctx)
     callback.on_after_train(ctx)
     assert client.start_run.call_count == 1
+
+
+def test_mlflow_configures_server_ca_before_connecting(ctx, tmp_path, monkeypatch):
+    cert = tmp_path / "ca.pem"
+    cert.write_text("certificate", encoding="utf-8")
+    callback = MLflowCallback(server_cert_path=str(cert))
+    client = Mock()
+
+    def get_client():
+        assert os.environ["MLFLOW_TRACKING_SERVER_CERT_PATH"] == str(cert)
+        return client
+
+    monkeypatch.setattr(callback, "_mlflow", get_client)
+    monkeypatch.setenv("MLFLOW_TRACKING_SERVER_CERT_PATH", "old.pem")
+    callback.on_train_begin(ctx)
+    assert os.environ["MLFLOW_TRACKING_SERVER_CERT_PATH"] == str(cert)
+    callback.on_after_train(ctx)
+
+
+def test_mlflow_rejects_missing_server_ca(ctx, tmp_path, monkeypatch):
+    callback = MLflowCallback(server_cert_path=str(tmp_path / "missing.pem"))
+    client = Mock()
+    monkeypatch.setattr(callback, "_mlflow", lambda: client)
+    with pytest.raises(FileNotFoundError, match="MLflow server CA certificate"):
+        callback.on_train_begin(ctx)
+    client.set_experiment.assert_not_called()
+
+
+def test_response_config_passes_tracking_settings_to_mlflow_callback(tmp_path):
+    config = OmegaConf.load("examples/tabular_tasks/configs/response.yaml")
+    cert = tmp_path / "ca.pem"
+    config.mlflow.tracking_uri = "https://host/mlflow/"
+    config.mlflow.server_cert_path = str(cert)
+    callbacks = build_default_callbacks(
+        config,
+        model=Mock(),
+        train_dataloader=Mock(),
+        checkpoint_dir=str(tmp_path / "checkpoints"),
+    )
+    mlflow_callback = next(
+        callback for callback in callbacks if isinstance(callback, MLflowCallback)
+    )
+    assert mlflow_callback.tracking_uri == "https://host/mlflow/"
+    assert mlflow_callback.server_cert_path == str(cert)
 
 
 # -- loss reduction ----------------------------------------------------------
