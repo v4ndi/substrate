@@ -16,9 +16,11 @@ EVENTS = (
     "on_step_end",
     "on_evaluate",
     "on_save",
+    "on_after_save",
     "on_epoch_end",
     "on_log",
     "on_train_end",
+    "on_after_train",
 )
 
 
@@ -57,12 +59,18 @@ class TrainerCallback:
 
     def on_save(self, ctx: CallbackContext) -> None: ...
 
+    def on_after_save(self, ctx: CallbackContext) -> None:
+        """Saved files are available in ``ctx.extra['saved_artifacts']``."""
+
     def on_epoch_end(self, ctx: CallbackContext) -> None: ...
 
     def on_log(self, ctx: CallbackContext) -> None:
         """``ctx.logs`` holds the values to record, ``ctx.state.global_step`` the step."""
 
     def on_train_end(self, ctx: CallbackContext) -> None: ...
+
+    def on_after_train(self, ctx: CallbackContext) -> None:
+        """Called after the final test and all ``on_train_end`` callbacks."""
 
 
 class CallbackHandler:

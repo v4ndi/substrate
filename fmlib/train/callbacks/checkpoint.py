@@ -52,6 +52,8 @@ class CheckpointCallback(TrainerCallback):
             scaler=ctx.extra.get("scaler"),
             state=ctx.state,
         )
+        saved = [self.last_path]
         if self.save_weights:
-            save_model(model, model_path(self.directory, step))
+            saved.append(save_model(model, model_path(self.directory, step)))
+        ctx.extra["saved_artifacts"] = tuple(saved)
         rotate_checkpoints(self.directory, self.max_checkpoints)

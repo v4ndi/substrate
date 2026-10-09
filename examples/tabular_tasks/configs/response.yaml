@@ -71,6 +71,8 @@ mlflow:
   experiment_name: tabular_tasks
   run_name: response_smoke
   logging_dir: ./mlruns
+  tracking_uri: null  # set the communal MLflow URL here
+  server_cert_path: null  # absolute path to the MLflow server CA bundle
 
 optimizer:
   _target_: torch.optim.AdamW

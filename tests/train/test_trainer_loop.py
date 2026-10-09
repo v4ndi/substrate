@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+from unittest.mock import Mock
+
 import torch
 from tiny_training import TinyModel, TinyShardedDataset, collate
 from torch.utils.data import DataLoader
@@ -12,6 +15,7 @@ from fmlib.train import (
     DistEnv,
     EarlyStopping,
     EarlyStoppingCallback,
+    MLflowCallback,
     RunConfig,
     Trainer,
     TrainerCallback,
@@ -152,6 +156,31 @@ def test_checkpoint_is_written_and_restores_the_weights(tmp_path):
     assert payload["state"]["global_step"] == trainer.state.global_step
     for key, value in trainer.model.state_dict().items():
         assert torch.equal(value, fresh.state_dict()[key])
+
+
+def test_mlflow_uploads_each_saved_step_before_local_rotation(tmp_path, monkeypatch):
+    client = Mock()
+    uploads = []
+
+    def record_upload(path, artifact_path=None):
+        uploads.append((path, artifact_path, Path(path).is_file()))
+
+    client.log_artifact.side_effect = record_upload
+    mlflow = MLflowCallback(experiment_name="test", run_name="rotation")
+    monkeypatch.setattr(mlflow, "_mlflow", lambda: client)
+    directory = tmp_path / "checkpoints"
+    trainer = build_trainer(
+        tmp_path,
+        callbacks=[mlflow, CheckpointCallback(str(directory), max_checkpoints=1)],
+        num_epochs=2,
+    )
+    trainer.train()
+
+    assert len(uploads) == 4
+    assert all(existed for _, _, existed in uploads)
+    assert {name for _, name, _ in uploads} == {"checkpoints/8", "checkpoints/16"}
+    assert len(list(directory.glob("*/checkpoint.pt"))) == 1
+    client.end_run.assert_called_once_with(status="FINISHED")
 
 
 def test_early_stopping_halts_training(tmp_path):

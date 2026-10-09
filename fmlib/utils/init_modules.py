@@ -82,14 +82,16 @@ def init_optimizer(
     return instantiate(instantiate_dict)(params)
 
 
-def init_profiler(mlflow_arguments):
+def init_profiler(mlflow_arguments, trace_paths=None):
     """Build a ``torch.profiler`` that writes Chrome traces to shared storage."""
 
     def trace_handler(profiler):
-        save_dir = f"/home/datalab/nfs/profile_traces/{mlflow_arguments['experiment_name']}/{mlflow_arguments['run_name']}/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
+        save_dir = f"/home/datalab/nfs/profile_traces/{mlflow_arguments['experiment_name']}/{mlflow_arguments['run_name']}/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S_%f')}"
         save_file = f"{save_dir}/trace.json"
         Path(save_dir).mkdir(parents=True, exist_ok=True)
         profiler.export_chrome_trace(save_file)
+        if trace_paths is not None:
+            trace_paths.append(Path(save_file))
 
     profiler = torch.profiler.profile(
         activities=[
