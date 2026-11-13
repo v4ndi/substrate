@@ -1,0 +1,1001 @@
+<title>Ревью avatar.metrics</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Serif:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    --paper: #f2f4f6;
+    --card: #ffffff;
+    --ink: #14161a;
+    --ink-soft: #3a414c;
+    --muted: #666f7d;
+    --rule: #dde2e8;
+    --rule-soft: #e8ecf1;
+    --signal: #1f5fa8;
+    --code-bg: #eef1f5;
+    --sev-block: #a8342a;
+    --sev-block-bg: #f7e6e4;
+    --sev-silent: #8a6113;
+    --sev-silent-bg: #f8efdd;
+    --sev-cost: #1f6480;
+    --sev-cost-bg: #e2eef3;
+    --sev-dead: #5b6472;
+    --sev-dead-bg: #e8ebef;
+    --sev-done: #1f6b4a;
+    --sev-done-bg: #e0efe7;
+    --shadow: 0 1px 2px rgba(20, 22, 26, .05), 0 8px 24px -18px rgba(20, 22, 26, .35);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #0e1013;
+      --card: #16191e;
+      --ink: #e7eaef;
+      --ink-soft: #c3cad4;
+      --muted: #8e98a6;
+      --rule: #262b33;
+      --rule-soft: #1e232a;
+      --signal: #6aa9e8;
+      --code-bg: #1c2027;
+      --sev-block: #e88b80;
+      --sev-block-bg: #2e1b18;
+      --sev-silent: #ddb264;
+      --sev-silent-bg: #2b2317;
+      --sev-cost: #79bcd8;
+      --sev-cost-bg: #16262d;
+      --sev-dead: #99a3b1;
+      --sev-dead-bg: #1e222a;
+      --sev-done: #74c69d;
+      --sev-done-bg: #15251d;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -18px rgba(0, 0, 0, .8);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --paper: #0e1013;
+    --card: #16191e;
+    --ink: #e7eaef;
+    --ink-soft: #c3cad4;
+    --muted: #8e98a6;
+    --rule: #262b33;
+    --rule-soft: #1e232a;
+    --signal: #6aa9e8;
+    --code-bg: #1c2027;
+    --sev-block: #e88b80;
+    --sev-block-bg: #2e1b18;
+    --sev-silent: #ddb264;
+    --sev-silent-bg: #2b2317;
+    --sev-cost: #79bcd8;
+    --sev-cost-bg: #16262d;
+    --sev-dead: #99a3b1;
+    --sev-dead-bg: #1e222a;
+    --sev-done: #74c69d;
+    --sev-done-bg: #15251d;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -18px rgba(0, 0, 0, .8);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "IBM Plex Serif", Georgia, "Times New Roman", serif;
+    font-size: 16.5px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .shell {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 24px 96px;
+    display: grid;
+    grid-template-columns: 210px minmax(0, 1fr);
+    gap: 48px;
+    align-items: start;
+  }
+
+  @media (max-width: 900px) {
+    .shell { grid-template-columns: minmax(0, 1fr); gap: 0; }
+    nav.toc { display: none; }
+  }
+
+  header.masthead {
+    grid-column: 1 / -1;
+    border-bottom: 2px solid var(--ink);
+    padding: 44px 0 22px;
+    margin-bottom: 36px;
+  }
+
+  .eyebrow {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11.5px;
+    letter-spacing: .13em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 14px;
+  }
+
+  h1 {
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-weight: 600;
+    font-size: clamp(30px, 5vw, 46px);
+    line-height: 1.08;
+    letter-spacing: -.02em;
+    margin: 0 0 16px;
+    text-wrap: balance;
+  }
+
+  h1 code {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: .82em;
+    font-weight: 500;
+    background: none;
+    padding: 0;
+    color: var(--signal);
+  }
+
+  .standfirst {
+    max-width: 62ch;
+    color: var(--ink-soft);
+    font-size: 18px;
+    margin: 0 0 26px;
+  }
+
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 26px;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12.5px;
+    color: var(--muted);
+  }
+
+  .meta b { color: var(--ink-soft); font-weight: 500; }
+
+  /* ---------- scoreboard ---------- */
+
+  .scoreboard {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    margin: 32px 0 8px;
+  }
+
+  .score { background: var(--card); padding: 16px 18px 18px; }
+
+  .score .n {
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-size: 30px;
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: -.02em;
+    font-variant-numeric: tabular-nums;
+    display: block;
+    margin-bottom: 8px;
+  }
+
+  .score .n .was {
+    font-size: 17px;
+    font-weight: 400;
+    color: var(--muted);
+    text-decoration: line-through;
+    margin-right: 7px;
+  }
+
+  .score.done .n { color: var(--sev-done); }
+  .score.open .n { color: var(--sev-silent); }
+  .score.dead .n { color: var(--sev-dead); }
+
+  .score .lbl {
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-size: 13px;
+    line-height: 1.35;
+    color: var(--ink-soft);
+    display: block;
+  }
+
+  .score .sub {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11px;
+    color: var(--muted);
+    display: block;
+    margin-top: 5px;
+  }
+
+  nav.toc {
+    position: sticky;
+    top: 24px;
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-size: 13px;
+    line-height: 1.5;
+    border-left: 1px solid var(--rule);
+    padding-left: 16px;
+  }
+
+  nav.toc p {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 10.5px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 10px;
+  }
+
+  nav.toc a {
+    display: block;
+    color: var(--ink-soft);
+    text-decoration: none;
+    padding: 4px 0;
+  }
+
+  nav.toc a:hover { color: var(--signal); }
+  nav.toc a:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+
+  main { min-width: 0; }
+
+  h2 {
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-weight: 600;
+    font-size: 24px;
+    letter-spacing: -.012em;
+    line-height: 1.2;
+    margin: 60px 0 18px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--ink);
+    text-wrap: balance;
+  }
+
+  h2:first-child { margin-top: 0; }
+
+  h3 {
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-weight: 600;
+    font-size: 17px;
+    margin: 34px 0 10px;
+    line-height: 1.3;
+    text-wrap: balance;
+  }
+
+  p { margin: 0 0 15px; max-width: 68ch; }
+  ul, ol { max-width: 68ch; padding-left: 22px; margin: 0 0 16px; }
+  li { margin-bottom: 8px; }
+  a { color: var(--signal); }
+
+  code {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: .855em;
+    background: var(--code-bg);
+    padding: .1em .32em;
+    border-radius: 2px;
+  }
+
+  pre {
+    background: var(--code-bg);
+    border-left: 2px solid var(--rule);
+    padding: 13px 16px;
+    overflow-x: auto;
+    margin: 0 0 16px;
+    font-size: 13px;
+    line-height: 1.55;
+  }
+
+  pre code { background: none; padding: 0; font-size: 13px; }
+  strong { font-weight: 600; }
+
+  /* ---------- findings ---------- */
+
+  .finding {
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--sev-silent);
+    box-shadow: var(--shadow);
+    padding: 20px 22px 6px;
+    margin: 0 0 18px;
+  }
+
+  .finding.block { border-left-color: var(--sev-block); }
+  .finding.cost { border-left-color: var(--sev-cost); }
+  .finding > h3 { margin-top: 0; }
+
+  .fhead {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 4px;
+  }
+
+  .fid {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 2px 7px;
+    border-radius: 2px;
+    background: var(--sev-silent-bg);
+    color: var(--sev-silent);
+  }
+
+  .finding.block .fid { background: var(--sev-block-bg); color: var(--sev-block); }
+  .finding.cost .fid { background: var(--sev-cost-bg); color: var(--sev-cost); }
+
+  .ftitle {
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-weight: 600;
+    font-size: 17px;
+    line-height: 1.3;
+    margin: 0;
+    flex: 1 1 320px;
+    min-width: 0;
+  }
+
+  .proof {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 10.5px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--sev-cost);
+    border: 1px solid var(--sev-cost);
+    padding: 2px 6px;
+    border-radius: 2px;
+    white-space: nowrap;
+  }
+
+  .fix {
+    border-top: 1px solid var(--rule-soft);
+    margin: 4px -22px 0;
+    padding: 12px 22px;
+    font-size: 15px;
+    color: var(--ink-soft);
+  }
+
+  .fix b {
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-size: 12px;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-right: 8px;
+  }
+
+  /* ---------- done items ---------- */
+
+  .done-list { display: grid; gap: 16px; margin: 0 0 22px; max-width: 72ch; }
+
+  .done-item {
+    border-left: 2px solid var(--sev-done);
+    padding-left: 15px;
+  }
+
+  .done-item h4 {
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-size: 15.5px;
+    font-weight: 600;
+    margin: 0 0 5px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 9px;
+  }
+
+  .tick {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 10.5px;
+    font-weight: 500;
+    letter-spacing: .06em;
+    padding: 2px 6px;
+    border-radius: 2px;
+    background: var(--sev-done-bg);
+    color: var(--sev-done);
+    white-space: nowrap;
+  }
+
+  .done-item p { margin: 0 0 9px; font-size: 15.5px; color: var(--ink-soft); }
+  .done-item pre { margin-top: 10px; }
+
+  /* ---------- tables ---------- */
+
+  .tablewrap { overflow-x: auto; margin: 0 0 20px; border: 1px solid var(--rule); }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-size: 13.5px;
+    background: var(--card);
+  }
+
+  th, td {
+    text-align: left;
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--rule-soft);
+    vertical-align: top;
+  }
+
+  th {
+    font-weight: 600;
+    font-size: 11.5px;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border-bottom: 1px solid var(--rule);
+    white-space: nowrap;
+  }
+
+  td code { font-size: 12.5px; }
+  td.num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+  }
+  td.was { color: var(--muted); }
+  tr:last-child td { border-bottom: none; }
+
+  .tag {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 10.5px;
+    letter-spacing: .06em;
+    padding: 1px 6px;
+    border-radius: 2px;
+    background: var(--sev-cost-bg);
+    color: var(--sev-cost);
+  }
+
+  .tag.file { background: var(--sev-dead-bg); color: var(--sev-dead); }
+
+  .callout {
+    border: 1px solid var(--rule);
+    border-top: 2px solid var(--signal);
+    background: var(--card);
+    padding: 16px 20px 4px;
+    margin: 0 0 22px;
+    max-width: 72ch;
+  }
+
+  .callout p:last-child { margin-bottom: 12px; }
+
+  .callout.warn { border-top-color: var(--sev-block); }
+
+  ol.plan { list-style: none; padding: 0; counter-reset: step; max-width: 72ch; }
+
+  ol.plan > li {
+    counter-increment: step;
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr);
+    gap: 14px;
+    padding: 11px 0;
+    border-bottom: 1px solid var(--rule-soft);
+    margin: 0;
+  }
+
+  ol.plan > li::before {
+    content: counter(step);
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12px;
+    color: var(--muted);
+    padding-top: 3px;
+  }
+
+  footer {
+    grid-column: 1 / -1;
+    margin-top: 56px;
+    padding-top: 18px;
+    border-top: 1px solid var(--rule);
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    html { scroll-behavior: smooth; }
+  }
+</style>
+
+<div class="shell">
+
+  <header class="masthead">
+    <p class="eyebrow">Код-ревью · avatar_fm · после чистки</p>
+    <h1>Ревью модуля <code>avatar.metrics</code></h1>
+    <p class="standfirst">
+      Половина модуля не использовалась — её больше нет. Контракт разделён на
+      «числа» и «файлы», тройная копия цикла по группам свёрнута в один базовый
+      класс, калибровка uplift перестала оценивать себя на собственных строках,
+      а метрика больше не имеет права ни остановить обучение, ни подсунуть
+      ранней остановке <code>nan</code>. Открытых находок не осталось.
+    </p>
+    <div class="meta">
+      <span><b>Ветка</b> refactor/data-sharding-hdfs</span>
+      <span><b>Диффа</b> +2666 / −7296 в 73 файлах</span>
+      <span><b>Тесты</b> 444 passed, 2 skipped</span>
+    </div>
+
+    <div class="scoreboard">
+      <div class="score dead">
+        <span class="n"><span class="was">3024</span>1697</span>
+        <span class="lbl">строк в модуле</span>
+        <span class="sub">25 → 11 классов</span>
+      </div>
+      <div class="score done">
+        <span class="n">9</span>
+        <span class="lbl">пунктов плана выполнено</span>
+        <span class="sub">из 9 запрошенных</span>
+      </div>
+      <div class="score done">
+        <span class="n"><span class="was">15</span>0</span>
+        <span class="lbl">находок осталось открытыми</span>
+        <span class="sub">каждая закрыта тестом</span>
+      </div>
+      <div class="score dead">
+        <span class="n"><span class="was">1</span>7</span>
+        <span class="lbl">тестовых файла</span>
+        <span class="sub">+ контрактные тесты</span>
+      </div>
+    </div>
+  </header>
+
+  <nav class="toc">
+    <p>Разделы</p>
+    <a href="#state">Состояние</a>
+    <a href="#done">Что исправлено</a>
+    <a href="#open">Что открыто</a>
+    <a href="#dead">Мёртвый код</a>
+    <a href="#plan">Дальше</a>
+  </nav>
+
+  <main>
+
+    <section id="state">
+      <h2>1. Что стало с модулем</h2>
+
+      <p>
+        Отчёт описывает <strong>текущее</strong> состояние. Всё, что исправлено или
+        удалено, из списка находок убрано — осталось только то, что открыто
+        сегодня. Историю изменений держит git, дублировать её здесь незачем.
+      </p>
+
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th></th><th>было</th><th>стало</th></tr></thead>
+          <tbody>
+            <tr><td>строк в модуле</td><td class="num was">3024</td><td class="num">1697</td></tr>
+            <tr><td>публичных классов</td><td class="num was">25</td><td class="num">11 + 5 базовых</td></tr>
+            <tr><td>недостижимых классов</td><td class="num was">12 (50% строк)</td><td class="num">0</td></tr>
+            <tr><td>открытых находок</td><td class="num was">15</td><td class="num">0</td></tr>
+            <tr><td>тестовых файлов</td><td class="num was">1</td><td class="num">7</td></tr>
+            <tr><td>дефектов, роняющих прогон</td><td class="num was">6</td><td class="num">0</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Что удалено</h3>
+
+      <p>
+        Из модуля целиком ушли три файла: с <code>RocAucScore</code>, с
+        MoE-диагностикой (<code>Entropy</code>, <code>Importance</code>) и со
+        статистиками последовательностей (<code>SequenceStats</code>,
+        <code>ExpertsWorkload</code>, <code>HiddensNorm</code>). Внутри оставшихся
+        удалены <code>ClassificationInferenceMetrics</code>,
+        <code>MMoEResponseMetrics</code>, <code>PLEResponseMetrics</code>,
+        <code>CatboostCampaignBenchmark</code>, <code>MLPCampaignBenchmark</code>,
+        <code>InferenceCampaignMetrics</code>,
+        <code>InferenceMultiTaskResponseMetrics</code> и мёртвый хелпер
+        <code>save_to_parquet</code>.
+      </p>
+
+      <p>
+        Вместе с ними ушёл модуль-шим обратной совместимости для опечатки в имени
+        <code>training_arguments</code> — из той же семьи, что три пакета
+        <code>avatar.nn</code>, удалённые в PR&nbsp;#6 — и три примера,
+        построенных на удалённых метриках: tabular_hidden_states,
+        distributed_training и multi_task, плюс рецепт MLP-бенчмарка в
+        документации.
+      </p>
+
+      <h3>Что осталось</h3>
+
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>класс</th><th>база</th><th>роль</th></tr></thead>
+          <tbody>
+            <tr><td><code>UpliftMetrics</code></td><td><span class="tag">Scalar</span></td><td>uplift@k, qini, калибровка и её диагностика</td></tr>
+            <tr><td><code>ResponseMetrics</code></td><td><span class="tag">Scalar</span></td><td>ROC AUC, precision@k, recall@k</td></tr>
+            <tr><td><code>RegressionMetrics</code></td><td><span class="tag">Scalar</span></td><td>MSE, MAE, MAPE</td></tr>
+            <tr><td><code>MultiLossMetric</code></td><td><span class="tag">Scalar</span></td><td>компоненты составной функции потерь</td></tr>
+            <tr><td><code>UniversalLossesMetric</code></td><td><span class="tag">Scalar</span></td><td>все поля <code>*loss</code> выхода</td></tr>
+            <tr><td><code>GroupAverageMetricWrapper</code></td><td><span class="tag">Scalar</span></td><td>средние по посчитанным метрикам</td></tr>
+            <tr><td><code>GroupDevidedMetricsWrapper</code></td><td><span class="tag">Scalar</span></td><td>метрика отдельно по каждой группе</td></tr>
+            <tr><td><code>CollectEmbeddings</code></td><td><span class="tag file">Artifact</span></td><td>выгрузка эмбеддингов</td></tr>
+            <tr><td><code>InferenceMultiTaskCampaignMetrics</code></td><td><span class="tag file">Artifact</span></td><td>выгрузка вероятностей обеих голов</td></tr>
+            <tr><td><code>InferenceSupervisedMetrics</code></td><td><span class="tag file">Artifact</span></td><td>выгрузка предсказаний</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        Все 25 рабочих конфигов, ссылавшихся на
+        <code>InferenceMultiTaskCampaignMetrics</code> и
+        <code>CollectEmbeddings</code>, продолжают резолвиться — это проверяет
+        тест на таргеты конфигов.
+      </p>
+    </section>
+
+    <section id="done">
+      <h2>2. Что исправлено</h2>
+
+      <div class="done-list">
+
+        <div class="done-item">
+          <h4>Контракт разделён на <code>ScalarMetric</code> и <code>ArtifactMetric</code> <span class="tick">закрывает B1</span></h4>
+          <p>
+            <code>ScalarMetric.compute</code> возвращает числа.
+            <code>ArtifactMetric</code> требует от наследника <code>flush</code> —
+            накопить, записать, забыть, — а <code>compute</code> реализован один
+            раз в базовом классе: вызывает <code>flush</code> и возвращает пустой
+            словарь.
+          </p>
+          <p>
+            Это структурно закрывает дефект, из-за которого четыре сборщика
+            возвращали из <code>compute</code> <code>None</code>, а цикл делает
+            <code>scores.update(metric.compute())</code>. Теперь
+            <code>None</code> вернуть неоткуда, и это проверяется тестом, который
+            запрещает наследнику <code>ArtifactMetric</code> переопределять
+            <code>compute</code>.
+          </p>
+        </div>
+
+        <div class="done-item">
+          <h4>Калибровка больше не роняет обучение <span class="tick">B2</span></h4>
+          <p>
+            Два <code>assert</code>, убивавшие прогон при недообученной модели,
+            стали метриками:
+            <code>calibration_rank_shift_{control,treatment}</code> и
+            <code>calibration_gap_{control,treatment}</code> возвращаются в
+            результате, а при превышении порога пишется предупреждение. Проблема
+            видна в MLflow, обучение живёт.
+          </p>
+          <p>
+            Заодно честно описан <code>require_calibration</code>: он выбирает,
+            какое семейство метрик попадёт в <code>mean_{main_metric}</code>, а не
+            включает калибровку — калибраторы подгоняются всегда.
+          </p>
+        </div>
+
+        <div class="done-item">
+          <h4>Накопители потерь считают то, что обещают <span class="tick">S2 · S3</span></h4>
+          <p>
+            <code>MultiLossMetric</code> считает сумму потерь на сумму элементов, а
+            не среднее поштучных отношений: на батчах <code>(2, 4)</code> и
+            <code>(4, 2)</code> было 1.25, стало 1.0. И <code>compute</code> больше
+            не съедает собственный накопитель — два вызова подряд дают один ответ.
+          </p>
+          <p>
+            <code>UniversalLossesMetric</code> держит счётчик по каждому полю
+            отдельно: потеря, приходящая в одном батче из четырёх, больше не
+            делится на четыре.
+          </p>
+        </div>
+
+        <div class="done-item">
+          <h4>Сбор на ранг 0 вместо раздачи всем <span class="tick">P1</span></h4>
+          <p>
+            <code>all_gather_object</code> заменён на
+            <code>gather_object(dst=0)</code>. Полезная нагрузка нужна одному
+            рангу, а раздавалась всем — это <code>world_size</code>-кратный трафик
+            и пиковая память, которые остальные ранги тут же выбрасывали.
+          </p>
+          <p>
+            Тонкость, которой не было в исходном предложении:
+            <strong><code>gather_object</code> не поддерживается бэкендом
+            NCCL</strong> — он сводится к <code>gather</code>, а NCCL реализует
+            только <code>all_gather</code>. Поэтому под пиклённые объекты заводится
+            отдельная gloo-группа, одна на прогон, создаваемая при инициализации
+            (<code>new_group</code> — коллективная операция, её нельзя создавать
+            лениво в разных точках у разных рангов). Когда группа по умолчанию и
+            так gloo, дополнительная не создаётся.
+          </p>
+        </div>
+
+        <div class="done-item">
+          <h4>Метрика объявляет, что читает <span class="tick">P2</span></h4>
+          <p>
+            <code>required_inputs</code> / <code>required_outputs</code> на
+            метрике, union по списку метрик, и цикл отправляет на ранг 0 только эти
+            поля вместо всего батча и всего выхода модели.
+          </p>
+          <pre><code>class MeanConfidence(ScalarMetric):
+    required_inputs = ()
+    required_outputs = ("logits",)</code></pre>
+          <p>
+            Стороны независимы: <code>UniversalLossesMetric</code>, которому нужны
+            все поля выхода, но ни одного ключа входа, всё равно позволяет
+            выбросить входные тензоры — обычно самые тяжёлые. <code>None</code>
+            означает «всё с этой стороны».
+          </p>
+          <p>
+            Сужение сохраняет класс выхода и все его поля, обнуляя незапрошенные, —
+            иначе сломались бы проверки через <code>hasattr</code>. Отсюда правило:
+            проверять поле по значению, а не по наличию атрибута.
+          </p>
+        </div>
+
+        <div class="done-item">
+          <h4>Файлы и каталоги <span class="tick">P3 · P4 · P6</span></h4>
+          <p>
+            <code>os.makedirs(..., exist_ok=False)</code> заменён на
+            <code>exist_ok=True</code>: каталог от предыдущего прогона ронял задачу
+            при <em>создании</em> метрики, то есть до начала обучения.
+          </p>
+          <p>
+            Имена частей стали
+            <code>&lt;время старта&gt;_part-00000[_префикс].parquet</code>. Раньше
+            имя строилось из <code>datetime.now()</code> с точностью до секунды, а
+            сборщики сбрасывают буфер каждые <code>save_steps</code> батчей — два
+            сброса в одну секунду молча затирали друг друга.
+          </p>
+          <p><code>print</code> в модуле не осталось: всё через <code>logging</code>.</p>
+        </div>
+
+        <div class="done-item">
+          <h4><code>task_name</code> удалён, три копии цикла стали одной <span class="tick">B3</span></h4>
+          <p>
+            Uplift-, response- и regression-метрики были тремя копиями одного
+            ~100-строчного цикла: накопить колонки по батчам, слить, разрезать по
+            задаче, группе и <code>split_type</code>, назвать числа. Сущность
+            задачи убрана целиком, а скелет вынесен в один базовый класс —
+            наследник реализует только <code>collect</code> (что оставить от
+            батча) и <code>score_group</code> (как оценить срез).
+          </p>
+          <pre><code>class GroupedPredictionMetric(ScalarMetric):
+    def collect(self, inputs, outputs) -&gt; dict: ...
+    def score_group(self, merged, group, calib_mask, test_mask): ...</code></pre>
+          <p>
+            <code>ResponseMetrics</code> и <code>RegressionMetrics</code>
+            съехались ещё на шаг ниже и отличаются друг от друга только
+            <code>task_type</code> и тем, как логит становится предсказанием.
+            Вместе с задачей ушёл <strong>B3</strong>: имя метрики теперь строит
+            одна общая функция, и расхождению между копиями взяться неоткуда.
+          </p>
+          <p>
+            Побочные следствия: из метрик и submit-файлов исчезли колонка и
+            префикс <code>task_name</code>; <code>product</code> больше не нужен
+            ни одной из трёх метрик; группа по умолчанию у uplift стала
+            <code>-1</code>, как у соседей. Резать по задаче по-прежнему можно
+            снаружи — <code>GroupDevidedMetricsWrapper</code>.
+          </p>
+        </div>
+
+        <div class="done-item">
+          <h4>Обёртка по группам режет батч целиком <span class="tick">S12 · P5</span></h4>
+          <p>
+            <code>GroupDevidedMetricsWrapper</code> копировал выход модели через
+            <code>copy.deepcopy</code> и подменял в копии одни логиты. Отсюда три
+            дефекта сразу: на выходе обучающего шага тензоры не листовые и
+            копирование падало, так что обёртку нельзя было повесить как
+            train-метрику; копия всего выхода делалась на каждую группу каждого
+            батча; и любое поле выхода, кроме логитов, приезжало во вложенную
+            метрику <strong>во всю ширину батча</strong> — размеры не сходились у
+            всех, кто читает не только <code>logits</code>.
+          </p>
+          <p>
+            Теперь выход копируется поверхностно, а срез берётся из каждого поля,
+            чьё первое измерение равно размеру батча; остальное (скалярный лосс,
+            метка прогона) проходит без изменений. Заодно перестали теряться
+            колонки входа: прежний перебор по типам знал только <code>dict</code>,
+            <code>list</code> и <code>torch.Tensor</code>, и numpy-колонка
+            (<code>epk_id</code>, <code>split_type</code>) молча исчезала из среза.
+          </p>
+          <p>
+            <code>reset</code> теперь удаляет и сами группы. Это был не
+            косметический дефект: группа, бывшая на первой эпохе и исчезнувшая на
+            второй, доезжала до <code>compute</code> с пустым накопителем, где
+            <code>ResponseMetrics</code> падает на <code>preds[0]</code>:
+          </p>
+          <pre><code>эпоха 1 -> channel_a_*, channel_b_*
+после reset() группы: [('a',), ('b',)]
+эпоха 2, канала "b" в данных нет -> IndexError: list index out of range</code></pre>
+        </div>
+
+        <div class="done-item">
+          <h4>Калибровка uplift стала честной <span class="tick">S6 · S7 · S8 · S9</span></h4>
+          <p>
+            Калибратор подгоняется на срезе <code>split_type == "calib"</code>, а
+            калиброванные метрики теперь возвращаются <strong>только для
+            отложенного среза</strong> <code>test</code>. Оценивать калибратор на
+            тех же строках, на которых он обучался, — это in-sample, и такие
+            числа льстят модели. Популяция без среза <code>test</code> — а это
+            любой батч без колонки <code>split_type</code>, то есть валидация в
+            обучении, где путь указывает внутрь партиции
+            <code>split_type=calib</code>, — получает только сырые метрики и
+            предупреждение в лог.
+          </p>
+          <p>
+            <code>mean_{main_metric}</code> и
+            <code>mean_calibrated_{main_metric}</code> стали двумя независимыми
+            числами: первое усредняет сырую метрику, второе — калиброванную, и
+            второй ключ появляется только тогда, когда калиброванные метрики
+            реально посчитаны. <code>require_calibration</code> теперь
+            действительно включает калибровку, а не выбирает, какое семейство
+            попадёт в <code>mean_*</code>.
+          </p>
+          <p>
+            Дописывание метки убрано. Было <code>y_true[0] += 1</code> на срезе
+            без конверсий — чтобы вызов не упал. Сломанный срез превращался в
+            правдоподобное число, метка при повторе становилась <code>2</code>, а
+            на срезе из одной группы код всё равно падал:
+          </p>
+          <pre><code>IndexError: index 0 is out of bounds for axis 0 with size 0</code></pre>
+          <p>
+            Теперь вырожденный срез не даёт метрик вовсе, причина пишется в лог, а
+            калибратор, который не на чем подогнать, просто не создаётся — группа
+            при этом сохраняет свои сырые метрики.
+          </p>
+        </div>
+
+        <div class="done-item">
+          <h4><code>nan</code> не выходит из метрики и не стирает рекорд <span class="tick">S4</span></h4>
+          <p>
+            <code>roc_auc_score</code> на срезе из одного класса возвращает
+            <code>nan</code>, а <code>precision_at_k</code> делит на
+            <code>k</code>, который на маленьком срезе округляется до нуля. Такие
+            числа больше не выдаются: ключ пропускается, причина пишется в лог.
+          </p>
+          <p>
+            Это была половина дефекта. Вторая — в <code>EarlyStopping</code>:
+            сравнение <code>score &lt; best + delta</code> с <code>nan</code>
+            всегда ложно, поэтому исполнялась ветка «улучшение». <code>nan</code>
+            переписывал рекорд, обнулял счётчик терпения и — поскольку чекпоинт
+            сохраняется ровно при нулевом счётчике — записывал эпоху как лучшую.
+          </p>
+          <pre><code>nan есть  best=0.1   early_stop=False
+nan нет   best=0.9   early_stop=True</code></pre>
+          <p>
+            Теперь валидация, не давшая сравнимого числа — метрика отсутствует,
+            <code>None</code> или <code>nan</code>, — считается
+            <strong>отсутствием улучшения</strong>: рекорд стоит, терпение тикает,
+            чекпоинт не пишется. Отсутствующий ключ перестал быть смертельным:
+            раньше <code>assert self.main_metric in scores</code> убивал обучение,
+            а метрика теперь имеет право не выдать число.
+          </p>
+        </div>
+
+        <div class="done-item">
+          <h4>Среднее по группам пересчитывается каждую эпоху <span class="tick">S5</span></h4>
+          <p>
+            <code>GroupAverageMetricWrapper</code> раскрывал регулярные выражения
+            один раз, на первом <code>compute</code>, а
+            <code>GroupDevidedMetricsWrapper</code> открывает группы лениво, по
+            мере их появления в данных. Группа, впервые встретившаяся на второй
+            эпохе, не попадала в среднее до конца прогона, и в логах это не было
+            видно. Обёртка стоит в 21 конфиге — самая популярная в модуле.
+          </p>
+          <pre><code>эпоха 1 -> {'g_0_auc': 1.0, 'avg_auc': 1.0}
+эпоха 2 -> {'g_0_auc': 1.0, 'g_1_auc': 0.0, 'avg_auc': 1.0}</code></pre>
+          <p>
+            Теперь выражения раскрываются на каждом <code>compute</code>. В
+            обратную сторону это чинит и падение: на прежней реализации
+            исчезнувшая группа давала <code>KeyError</code> прямо в
+            <code>compute</code>. Среднее, под которое не подошло ни одно имя,
+            больше не выдаётся нулём — ключа просто нет, и причина в логе.
+          </p>
+        </div>
+
+        <div class="done-item">
+          <h4>Тесты <span class="tick">7 файлов вместо 1</span></h4>
+          <p>
+            Появились контрактные тесты, параметризованные по всем классам модуля,
+            золотые значения для обоих накопителей потерь, тесты имён и выбора
+            среза у метрик по группам, срез батча по группам и чистый <code>reset</code>
+            (пять из семи тестов падают на прежней реализации), честность калибровки
+            uplift (семь из девяти), сужение полезной нагрузки и поведение ранней
+            остановки на скоре, который не с чем сравнить (пять из семи). Параметризация намеренная: дефекты, ради которых они
+            написаны, присутствовали сразу в нескольких классах, и тест на один
+            класс написали бы для того, который и так был исправен.
+          </p>
+        </div>
+
+      </div>
+
+      <div class="callout">
+        <p>
+          <strong>От чего отказались.</strong> Переход на контракт
+          <code>torchmetrics</code> снят по решению владельца модуля. Аргументы за
+          него никуда не делись — декларативные накопители с
+          <code>dist_reduce_fx</code> сняли бы часть дефектов по построению, — но
+          цена миграции сочтена неоправданной. Вместо этого сужение полезной
+          нагрузки даёт основную часть выигрыша по трафику без смены фреймворка.
+        </p>
+      </div>
+    </section>
+
+    <section id="open">
+      <h2>3. Что осталось открытым</h2>
+
+      <div class="callout">
+        <p>
+          <strong>Ничего.</strong> Все пятнадцать находок закрыты, каждая —
+          тестом, который падает на прежней реализации. Воспроизводящий скрипт
+          больше не нужен и удалён: тест, который падает, стоит дороже скрипта,
+          который печатает.
+        </p>
+        <p>
+          Открытым остаётся один пункт, но он не находка, а опечатка в именах:
+          <code>GroupDevidedMetricsWrapper</code> и
+          <code>columns_to_devide</code> (правильно — divided).
+        </p>
+      </div>
+    </section>
+
+    <section id="dead">
+      <h2>4. Анализ мёртвого кода</h2>
+
+      <div class="callout">
+        <p>
+          <strong>Правило.</strong> Символ достижим, если его имя встречается
+          где-либо в репозитории вне собственного файла: в коде, в Hydra-конфиге, в
+          тесте, в документации. Правило переоценивает достижимость, поэтому ноль
+          ссылок — сильное свидетельство, а ненулевое число не доказывает ничего.
+        </p>
+      </div>
+
+      <h3>В <code>avatar.metrics</code> мёртвого кода не осталось</h3>
+
+      <p>
+        Из 13 имён в <code>__all__</code> восемь встречаются в рабочих конфигах или
+        в коде, а остальные — <code>ScalarMetric</code>,
+        <code>ArtifactMetric</code>, <code>ResponseMetrics</code>,
+        <code>RegressionMetrics</code>, <code>InferenceSupervisedMetrics</code>,
+        <code>GroupDevidedMetricsWrapper</code> — живут пока только в документации
+        и тестах. Первые два — базовые классы, и машинное правило помечает их
+        мёртвыми лишь потому, что не смотрит внутрь пакета. Остальные оставлены
+        сознательно: это тот минимум, который решено сохранить.
+      </p>
+
+      <div class="callout warn">
+        <p>
+          <strong>Побочный эффект чистки: осиротел multi-task.</strong> Удаление
+          примера multi_task забрало <strong>единственные рабочие конфиги</strong>
+          для <code>avatar.pipeline.multi_task</code>. Прямое следствие видно в
+          машинном отчёте: <code>MultiTaskLoss</code> из
+          <code>avatar.losses.multi_task</code> теперь не упоминается нигде, а
+          <code>WeightLossBalancer</code>, <code>UncertainlyLossBalancer</code> и
+          <code>PCGradBalancer</code> используются только внутри своего файла.
+        </p>
+        <p>
+          Сами классы <code>MMoE</code>, <code>PLE</code>,
+          <code>MMoEBackbone</code>, <code>PLEBackbone</code>,
+          <code>MLPExpert</code>, <code>TaskHead</code> остаются в коде и в тестах,
+          но показать их в работе больше нечем. Это следствие принятого решения, а
+          не ошибка — но если multi-task-постановка нужна, стоит вернуть пример,
+          переписав его метрики на <code>ResponseMetrics</code>.
+        </p>
+      </div>
+
+      <h3>Вне <code>avatar.metrics</code></h3>
+
+      <p>
+        Прежний список сократился: <code>check_columns_to_tensor</code>,
+        <code>BaseClassificationOutput</code>, <code>MMoeUpliftOutput</code> и
+        <code>dump_tabular_meta</code> по-прежнему не имеют ни одной ссылки — их
+        никто не просил трогать. К ним добавился <code>MultiTaskLoss</code> по
+        причине выше. Ещё около двадцати публичных символов используются только
+        внутри своего файла и по-хорошему должны стать приватными.
+      </p>
+    </section>
+
+    <section id="plan">
+      <h2>5. Порядок дальнейших работ</h2>
+
+      <ol class="plan">
+        <li><span>Переименовать <code>GroupDevidedMetricsWrapper</code> и <code>columns_to_devide</code> (правильно — divided) с шимом на один релиз, тем же приёмом, каким убрали шимы в <code>avatar.nn</code>. Класс не встречается ни в одном рабочем конфиге, так что цена минимальна.</span></li>
+        <li><span>Вернуть пример multi-task, если постановка нужна: пайплайн и его тесты на месте, но рабочего конфига для него в репозитории больше нет.</span></li>
+        <li><span>Добавить колонку <code>split_type</code> в валидационные наборы пилота — без неё калиброванные uplift-метрики не считаются вовсе, и это правильно, но и нежелательно.</span></li>
+      </ol>
+    </section>
+  </main>
+
+  <footer>
+    Исходники отчёта в репозитории: metrics_review.md · metrics_review_deadcode.txt
+  </footer>
+</div>

@@ -1,3 +1,5 @@
+"""Spark tabular preprocessing: label-encode, standardise, pack into two columns."""
+
 from __future__ import annotations
 
 from copy import deepcopy
@@ -93,7 +95,6 @@ class TabularPreprocessor(NumCatPipeline):
         Raises:
             ValueError: If neither categorical nor numerical columns were specified during initialization.
         """
-
         if identity_cols is not None:
             for col in identity_cols:
                 df = df.withColumn(f"source_{col}", F.col(col))
@@ -133,7 +134,6 @@ class TabularPreprocessor(NumCatPipeline):
             create_offset_only: If True, only calculates offsets without fitting
                                the label encoder and scaler (useful when they're pre-initialized).
         """
-
         if not create_offset_only:
             super().fit(df)
         # create offset_map
@@ -153,7 +153,6 @@ class TabularPreprocessor(NumCatPipeline):
         Returns:
             Transformed DataFrame as described in the transform method.
         """
-
         self.fit(df)
         df = self.transform(df, identity_cols)
         return df
@@ -169,7 +168,6 @@ class TabularPreprocessor(NumCatPipeline):
                   - Offset mapping
                   - Vocabulary size
         """
-
         dumped_state = deepcopy(super().dump())
         dumped_state.update({
             "spec_tokens": self.spec_tokens,
@@ -188,7 +186,6 @@ class TabularPreprocessor(NumCatPipeline):
         Returns:
             TabularPreprocessor: A new instance with the loaded state.
         """
-
         attr_dict = deepcopy(attr_dict)
         instance = super().load(attr_dict)
 

@@ -1,3 +1,5 @@
+"""Embeddings for event sequences."""
+
 from avatar.nn.embedding.sequential.base import (
     BaseEventSequenceEmbedding,
     BaseTemporalEmbedding,

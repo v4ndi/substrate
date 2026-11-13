@@ -1,8 +1,15 @@
+"""The configurable feed-forward block used by every head."""
+
 import torch
 from torch import nn
 
 
 def init_activation(activation: str) -> nn.Module:
+    """Resolve an activation by name.
+
+    Raises:
+        ValueError: The name is not a known activation.
+    """
     if activation == "relu":
         return nn.ReLU
     if activation == "selu":
@@ -15,6 +22,11 @@ def init_activation(activation: str) -> nn.Module:
 
 
 def init_normalization(normalization: str) -> nn.Module:
+    """Resolve a normalisation layer by name.
+
+    Raises:
+        ValueError: The name is not a known normalisation.
+    """
     assert normalization in ["layer_norm", "batch_norm"], (
         "Only layer_norm and batch_norm are supported"
     )
@@ -27,6 +39,12 @@ def init_normalization(normalization: str) -> nn.Module:
 
 
 class FeedForwardNetwork(nn.Module):
+    """The configurable feed-forward block used by every head.
+
+    Order of dropout, activation and normalisation is configurable because the
+    heads in this repository disagree about it, and both orders are in use.
+    """
+
     def __init__(
         self,
         input_dim: int,
@@ -41,11 +59,14 @@ class FeedForwardNetwork(nn.Module):
         activation_before_normalization: bool = False,
         need_output_linear: bool = True,
     ):
+        # ``None`` means "same as input_dim" and is resolved a few lines below,
+        # so it has to be tested before the comparison, not after it: the old
+        # order raised TypeError on the very value the docstring allows.
         assert input_dim > 0, "Input dimension must be greater than 0"
-        assert output_dim > 0 or output_dim is None, (
+        assert output_dim is None or output_dim > 0, (
             "Output dimension must be greater than 0"
         )
-        assert hidden_dim > 0 or hidden_dim is None, (
+        assert hidden_dim is None or hidden_dim > 0, (
             "Hidden dimension must be greater than 0"
         )
         assert need_output_linear or not end_normalization, (

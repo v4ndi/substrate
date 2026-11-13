@@ -1,3 +1,9 @@
+"""The backbone contract: hidden states in, hidden states out.
+
+A ``Protocol`` rather than a base class, so a HuggingFace model satisfies it
+without inheriting from anything of ours.
+"""
+
 from typing import Protocol, runtime_checkable
 
 import torch

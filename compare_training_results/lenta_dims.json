@@ -1,0 +1,12 @@
+{
+  "dataset": "lenta",
+  "num_numerical_features": 191,
+  "num_categorical_features": 2,
+  "vocab_size": 8,
+  "n_groups": 3,
+  "train_path": "/home/jovyan/rusakov/runs/compare_training/data/lenta_processed/train",
+  "valid_path": "/home/jovyan/rusakov/runs/compare_training/data/lenta_processed/valid",
+  "train_rows": 549732,
+  "valid_rows": 137297,
+  "shards": 16
+}

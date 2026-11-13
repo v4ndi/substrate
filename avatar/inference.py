@@ -1,80 +1,101 @@
-import datetime
+"""Inference entrypoint.
+
+    python -m avatar.inference --config-dir=configs --config-name=inference
+
+Multi-rank inference works the same way training does — launch it under
+``torchrun`` and give it a dataset that shards itself. A replicated dataset
+would have every rank score the same rows, so the metrics are computed on
+rank 0 only in that case.
+
+A config may set ``prepare_batch`` to a callable that rewrites each batch before
+it is scored; campaign inference uses it to sweep the (task x channel) matrix.
+"""
+
+from __future__ import annotations
+
 import os
 import warnings
 
 import hydra
 import torch
-from accelerate.utils import set_seed
 from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
-from tqdm import tqdm
 
-from avatar.accelerate_utils import init_accelerate
-from avatar.train import log_metrics
+from avatar.train.config import resolve_run_config
+from avatar.train.dist import DistEnv, seed_everything
+from avatar.train.evaluate import predict
+from avatar.train.utils import prefix_metrics
 
-os.environ["HYDRA_FULL_ERROR"] = "1"
-os.environ["NCCL_P2P_DISABLE"] = "1"
-os.environ["NCCL_IB_DISABLE"] = "1"
-os.environ["TORCHINDUCTOR_CACHE_DIR"] = (
-    f"/home/datalab/nfs/torchinductor_cache/cache_pid{os.getpid()}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S_%f')}"
-)
+os.environ.setdefault("HYDRA_FULL_ERROR", "1")
+
+
+def log_scores(mlflow_arguments: dict | None, scores: dict, prefix: str = "") -> None:
+    """Record inference scores as a standalone MLflow run."""
+    if not mlflow_arguments or not scores:
+        return
+    import mlflow
+
+    if mlflow_arguments.get("tracking_uri"):
+        mlflow.set_tracking_uri(mlflow_arguments["tracking_uri"])
+    if mlflow_arguments.get("experiment_name"):
+        mlflow.set_experiment(mlflow_arguments["experiment_name"])
+    with mlflow.start_run(run_name=mlflow_arguments.get("run_name")):
+        mlflow.log_metrics({
+            key: float(value)
+            for key, value in prefix_metrics(scores, prefix).items()
+            if isinstance(value, int | float) and not isinstance(value, bool)
+        })
 
 
 @hydra.main(version_base=None, config_path=".", config_name="inference")
-def main(config: DictConfig):
-    set_seed(42)
-    print(OmegaConf.to_yaml(config))
+def main(config: DictConfig) -> None:
+    """Load weights, score ``test_dataloader`` and report the metrics."""
+    run_config = resolve_run_config(config)
+    env = DistEnv.from_env(
+        backend=run_config.distributed.backend,
+        timeout_sec=run_config.distributed.timeout_sec,
+    )
+    seed_everything(42, rank=env.rank)
+    env.print(OmegaConf.to_yaml(config))
 
     model = instantiate(config["model"])
     test_dataloader = instantiate(config["test_dataloader"])
 
-    if "load_state" in config and config["load_state"] is not None:
-        load_state = config["load_state"]
-        model_state = torch.load(load_state)
-        model.load_state_dict(model_state, strict=True)
+    load_state = config.get("load_state")
+    if load_state is not None:
+        model.load_state_dict(
+            torch.load(load_state, map_location="cpu", weights_only=False), strict=True
+        )
     else:
         warnings.warn("\n\nNo load_state provided\n\n", stacklevel=2)
 
-    print(model)
+    env.print(model)
+    model = model.to(env.device)
 
-    inference(
-        config=config,
-        model=model,
-        test_dataloader=test_dataloader,
-    )
+    metrics = None
+    if "metrics" in config and config["metrics"] is not None:
+        metrics = instantiate(config["metrics"]["test_metrics"])
 
+    # Optional batch rewriting, the campaign sweep being the one that exists:
+    # see :class:`avatar.data.campaign.CampaignTaskChannelBatches`.
+    prepare_batch = None
+    if config.get("prepare_batch") is not None:
+        prepare_batch = instantiate(config["prepare_batch"])
 
-def inference(config, model, test_dataloader):
-    model.eval()
-    mlflow = (
-        config["mlflow"]
-        if ("mlflow" in config and config["mlflow"] is not None)
-        else None
-    )
-    accelerator = init_accelerate(
-        accelerate_arguments=config["accelerator"], mlflow_arguments=mlflow
-    )
-    if accelerator.num_processes > 1:
-        raise NotImplementedError("Distributed inference does not work yet")
-
-    model, test_dataloader = accelerator.prepare(model, test_dataloader)
-    progress_bar = tqdm(
-        test_dataloader,
-        desc="Inference: ",
-    )
-
-    metrics = instantiate(config["metrics"]["test_metrics"])
-    for batch in progress_bar:
-        with torch.inference_mode():
-            output = model(**batch)
-            metrics.update(
-                inputs=batch,
-                outputs=output,
+    try:
+        scores = predict(
+            model, test_dataloader, env, metrics, prepare_batch=prepare_batch
+        )
+        if env.is_main and scores:
+            env.print(scores)
+            mlflow_arguments = (
+                OmegaConf.to_container(config["mlflow"])
+                if "mlflow" in config and config["mlflow"] is not None
+                else None
             )
-
-    scores = metrics.compute()
-    if mlflow:
-        log_metrics(accelerator, scores, 0, prefix="val_")
+            log_scores(mlflow_arguments, scores, prefix="val_")
+    finally:
+        env.destroy()
 
 
 if __name__ == "__main__":

@@ -27,7 +27,7 @@ class LinearEmbeddings(nn.Module):
     - Input: `(*, n_features)`
     - Output: `(*, n_features, d_embedding)`
 
-    Examples
+    Examples:
     >>> batch_size = 2
     >>> n_cont_features = 3
     >>> x = torch.randn(batch_size, n_cont_features)
@@ -38,10 +38,14 @@ class LinearEmbeddings(nn.Module):
     """
 
     def __init__(self, n_features: int, hidden_size: int) -> None:
-        """
+        """Give each continuous feature its own projection.
+
         Args:
-            n_features: the number of continuous features.
-            hidden_size: the embedding size.
+            n_features: The number of continuous features.
+            hidden_size: The embedding size.
+
+        Raises:
+            ValueError: ``n_features`` or ``hidden_size`` is not positive.
         """
         if n_features <= 0:
             raise ValueError(f"n_features must be positive, however: {n_features=}")
@@ -102,6 +106,7 @@ class HashEmbedding(nn.Module):
 
     def _get_embed(self, hashes: list[torch.Tensor]):
         """Averages the embeddings for the given hashes.
+
         Args:
             hashes (list[torch.Tensor]): List of hash indices.
 

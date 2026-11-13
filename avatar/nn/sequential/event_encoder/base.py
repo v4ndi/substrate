@@ -1,9 +1,11 @@
+"""The event-encoder contract."""
+
 from typing import Literal
 
 import torch
 import torch.nn as nn
 
-from avatar.data.event_seq_batch import EventSequenceBatch
+from avatar.data.sequential.batch import EventSequenceBatch
 from avatar.nn.embedding import (
     BaseEventSequenceEmbedding,
     BaseTemporalEmbedding,
@@ -17,7 +19,7 @@ class BaseEventEncoder(nn.Module):
     Applies ``embedding`` to the raw features, optionally adds a positional
     embedding, and optionally appends a time-encoding channel.
 
-    Attributes
+    Attributes:
     ----------
     embedding : BaseEventSequenceEmbedding
         The base event sequence embedding.

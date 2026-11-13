@@ -1,3 +1,5 @@
+"""Transformer building blocks for the tabular encoder."""
+
 import torch
 import torch.nn as nn
 

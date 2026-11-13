@@ -1,3 +1,5 @@
+"""Samplers that filter records by column values."""
+
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -27,7 +29,7 @@ class ColumnFilterSampler(BaseSampler):
     allowed_values: tuple[any]
         List of allowed values
 
-    Raises
+    Raises:
     ------
     AssertionError
         If both `min_value`, `max_value`, `allowed_values` are `None`.
@@ -36,7 +38,7 @@ class ColumnFilterSampler(BaseSampler):
     ValueError
         If both bounds are `None` when evaluating the condition.
 
-    Notes
+    Notes:
     -----
     - This sampler assumes each yielded item from `self.dataset_iterator` is a
       mapping or object accessible via `sample[column]`. Adjust access if your
@@ -44,7 +46,7 @@ class ColumnFilterSampler(BaseSampler):
     - If integrating with PyTorch `DataLoader`, typical samplers yield indices
       rather than sample payloads; adapt `__iter__` accordingly in that case.
 
-    Examples
+    Examples:
     --------
     Filter by an integer range:
         min_value=10, max_value=20 includes values in [10, 20].
@@ -96,53 +98,13 @@ class ColumnFilterSampler(BaseSampler):
                 continue
 
 
-class ColumnsFilterSampler(BaseSampler):
-    def __init__(self, filters: dict[str, list[Any | None]]):
-        """Filter samples by a column with optional min/max inclusive bounds.
-        Args:
-            filters: dict where
-                key = column name (str)
-                value = [min_value, max_value], where each Any | None
-        Raises:
-            AssertionError
-                If both bounds are provided and `min_value` is not less than or equal to `max_value`.
-                If for rule there are more than 2 bounds.
-            ValueError
-                If both bounds are `None` when evaluating the condition.
-        Examples:
-            ColumnsFilterSampler({age: [18, 65], height=[None, 150]})
-        """
-        super().__init__()
-        self.filters = filters
-
-    def _check_condition(self, data, min_max_values):
-        assert len(min_max_values) == 2, "too many bounds for col"
-        min_value, max_value = min_max_values[0], min_max_values[1]
-        assert min_value <= max_value, "min_value must be less or equal than max_value"
-
-        if min_value is not None and max_value is not None:
-            return data >= min_value and data <= max_value
-        elif min_value is not None and max_value is None:
-            return data >= min_value
-        elif min_value is None and max_value is not None:
-            return data <= max_value
-        else:
-            raise ValueError("min_value and max_value cannot be both None")
-
-    def __iter__(self):
-        for data in self.dataset_iterator:
-            if self.filters is None:
-                yield data
-            elif all(
-                self._check_condition(data=data[col], min_max_values=min_max_values)
-                for col, min_max_values in self.filters.items()
-            ):
-                yield data
-            else:
-                continue
-
-
 class MultiTaskColumnsFilterSampler(BaseSampler):
+    """Filter on several columns at once, for multi-task datasets.
+
+    Special-cased by the datasets: its decisions define which records exist at
+    all, so the scan applies it once and it does not run again during iteration.
+    """
+
     def __init__(
         self,
         task_name_column: str,
@@ -155,6 +117,8 @@ class MultiTaskColumnsFilterSampler(BaseSampler):
         ``[min, max]`` rules remain supported for backwards compatibility.
 
         Args:
+            task_name_column: Column naming the task each record belongs to;
+                its value selects which entry of ``filters`` applies.
             filters: dict where
                 key = task name (str)
                     key = column name (str)

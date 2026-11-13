@@ -1,28 +1,44 @@
+"""The tabular embedding: categorical ids and numeric values to feature tokens.
+
+Categorical columns share one table, indexed by the cumulative-offset ids the
+preprocessor emits, which is why ``vocab_size`` is a single number across all
+of them.
+"""
+
 import torch
 import torch.nn as nn
 
-from avatar.data.tabular_batch import TabularBatch
+from avatar.data.tabular.batch import TabularBatch
 from avatar.nn.embedding.tabular.base import BaseTabularEmbedding
 from avatar.nn.embedding.tabular.hidden_state_agg import BaseHiddenStateAggregator
 from avatar.nn.embedding.tabular.numeric import NumericFeatureEmbedding
 
 
 class TabularEmbedding(BaseTabularEmbedding):
-    """Embedding for tabular data
-    Args:
-        num_numerical_features (int): total number of numerical features
-        vocab_size (int): total number of unique categorical values + special tokens like 'unk'
-        hidden_size (int): hidden size of the embedding
-        std_noise (float): standard deviation of the noise
-        nn_embedding_config: additional kwargs for nn.Embedding
-        hidden_state_aggregator (Optional[BaseHiddenStateAggregator]):
-            Additional module for combining tabular embeddings with extrenal hidden states
-        numerical_embedding: embedding for not Nan numerical features
-        num_embedding: embedding for all numerical features
-        use_null_embedding (bool): whether to use null embedding for numerical features
+    """Embed a tabular batch into one token per feature.
 
-    If you have only categorical features, you can set num_numerical_features to None,
-    if only numerical features you can set vocab_size to None
+    All categorical columns share a single embedding table, indexed by the
+    cumulative-offset ids the preprocessor emits — which is why ``vocab_size``
+    is one number rather than one per column.
+
+    Either family may be absent: pass ``num_numerical_features=None`` for a
+    purely categorical table, or ``vocab_size=None`` for a purely numeric one.
+
+    Args:
+        num_numerical_features: How many numeric features, or None if there
+            are none.
+        vocab_size: Size of the shared categorical table, including special
+            tokens such as ``unk``. None if there are no categorical features.
+        hidden_size: Width of each feature token.
+        std_noise: Standard deviation of Gaussian noise added to numeric
+            features during training; None disables it.
+        nn_embedding_config: Extra keyword arguments for ``nn.Embedding``.
+        hidden_state_aggregator: How an external client embedding joins the
+            tokens — see :mod:`avatar.nn.embedding.tabular.hidden_state_agg`.
+        numerical_embedding: Embedding applied to non-NaN numeric features.
+        num_embedding: Embedding applied to all numeric features.
+        use_null_embedding: Give NaN numeric values their own learned vector
+            instead of dropping them to zero.
     """
 
     def __init__(
@@ -61,12 +77,17 @@ class TabularEmbedding(BaseTabularEmbedding):
         self.hidden_state_aggregator = hidden_state_aggregator
 
     def forward(self, tab_features: TabularBatch) -> torch.FloatTensor:
-        """
+        """Embed the batch into feature tokens.
+
         Args:
-            tab_features: TabularBatch
-            tab_features.cat_features.shape = (batch_size, n_cat_features)
-            tab_features.num_features.shape = (batch_size, m_num_features)
-            tab_features.hidden_states.shape = (batch_size, hidden_size)
+            tab_features: Batch with ``cat_features``
+                ``(batch_size, n_cat_features)``, ``num_features``
+                ``(batch_size, n_num_features)`` and optional ``hidden_states``.
+
+        Returns:
+            ``(batch_size, n_features, hidden_size)``, where ``n_features`` is
+            the sum of both families plus any token the hidden-state aggregator
+            added.
         """
         cat_features = tab_features.cat_features
         num_features = tab_features.num_features

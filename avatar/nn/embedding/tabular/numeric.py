@@ -1,3 +1,5 @@
+"""Per-feature embedding of standardised numeric columns."""
+
 import torch
 import torch.nn as nn
 from torch import Tensor

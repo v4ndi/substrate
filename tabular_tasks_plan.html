@@ -1,0 +1,1220 @@
+<title>Четыре табличные задачи</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=JetBrains+Mono:wght@400;500;700&display=swap">
+
+<style>
+  :root {
+    --paper: #fbfbfc;
+    --surface: #ffffff;
+    --sunken: #f2f3f6;
+    --ink: #161a20;
+    --ink-soft: #3d4450;
+    --muted: #6b7280;
+    --rule: #e0e3e9;
+    --rule-soft: #eceef2;
+    --accent: #2f5d8a;
+    --accent-soft: #e8eff6;
+    --ok: #2c6e4f;
+    --ok-soft: #e6f1ea;
+    --bad: #a8382f;
+    --bad-soft: #fae9e7;
+    --warn: #8a6212;
+    --warn-soft: #f7eedb;
+    --shadow: 0 1px 2px rgba(22, 26, 32, .05), 0 8px 24px -12px rgba(22, 26, 32, .16);
+
+    --display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+    --body: "Source Serif 4", Georgia, "Times New Roman", serif;
+    --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #11141a;
+      --surface: #171b22;
+      --sunken: #1d222b;
+      --ink: #e7eaef;
+      --ink-soft: #c2c8d2;
+      --muted: #8b93a1;
+      --rule: #2a303a;
+      --rule-soft: #222831;
+      --accent: #7fa9d3;
+      --accent-soft: #1b2733;
+      --ok: #6bbd91;
+      --ok-soft: #16261e;
+      --bad: #e2857b;
+      --bad-soft: #2a1a18;
+      --warn: #d5ab5c;
+      --warn-soft: #262016;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -12px rgba(0, 0, 0, .7);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --paper: #11141a;
+    --surface: #171b22;
+    --sunken: #1d222b;
+    --ink: #e7eaef;
+    --ink-soft: #c2c8d2;
+    --muted: #8b93a1;
+    --rule: #2a303a;
+    --rule-soft: #222831;
+    --accent: #7fa9d3;
+    --accent-soft: #1b2733;
+    --ok: #6bbd91;
+    --ok-soft: #16261e;
+    --bad: #e2857b;
+    --bad-soft: #2a1a18;
+    --warn: #d5ab5c;
+    --warn-soft: #262016;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -12px rgba(0, 0, 0, .7);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 17px;
+    line-height: 1.62;
+    margin: 0;
+    padding-block: 0 72px;
+    padding-inline: 20px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 860px; margin: 0 auto; }
+  .prose { max-width: 680px; }
+
+  /* ---------- masthead ---------- */
+
+  header.mast {
+    padding-block: 56px 32px;
+    border-bottom: 2px solid var(--ink);
+    margin-bottom: 44px;
+  }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    font-weight: 500;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 18px;
+  }
+
+  h1 {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: clamp(2.1rem, 6.2vw, 3.1rem);
+    line-height: 1.06;
+    letter-spacing: -.022em;
+    margin: 0 0 20px;
+    text-wrap: balance;
+  }
+
+  .standfirst {
+    font-size: 1.14rem;
+    color: var(--ink-soft);
+    max-width: 620px;
+    margin: 0 0 30px;
+  }
+
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 26px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .meta b { color: var(--ink); font-weight: 500; }
+
+  /* ---------- sections ---------- */
+
+  section { margin-bottom: 64px; scroll-margin-top: 24px; }
+
+  h2 {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 1.62rem;
+    letter-spacing: -.014em;
+    line-height: 1.2;
+    margin: 0 0 8px;
+    text-wrap: balance;
+  }
+
+  h2 .num {
+    font-family: var(--mono);
+    font-size: .7em;
+    font-weight: 500;
+    color: var(--accent);
+    margin-right: .6em;
+  }
+
+  h3 {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 1.12rem;
+    letter-spacing: -.006em;
+    margin: 36px 0 10px;
+  }
+
+  .lede {
+    color: var(--muted);
+    font-size: .98rem;
+    margin: 0 0 26px;
+    max-width: 640px;
+  }
+
+  p { margin: 0 0 16px; }
+  a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+
+  code {
+    font-family: var(--mono);
+    font-size: .84em;
+    background: var(--sunken);
+    border-radius: 3px;
+    padding: .1em .35em;
+  }
+
+  strong { font-weight: 600; }
+
+  /* ---------- verdict board ---------- */
+
+  .board {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+    margin-bottom: 30px;
+  }
+
+  .task {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 5px;
+    padding: 18px 18px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .task[data-state="ok"] { border-left: 3px solid var(--ok); }
+  .task[data-state="bad"] { border-left: 3px solid var(--bad); }
+  .task[data-state="warn"] { border-left: 3px solid var(--warn); }
+
+  .task h4 {
+    font-family: var(--display);
+    font-size: 1.02rem;
+    font-weight: 600;
+    margin: 0;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .chip {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    padding: 3px 7px;
+    border-radius: 3px;
+    white-space: nowrap;
+  }
+  .chip.ok { background: var(--ok-soft); color: var(--ok); }
+  .chip.bad { background: var(--bad-soft); color: var(--bad); }
+  .chip.warn { background: var(--warn-soft); color: var(--warn); }
+
+  .stack {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    line-height: 1.75;
+    color: var(--muted);
+    margin: 0;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0 12px;
+  }
+  .stack dt { color: var(--muted); opacity: .7; }
+  .stack dd { margin: 0; color: var(--ink-soft); overflow-wrap: anywhere; }
+
+  .task p { margin: 0; font-size: .93rem; color: var(--ink-soft); }
+
+  /* ---------- evidence ---------- */
+
+  pre {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.62;
+    background: var(--sunken);
+    border: 1px solid var(--rule-soft);
+    border-radius: 5px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    margin: 0 0 18px;
+  }
+  pre code { background: none; padding: 0; font-size: inherit; }
+
+  .fail { color: var(--bad); font-weight: 500; }
+  .pass { color: var(--ok); font-weight: 500; }
+  .note { color: var(--muted); }
+
+  figure { margin: 0 0 26px; }
+  figcaption {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+
+  /* ---------- tables ---------- */
+
+  .scroll { overflow-x: auto; margin: 0 0 24px; }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-family: var(--display);
+    font-size: 14px;
+    min-width: 520px;
+  }
+  th, td {
+    text-align: left;
+    padding: 9px 14px 9px 0;
+    border-bottom: 1px solid var(--rule-soft);
+    vertical-align: top;
+  }
+  th {
+    font-weight: 600;
+    font-size: 11px;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border-bottom: 1px solid var(--rule);
+  }
+  td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  tbody tr:last-child td { border-bottom: none; }
+
+  /* ---------- fix list ---------- */
+
+  .fix {
+    border-top: 1px solid var(--rule);
+    padding-top: 20px;
+    margin-top: 28px;
+  }
+  .fix:first-of-type { border-top: none; }
+
+  .fix-head {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+  }
+  .tag {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--surface);
+    background: var(--ink);
+    padding: 2px 7px;
+    border-radius: 3px;
+  }
+  .fix-head h3 { margin: 0; font-size: 1.08rem; }
+  .fix-head .where {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--muted);
+  }
+
+  /* ---------- config diff ---------- */
+
+  .configs {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+  }
+  .config {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 5px;
+    overflow: hidden;
+  }
+  .config header {
+    padding: 11px 15px;
+    border-bottom: 1px solid var(--rule-soft);
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+  }
+  .config header span:first-child {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: .95rem;
+  }
+  .config header span:last-child {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--muted);
+  }
+  .config pre {
+    margin: 0;
+    border: none;
+    border-radius: 0;
+    background: none;
+    font-size: 11.8px;
+  }
+  .k { color: var(--accent); }
+  .hl { background: var(--accent-soft); border-radius: 2px; padding: 0 2px; }
+
+  /* ---------- ordered work ---------- */
+
+  ol.work {
+    list-style: none;
+    counter-reset: step;
+    padding: 0;
+    margin: 0;
+  }
+  ol.work li {
+    counter-increment: step;
+    display: grid;
+    grid-template-columns: 34px 1fr;
+    gap: 14px;
+    padding: 13px 0;
+    border-bottom: 1px solid var(--rule-soft);
+    align-items: start;
+  }
+  ol.work li::before {
+    content: counter(step, decimal-leading-zero);
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--accent);
+    padding-top: 4px;
+  }
+  ol.work li:last-child { border-bottom: none; }
+  ol.work b { font-family: var(--display); font-weight: 600; }
+
+  ul.plain { padding-left: 1.1em; margin: 0 0 16px; }
+  ul.plain li { margin-bottom: 9px; }
+
+  .callout {
+    background: var(--accent-soft);
+    border-radius: 5px;
+    padding: 18px 20px;
+    margin: 0 0 24px;
+  }
+  .callout p:last-child { margin-bottom: 0; }
+
+  .tree {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.85;
+    background: var(--sunken);
+    border: 1px solid var(--rule-soft);
+    border-radius: 5px;
+    padding: 16px 18px;
+    overflow-x: auto;
+    margin: 0 0 22px;
+  }
+  .tree .dir { color: var(--accent); font-weight: 500; }
+  .tree .cmt { color: var(--muted); }
+
+  footer {
+    border-top: 1px solid var(--rule);
+    padding-top: 22px;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--muted);
+    line-height: 1.9;
+  }
+
+  @media (max-width: 700px) {
+    body { font-size: 16px; }
+    .board, .configs { grid-template-columns: 1fr; }
+    header.mast { padding-block: 36px 26px; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="mast">
+    <p class="eyebrow">avatar_fm · feat/tabular-four-tasks · сделано</p>
+    <h1>Четыре табличные задачи</h1>
+    <p class="standfirst">
+      Uplift, response, регрессия и многоклассовая классификация — четырьмя
+      конфигами поверх <code>TabularTransformer</code>. Работала одна
+      постановка из четырёх; теперь работают все, на открытых данных, вместе с
+      инференсом и примером.
+    </p>
+    <div class="meta">
+      <span><b>Работает</b> 4 из 4</span>
+      <span><b>Закрыто дефектов</b> 5, из них 2 не были видны в плане</span>
+      <span><b>Тестов</b> 574, было 504</span>
+      <span><b>Коммитов</b> 5</span>
+    </div>
+  </header>
+
+  <section id="done">
+    <h2><span class="num">✓</span>Что сделано</h2>
+    <p class="lede">
+      Порядок работ из плана пройден целиком. Ниже — исходный разбор, а рядом с
+      каждым пунктом то, чем он закончился.
+    </p>
+
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr><th>шаг</th><th>что вышло</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><b>F1 + F2</b> согласование формы головы и таргета</td><td><code>ClassificationLoss.align</code>, 7 тестов, 5 из них падают на прежней реализации</td></tr>
+          <tr><td><b>F4</b> MAPE на нулевых таргетах</td><td>считается по ненулевым, доля пропущенных в лог; добавлены <code>rmse</code> и <code>r2</code></td></tr>
+          <tr><td><b>F3</b> метрики multi-class</td><td><code>MultiClassMetrics</code>, 12 тестов; двумерная колонка раскладывается в submit-файле</td></tr>
+          <tr><td><b>prepare_data.py</b></td><td>четыре набора из трёх открытых датасетов, smoke и full</td></tr>
+          <tr><td><b>Четыре конфига</b></td><td>все четыре прогнаны, smoke и полный масштаб</td></tr>
+          <tr><td><b>F5</b> многоклассовый инференс</td><td><code>task_type: multi_clf</code>, четыре <code>*_inference.yaml</code>, все отработали</td></tr>
+          <tr><td><b>README и docs</b></td><td>README примера; исправлены два фрагмента в <code>docs/</code>, которые не работали</td></tr>
+          <tr><td><b>Полные прогоны</b></td><td>Lenta и Covertype: MAE 1.92 → 1.14, balanced accuracy 0.385 → 0.575</td></tr>
+          <tr><td><b>F6 + F7</b></td><td><code>SupervisedLearner</code> переживает инференс; <code>SLearnerExp</code> переименован, 20 мёртвых regex-строк починены</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Два дефекта, которых в плане не было</h3>
+    <p class="prose">
+      Оба нашлись на первом же запуске и оба — один класс ошибки: колонка,
+      у которой исходное имя совпадает с целевым, удалялась после того, как из
+      неё построили тензор.
+    </p>
+    <pre><code>TypeError: ones_like(): argument 'input' (position 1) must be Tensor, not NoneType</code></pre>
+    <p class="prose">
+      <code>UpliftCollateFn(group_column="group")</code> писал тензор под ключ
+      <code>group</code> и затем удалял <code>group</code>, отдавая модели
+      <code>None</code>. То же делал <code>SupervisedCollateFn</code> с
+      <code>add_extra_columns: {group: group}</code>. Имя не случайное: метрики
+      объявляют <code>group</code> в <code>required_inputs</code>, то есть это
+      единственное имя, которое до них доезжает. Ровно этот дефект был уже
+      понят и починен классом ниже в том же файле — для <code>task_name</code>.
+    </p>
+    <p class="prose">
+      Второй: инференс падал на <code>can't convert cuda:0 device type tensor
+      to numpy</code>, как только колонку группы переименовывали в
+      <code>target_attr_2</code>, — коллектор предсказаний не ожидал, что
+      колонка-идентификатор может приехать тензором с устройства.
+    </p>
+
+    <h3>Что получилось на данных</h3>
+    <p class="prose">
+      Десять эпох, ранняя остановка с <code>patience: 3</code>, модель из двух
+      слоёв шириной 64. Лучшее значение главной метрики за прогон.
+    </p>
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr><th>задача</th><th>главная метрика</th><th>smoke ~20k</th><th>full</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>uplift</td><td><code>mean_calibrated_qini_auc_score</code></td><td class="num">0.081</td><td class="num">0.068</td></tr>
+          <tr><td>response</td><td><code>mean_roc_auc_score</code></td><td class="num">0.647</td><td class="num">0.632</td></tr>
+          <tr><td>регрессия</td><td><code>mean_mae</code>, меньше — лучше</td><td class="num">1.92</td><td class="num"><b>1.14</b></td></tr>
+          <tr><td>multi-class</td><td><code>mean_balanced_accuracy</code></td><td class="num">0.385</td><td class="num"><b>0.575</b></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="prose">
+      Две задачи, у которых smoke-выборка была в тридцать раз меньше полной, от
+      полных данных заметно выигрывают. Две другие живут на Hillstrom, где и
+      полный набор — 64 000 строк. Это числа отладочного масштаба: они
+      показывают, что связка «конфиг → пайплайн → метрика» работает и что данные
+      в неё приходят осмысленные.
+    </p>
+
+    <div class="callout">
+      <p>
+        Ветка <code>feat/tabular-four-tasks</code>, пять коммитов. Пример —
+        <code>examples/tabular_tasks/</code>: скрипт выгрузки, восемь конфигов,
+        README.
+      </p>
+    </div>
+  </section>
+
+  <section id="verdict">
+    <h2><span class="num">00</span>Вердикт, с которого всё началось</h2>
+    <p class="lede">
+      Разбор до работ. Каждая строка была проверена запуском, а не чтением
+      кода: собрана модель на игрушечных данных, прогнан forward, результат
+      отдан метрике ровно так, как это делает
+      <code>avatar.train.evaluate</code>. Всё описанное ниже закрыто.
+    </p>
+
+    <div class="board">
+      <div class="task" data-state="ok">
+        <h4>uplift <span class="chip ok">работает</span></h4>
+        <dl class="stack">
+          <dt>пайплайн</dt><dd>uplift.SLearner</dd>
+          <dt>батч</dt><dd>UpliftCollateFn</dd>
+          <dt>метрика</dt><dd>UpliftMetrics</dd>
+        </dl>
+        <p>
+          Есть рабочий пример. Не хватает только колонки <code>split_type</code>
+          в валидации — без неё калиброванные метрики не считаются.
+        </p>
+      </div>
+
+      <div class="task" data-state="bad">
+        <h4>response <span class="chip bad">не работает</span></h4>
+        <dl class="stack">
+          <dt>пайплайн</dt><dd>TabularClassification</dd>
+          <dt>батч</dt><dd>SupervisedCollateFn</dd>
+          <dt>метрика</dt><dd>ResponseMetrics</dd>
+        </dl>
+        <p>
+          Ни одним способом. В форме <code>num_classes: 1</code> не обучается,
+          в форме <code>num_classes: 2</code> не измеряется.
+        </p>
+      </div>
+
+      <div class="task" data-state="warn">
+        <h4>регрессия <span class="chip warn">учится не тому</span></h4>
+        <dl class="stack">
+          <dt>пайплайн</dt><dd>TabularClassification</dd>
+          <dt>батч</dt><dd>SupervisedCollateFn</dd>
+          <dt>метрика</dt><dd>RegressionMetrics</dd>
+        </dl>
+        <p>
+          Прогон идёт, числа появляются. Лосс при этом считается по всем парам
+          «предсказание × чужой таргет».
+        </p>
+      </div>
+
+      <div class="task" data-state="bad">
+        <h4>multi-class <span class="chip bad">нечем мерить</span></h4>
+        <dl class="stack">
+          <dt>пайплайн</dt><dd>TabularClassification</dd>
+          <dt>батч</dt><dd>SupervisedCollateFn</dd>
+          <dt>метрика</dt><dd>—</dd>
+        </dl>
+        <p>
+          Лосс корректен. Метрики многоклассовой классификации в
+          <code>avatar.metrics</code> нет вообще.
+        </p>
+      </div>
+    </div>
+
+    <div class="callout">
+      <p>
+        Это было не «нужно написать четыре конфига». Это было «нужно починить
+        три дефекта и написать одну метрику» — и только тогда конфиги станут
+        возможны. Дефектов оказалось пять: два вскрылись на первом запуске.
+      </p>
+    </div>
+
+    <h3>Response: в одной форме не учится, в другой не измеряется</h3>
+    <p class="prose">
+      Голова на один логит даёт <code>(B, 1)</code>, а collate отдаёт таргеты
+      <code>(B,)</code>:
+    </p>
+    <pre><code><span class="fail">[FAIL]</span> binary, num_classes=1: ValueError: Target size (torch.Size([64]))
+       must be the same as input size (torch.Size([64, 1]))</code></pre>
+    <p class="prose">
+      Обходной путь — <code>num_classes: 2</code> и <code>CrossEntropyLoss</code>,
+      как написано в <code>docs/getting_started.md</code>, — обучается, но не
+      считается: <code>ResponseMetrics.predictions</code> делает
+      <code>sigmoid(logits).squeeze(1)</code> и ждёт ровно один столбец.
+    </p>
+    <pre><code><span class="fail">[FAIL]</span> binary, num_classes=2 + ResponseMetrics:
+       ValueError: y should be a 1d array, got an array of shape (64, 2) instead.</code></pre>
+
+    <h3>Регрессия: хуже, потому что молча</h3>
+    <p class="prose">
+      <code>MSELoss</code> получает <code>(B, 1)</code> и <code>(B,)</code>,
+      броадкастит их в <code>(B, B)</code> и считает среднюю ошибку по всем
+      парам. Градиент тянет каждое предсказание к среднему таргету батча, а не
+      к своему. Единственный признак — <code>UserWarning</code> от torch в логе.
+    </p>
+    <figure>
+      <figcaption>шесть записей, один батч</figcaption>
+      <pre><code>лосс, как считается сегодня = 2.052790
+лосс по всем B×B парам      = 2.052790   <span class="note">← то же самое число</span>
+лосс, который имелся в виду = 1.397575
+
+градиент сегодня    : [ 0.530, -0.081, -0.710,  0.206, -0.345, -0.450]
+градиент правильный : [ 0.379, -0.377, -0.487,  0.324, -0.163, -0.527]</code></pre>
+    </figure>
+
+    <h3>Multi-class: лосс есть, метрики нет</h3>
+    <pre><code><span class="pass">[OK]</span>   multiclass K=5, targets long (B,): logits=(8, 5) loss=1.8050
+<span class="fail">[FAIL]</span> multiclass K=5 + ResponseMetrics: ValueError: multi_class must be in ('ovo', 'ovr')</code></pre>
+    <p class="prose">
+      В <code>avatar.metrics</code> есть <code>ResponseMetrics</code>,
+      <code>RegressionMetrics</code>, <code>UpliftMetrics</code> и два
+      инференс-коллектора. И всё.
+    </p>
+  </section>
+
+  <section id="data">
+    <h2><span class="num">01</span>Данные: выгрузка и препроцессинг</h2>
+    <p class="lede">
+      Внутренние данные на машине недоступны, поэтому примеры строятся на
+      открытых датасетах. Все три источника проверены — скачиваются и читаются.
+    </p>
+
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr><th>датасет</th><th>строк</th><th>признаки</th><th>откуда</th><th>выгружен</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><b>Hillstrom</b></td><td class="num">64 000</td>
+            <td>2 числовых + 6 категориальных</td>
+            <td><code>sklift.fetch_hillstrom</code></td><td>да</td>
+          </tr>
+          <tr>
+            <td><b>Lenta</b></td><td class="num">687 029</td>
+            <td>191 числовой + 2 категориальных</td>
+            <td><code>sklift.fetch_lenta</code></td><td>да</td>
+          </tr>
+          <tr>
+            <td><b>Covertype</b></td><td class="num">581 012</td>
+            <td>10 непрерывных + 44 бинарных</td>
+            <td><code>sklearn.fetch_covtype</code></td><td>качается</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="prose">
+      Hillstrom и Lenta уже лежат в
+      <code>/home/jovyan/rusakov/runs/compare_training/data/</code> — их
+      выгружали для отчёта о сравнении обучения. Скрипты
+      <code>compare_training_scripts/download_data.py</code> и
+      <code>build_dataset.py</code> — рабочий прототип всего этого шага; новый
+      скрипт делается из них.
+    </p>
+
+    <h3>Какой датасет под какую задачу</h3>
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr><th>задача</th><th>датасет</th><th>таргет</th><th>что за число</th><th>группа</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>uplift</td><td>Hillstrom → Lenta</td>
+            <td><code>visit</code> / <code>response_att</code></td>
+            <td class="num">16.7% ЦГ vs 10.6% КГ</td>
+            <td><code>channel</code></td>
+          </tr>
+          <tr>
+            <td>response</td><td>те же</td><td>тот же, воздействие игнорируется</td>
+            <td class="num">—</td><td><code>channel</code></td>
+          </tr>
+          <tr>
+            <td>регрессия</td><td>Lenta</td>
+            <td><code>log1p(sale_sum_12m_g24)</code></td>
+            <td class="num">82% ненулевых, max 743 228</td>
+            <td><code>main_format</code></td>
+          </tr>
+          <tr>
+            <td>multi-class</td><td>Covertype</td><td><code>Cover_Type</code></td>
+            <td class="num">7 классов, 0.5% … 48.8%</td><td>нет</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="prose">Три вещи лучше знать заранее, чем выяснить на прогоне:</p>
+    <ul class="plain prose">
+      <li>
+        <strong><code>spend</code> из Hillstrom не годится под регрессию:</strong>
+        99.1% нулей, ненулевых всего 578 строк. Поэтому взят плотный денежный
+        таргет из Lenta — а семейство колонок <code>*_g24</code> обязано уйти из
+        признаков, иначе таргет предсказывается сам из себя.
+      </li>
+      <li>
+        <strong>Covertype несбалансирован</strong> — класс 4 это 2 747 строк из
+        581 012 против 48.8% у класса 2. Аргумент за
+        <code>balanced_accuracy</code> и macro-F1 как главные числа, а не за
+        accuracy.
+      </li>
+      <li>
+        <strong>В Lenta колонка воздействия называется <code>group</code></strong>
+        (значения <code>test</code> / <code>control</code>) — ровно то имя, под
+        которым метрики ждут группу кампании. Скрипт подготовки обязан
+        переименовать, иначе всё соберётся и посчитает не то.
+      </li>
+    </ul>
+
+    <p class="prose">
+      Каждая задача получает два масштаба: <b>smoke</b> — выборка ~20 000 строк,
+      прогон минуты на CPU, это то, что запускается из примера, — и <b>full</b>
+      на всём датасете.
+    </p>
+
+    <h3>Раскладка колонок</h3>
+    <p class="prose">
+      Общая для всех четырёх задач, чтобы конфиги отличались только там, где
+      отличаются задачи.
+    </p>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>колонка</th><th>тип</th><th>кто читает</th></tr></thead>
+        <tbody>
+          <tr><td><code>epk_id</code></td><td class="num">int64</td><td>метрики, submit-файл</td></tr>
+          <tr><td><code>target</code></td><td class="num">int64 / float32</td><td><code>collate_fn.target_column</code></td></tr>
+          <tr><td><code>treatment</code></td><td class="num">int64, 1 = контроль</td><td><code>UpliftCollateFn</code>, только uplift</td></tr>
+          <tr><td><code>group</code></td><td class="num">int64</td><td>все метрики считаются по группам</td></tr>
+          <tr><td><code>split_type</code></td><td class="num">string</td><td>калибровка uplift, разделение срезов</td></tr>
+          <tr><td><code>cat_features</code></td><td class="num">list&lt;int64&gt;</td><td><code>TabularDataset</code></td></tr>
+          <tr><td><code>num_features</code></td><td class="num">list&lt;float32&gt;</td><td><code>TabularDataset</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="prose">
+      Имена <code>group</code> и <code>split_type</code> — не косметика:
+      <code>narrow_for_metrics</code> оставляет в батче ровно то, что метрика
+      объявила в <code>required_inputs</code>, а там записано буквально
+      <code>("epk_id", "group", "is_treat", "targets", "split_type")</code>.
+      Колонка с другим именем до метрики не доедет.
+    </p>
+
+    <h3>split_type: то, чего не хватало uplift-примеру</h3>
+    <p class="prose">
+      Валидация делится пополам, стратифицированно по
+      <span style="white-space:nowrap">(группа, воздействие, таргет)</span>:
+      <code>calib</code> — на нём подгоняются бета-калибраторы,
+      <code>test</code> — на нём и только на нём отчитываются калиброванные
+      метрики. Это то, что чинилось в аудите метрик: без колонки калибровка
+      оценивала себя на собственных строках.
+    </p>
+
+    <h3>Препроцессинг</h3>
+    <p class="prose">
+      <code>avatar.preprocessing.local.TabularPreprocessor</code>, один проход,
+      <strong>fit только на train</strong>. Выход шардируется на 8–16 файлов —
+      иначе файловому шардированию нечего делить между рангами.
+    </p>
+    <p class="prose">
+      Скрипт обязан печатать и класть в <code>dims.json</code> три числа, без
+      которых конфиг не собрать:
+    </p>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>параметр конфига</th><th>откуда</th></tr></thead>
+        <tbody>
+          <tr><td><code>embedding.vocab_size</code></td><td><code>pp.vocab_size</code></td></tr>
+          <tr><td><code>embedding.num_numerical_features</code></td><td><code>len(num_cols)</code></td></tr>
+          <tr><td><code>aggregation_config.num_features</code></td><td><code>len(cat_cols) + len(num_cols)</code>, плюс по токену за воздействие и за группу</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="prose">
+      Для регрессии к этому добавляется трансформация таргета:
+      <code>signed_log1p</code> и сохранённые <code>mean/std</code>, чтобы
+      предсказание можно было вернуть в рубли. Артефакт кладётся рядом с
+      препроцессором.
+    </p>
+  </section>
+
+  <section id="fixes">
+    <h2><span class="num">02</span>Правки во фреймворке</h2>
+    <p class="lede">Порядок — по тому, что блокирует.</p>
+
+    <div class="fix">
+      <div class="fix-head">
+        <span class="tag">F1</span>
+        <h3>Голова на один логит не сходится с таргетом <code>(B,)</code></h3>
+        <span class="where">блокер response · avatar/losses/classification.py</span>
+      </div>
+      <p class="prose">
+        Нужна одна точка согласования формы внутри
+        <code>ClassificationLoss</code> — единственного слоя, который знает
+        <code>num_classes</code> и <code>task_type</code>. Пользовательский
+        <code>loss_fn</code> из конфига проходит через неё же и получает
+        согласованные формы.
+      </p>
+      <pre><code>def align(self, logits, targets):
+    """Голова шириной в один столбец предсказывает одно число на запись.
+
+    Конфиг с ``num_classes: 1`` даёт логиты ``(B, 1)``, а collate — таргеты
+    ``(B,)``. BCE на этом падает, MSE молча броадкастит в ``(B, B)``.
+    """
+    if logits.ndim == 2 and logits.shape[-1] == 1 and targets.ndim == 1:
+        logits = logits.squeeze(-1)
+    if isinstance(self.loss_fn, (nn.BCEWithLogitsLoss, nn.MSELoss)):
+        targets = targets.to(logits.dtype)
+    return logits, targets</code></pre>
+      <p class="prose">
+        Проверка: тест, который на прежней реализации падает с тем самым
+        <code>ValueError</code>.
+      </p>
+    </div>
+
+    <div class="fix">
+      <div class="fix-head">
+        <span class="tag">F2</span>
+        <h3>Регрессия учится на средний таргет батча</h3>
+        <span class="where">блокер регрессии · та же точка</span>
+      </div>
+      <p class="prose">
+        Чинится тем же <code>align</code>: <code>squeeze(-1)</code> убирает
+        броадкаст. Отдельным тестом фиксируется, что лосс равен
+        <code>MSE(pred, y)</code>, а не среднему по парам — числа из раздела 00
+        годятся как эталон. Плюс внятный <code>ValueError</code> в
+        <code>TabularClassification.forward</code>, если формы всё ещё не
+        сходятся: сейчас ошибка приходит из недр torch.
+      </p>
+    </div>
+
+    <div class="fix">
+      <div class="fix-head">
+        <span class="tag">F3</span>
+        <h3>Метрики многоклассовой классификации</h3>
+        <span class="where">блокер multi-class · avatar/metrics/supervised.py</span>
+      </div>
+      <p class="prose">
+        Новый класс на том же скелете <code>GroupedPredictionMetric</code>, что
+        и остальные три — буфер по батчам, склейка, разрез по
+        <code>group</code> и <code>split_type</code>, имена
+        <code>{split}_group_{g}_{метрика}</code>.
+      </p>
+      <pre><code>class MultiClassMetrics(GroupedPredictionMetric):
+    required_inputs = ("epk_id", "group", "targets", "split_type")
+    required_outputs = ("logits",)</code></pre>
+      <p class="prose">
+        Набор на срез: <code>accuracy</code>, <code>balanced_accuracy</code>,
+        <code>f1_macro</code>, <code>f1_weighted</code>,
+        <code>roc_auc_score_ovr</code> (macro, с явным
+        <code>labels=range(K)</code>), <code>log_loss</code>. Всё через
+        <code>defined_scores</code> — срез, в котором остался один класс, не
+        должен выдавать <code>nan</code>: это ровно тот дефект, который стирал
+        рекорд ранней остановки.
+      </p>
+      <p class="prose">Два места, где многоклассовость не влезает в текущий скелет:</p>
+      <ul class="plain prose">
+        <li>
+          <code>predictions</code> возвращает <code>(N, K)</code>, а не
+          <code>(N,)</code>. <code>np.concatenate</code> это переживает, а
+          <code>write_submit</code> — нет: <code>pd.DataFrame</code> не
+          принимает двумерную колонку. Правка одна, в базовом классе — разложить
+          в <code>y_pred_0 … y_pred_{K-1}</code>, и все наследники получат это
+          бесплатно.
+        </li>
+        <li>
+          Хранить нужно обе колонки: argmax для accuracy и F1, полную матрицу
+          вероятностей для ROC AUC и log-loss.
+        </li>
+      </ul>
+    </div>
+
+    <div class="fix">
+      <div class="fix-head">
+        <span class="tag">F4</span>
+        <h3>MAPE на нулевых таргетах выдаёт 3.15e15</h3>
+        <span class="where">портит регрессию · avatar/metrics/supervised.py</span>
+      </div>
+      <p class="prose">
+        <code>sklearn.mean_absolute_percentage_error</code> при
+        <code>y_true = 0</code> делит на <code>np.finfo(float64).eps</code>:
+      </p>
+      <pre><code>MAPE при нулевых таргетах: 3152519739159347.0</code></pre>
+      <p class="prose">
+        Число конечное, поэтому фильтр <code>defined_scores</code> его
+        пропускает, и оно уезжает в MLflow — а если
+        <code>main_metric = "mape"</code>, то и в раннюю остановку. В выбранном
+        регрессионном таргете нулей 18%. Правка: считать MAPE только по
+        ненулевым таргетам, писать в лог долю пропущенных, возвращать
+        <code>nan</code> (то есть «нет числа»), если ненулевых не осталось.
+        Заодно добавить <code>rmse</code> и <code>r2</code> — сейчас есть только
+        <code>mse</code>, <code>mae</code>, <code>mape</code>.
+      </p>
+    </div>
+
+    <div class="fix">
+      <div class="fix-head">
+        <span class="tag">F5</span>
+        <h3><code>InferenceSupervisedMetrics</code> не умеет многоклассовость</h3>
+        <span class="where">нужен для инференс-конфига</span>
+      </div>
+      <p class="prose">
+        <code>task_type</code> принимает <code>binary_clf</code> и
+        <code>reg</code>; для <code>multi_clf</code> нужно писать argmax плюс
+        вероятности по классам. Без этого у multi-class-примера не будет
+        инференс-конфига, а он есть у всех остальных.
+      </p>
+    </div>
+
+    <div class="fix">
+      <div class="fix-head">
+        <span class="tag">F6</span>
+        <h3><code>SupervisedLearner</code> не переживает инференс</h3>
+        <span class="where">avatar/pipeline/tabular/supervised.py</span>
+      </div>
+      <pre><code><span class="fail">[FAIL]</span> SupervisedLearner inference (targets=None):
+       AttributeError: 'NoneType' object has no attribute 'device'
+<span class="pass">[OK]</span>   SupervisedLearner train: logits=None</code></pre>
+      <p class="prose">
+        Первое — <code>_ = targets.device</code> в начале <code>forward</code>.
+        Второе — логиты считаются только в <code>eval</code>, поэтому
+        <code>train_metrics</code> с этим пайплайном невозможны.
+      </p>
+      <p class="prose">
+        Решение по существу: <strong>не чинить, а не использовать</strong>. Для
+        response берётся <code>TabularClassification</code> — он
+        документирован, на него ссылается десяток примеров конфигов, и он же
+        обслуживает регрессию и multi-class. Три задачи из четырёх идут одним
+        пайплайном и отличаются тремя ключами. Починить две строки всё равно
+        стоит (три минуты), но в <code>docs/reference/pipeline.md</code> нужно
+        сказать, какой путь штатный.
+      </p>
+    </div>
+
+    <div class="fix">
+      <div class="fix-head">
+        <span class="tag">F7</span>
+        <h3>Конфиги пилота ссылаются на класс, которого нет</h3>
+        <span class="where">experiments/sbercampaign_pilot/configs/pilot/train/*.yaml</span>
+      </div>
+      <p class="prose">
+        В них стоит <code>avatar.pipeline.uplift.SLearnerExp</code>, которого в
+        коде больше нет. <code>tests/docs/test_config_targets.py</code> смотрит
+        только <code>examples/</code> и <code>docs/</code>, поэтому молчит. Не
+        блокер, но как шаблон эти файлы брать нельзя — и сказать об этом надо
+        явно, потому что первым делом человек откроет именно их.
+      </p>
+    </div>
+  </section>
+
+  <section id="configs">
+    <h2><span class="num">03</span>Конфиги</h2>
+    <p class="lede">
+      Четыре файла. Общая часть одинаковая — <code>distributed</code>,
+      шардированный <code>TabularDataset</code>, <code>TabularEmbedding</code> +
+      <code>TabularTransformer</code> + <code>LinearAggregation</code>,
+      <code>AdamW</code> с cosine. Ниже — только то, чем они отличаются.
+    </p>
+
+    <div class="configs">
+      <div class="config">
+        <header><span>uplift</span><span>готово сегодня</span></header>
+        <pre><code><span class="k">model</span>:
+  _target_: avatar.pipeline.uplift.SLearner
+  aggregation_config:
+    num_features: N + 2  <span class="note"># +воздействие +группа</span>
+  n_groups: 4
+  exchange_treatment_group: true
+<span class="k">collate_fn</span>:
+  _target_: avatar.data.UpliftCollateFn
+  target_column: target
+  treatment_column: treatment
+  group_column: group
+  inverse_treatment: True
+<span class="k">metrics</span>:
+  valid_metrics:
+    _target_: avatar.metrics.UpliftMetrics
+    require_calibration: true</code></pre>
+      </div>
+
+      <div class="config">
+        <header><span>response</span><span>требует F1</span></header>
+        <pre><code><span class="k">model</span>:
+  _target_: avatar.pipeline.tabular.TabularClassification
+  tabular_model: {TabularWithAggregatedStates}
+  <span class="hl">num_classes: 1</span>   <span class="note"># один логит -> вероятность</span>
+  <span class="hl">task_type: classification</span>
+<span class="k">collate_fn</span>:
+  _target_: avatar.data.SupervisedCollateFn
+  target_column: target
+  add_extra_columns: {group: group, epk_id: epk_id}
+<span class="k">metrics</span>:
+  valid_metrics:
+    _target_: avatar.metrics.ResponseMetrics
+    main_metric: roc_auc_score</code></pre>
+      </div>
+
+      <div class="config">
+        <header><span>регрессия</span><span>требует F2, F4</span></header>
+        <pre><code><span class="k">model</span>:
+  _target_: avatar.pipeline.tabular.TabularClassification
+  <span class="hl">num_classes: 1</span>
+  <span class="hl">task_type: regression</span>
+<span class="k">collate_fn</span>:
+  _target_: avatar.data.SupervisedCollateFn
+  target_column: target
+  <span class="hl">is_regression: True</span>
+  add_extra_columns: {group: group, epk_id: epk_id}
+<span class="k">metrics</span>:
+  valid_metrics:
+    _target_: avatar.metrics.RegressionMetrics
+    main_metric: mae
+<span class="k">train</span>:
+  early_stopping:
+    _target_: avatar.train.EarlyStopping
+    main_metric: mean_mae
+    strategy: min</code></pre>
+      </div>
+
+      <div class="config">
+        <header><span>multi-class</span><span>требует F3</span></header>
+        <pre><code><span class="k">model</span>:
+  _target_: avatar.pipeline.tabular.TabularClassification
+  <span class="hl">num_classes: 7</span>
+  <span class="hl">task_type: classification</span>
+<span class="k">collate_fn</span>:
+  _target_: avatar.data.SupervisedCollateFn
+  target_column: target
+  add_extra_columns: {group: group, epk_id: epk_id}
+<span class="k">metrics</span>:
+  valid_metrics:
+    _target_: avatar.metrics.MultiClassMetrics
+    num_classes: 7
+    main_metric: balanced_accuracy</code></pre>
+      </div>
+    </div>
+
+    <p class="prose" style="margin-top:22px">
+      К каждому — парный <code>inference.yaml</code> с
+      <code>InferenceSupervisedMetrics</code>; для multi-class — после F5.
+    </p>
+  </section>
+
+  <section id="examples">
+    <h2><span class="num">04</span>Examples</h2>
+    <p class="lede">
+      Предложение: новый каталог <code>examples/tabular_tasks/</code> — четыре
+      задачи на одном стенде, а не четыре отдельных примера.
+    </p>
+
+    <div class="tree">
+<span class="dir">examples/tabular_tasks/</span>
+  README.md            <span class="cmt">таблица «задача → датасет → пайплайн → метрика» + запуск</span>
+  prepare_data.py      <span class="cmt">выгрузка + препроцессинг, --task и --scale</span>
+  <span class="dir">artifacts/</span>           <span class="cmt">препроцессоры и dims.json — они маленькие</span>
+  <span class="dir">configs/</span>
+    uplift.yaml        uplift_inference.yaml
+    response.yaml      response_inference.yaml
+    regression.yaml    regression_inference.yaml
+    multiclass.yaml    multiclass_inference.yaml</div>
+
+    <p class="prose">
+      Почему вместе: ценность именно в том, что четыре конфига стоят рядом и
+      отличаются тремя ключами — это видно, только если они в одном каталоге.
+    </p>
+    <p class="prose">
+      Существующий <code>examples/uplift_modeling/s_learner/</code> остаётся как
+      есть: он про внутренние данные и про late fusion с эмбеддингом
+      последовательности, у него другая роль. В его README добавляется ссылка на
+      новый пример.
+    </p>
+    <p class="prose">
+      Формат — по правилам <code>examples/README.md</code>: <code>.py</code> плюс
+      README, без ноутбуков в критичном пути. <code>prepare_data.py</code> качает
+      открытые данные сам, поэтому пример попадает в разряд «запускается прямо
+      сейчас» — таких сейчас только два.
+    </p>
+  </section>
+
+  <section id="tests">
+    <h2><span class="num">05</span>Тесты</h2>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>что</th><th>где</th><th>зачем</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>согласование формы головы и таргета</td>
+            <td><code>tests/pipeline/test_losses.py</code></td>
+            <td>падает на прежней реализации (F1, F2)</td>
+          </tr>
+          <tr>
+            <td>имена, группы, срезы, вырожденный срез</td>
+            <td><code>tests/metrics/test_multiclass_metrics.py</code></td>
+            <td>F3</td>
+          </tr>
+          <tr>
+            <td>MAPE при нулевых таргетах</td>
+            <td><code>tests/metrics/test_grouped_metrics.py</code></td>
+            <td>F4</td>
+          </tr>
+          <tr>
+            <td><code>write_submit</code> с двумерным <code>y_pred</code></td>
+            <td>там же</td>
+            <td>F3</td>
+          </tr>
+          <tr>
+            <td>два шага обучения через настоящий конфиг, все четыре задачи</td>
+            <td><code>tests/pipeline/test_tabular_tasks.py</code></td>
+            <td>связка «конфиг → пайплайн → метрика» целиком</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="prose">
+      Конфиги примера попадут под <code>tests/docs/test_config_targets.py</code>
+      автоматически — он резолвит каждый <code>_target_</code> в
+      <code>examples/</code>.
+    </p>
+  </section>
+
+  <section id="order">
+    <h2><span class="num">06</span>Порядок работ</h2>
+    <p class="lede">
+      Пройден целиком, в этом порядке. Шаги 1–3 шли параллельно выгрузке
+      данных, как и планировалось.
+    </p>
+    <ol class="work">
+      <li><span><b>F1 + F2</b> — согласование формы в <code>ClassificationLoss</code>, с тестами. После этого response и регрессия впервые доходят от конфига до числа.</span></li>
+      <li><span><b>F4</b> — MAPE по ненулевым таргетам, добавление <code>rmse</code> и <code>r2</code>.</span></li>
+      <li><span><b>F3</b> — <code>MultiClassMetrics</code> плюс правка <code>write_submit</code> под двумерную колонку.</span></li>
+      <li><span><b><code>prepare_data.py</code></b> — выгрузка и препроцессинг всех четырёх наборов, smoke и full. Самый долгий шаг по времени прогона, но не по объёму кода: <code>build_dataset.py</code> покрывает две трети.</span></li>
+      <li><span><b>Четыре train-конфига</b> и smoke-прогон на каждом — до первых чисел.</span></li>
+      <li><span><b>F5</b> — многоклассовый инференс-коллектор, четыре <code>inference.yaml</code>.</span></li>
+      <li><span><b>README примера</b>, правки в <code>docs/reference/pipeline.md</code> и <code>docs/getting_started.md</code> — там сейчас <code>num_classes: 2</code> для того, что называется бинарной классификацией.</span></li>
+      <li><span><b>Full-прогоны</b> на Lenta и Covertype, числа в README.</span></li>
+      <li><span><b>F6</b> — две строки в <code>SupervisedLearner</code>; <b>F7</b> — решить, чинить или удалить конфиги пилота.</span></li>
+    </ol>
+    <p class="prose" style="margin-top:20px">
+      Шаги 1–3 независимы друг от друга и от шага 4: правки во фреймворке и
+      выгрузка данных идут параллельно.
+    </p>
+  </section>
+
+  <section id="scope">
+    <h2><span class="num">07</span>Что остаётся за рамками</h2>
+    <ul class="plain prose">
+      <li>
+        <strong>Late fusion с эмбеддингом последовательности.</strong> Все
+        четыре конфига строятся на чистых табличных признаках.
+        <code>hidden_state_column</code> поддержан пайплайнами, но у открытых
+        датасетов нет событийной истории, из которой такой эмбеддинг берётся.
+        Отдельная задача и отдельный пример.
+      </li>
+      <li>
+        <strong>Multi-task.</strong> <code>avatar/pipeline/multi_task/</code>
+        остаётся без рабочего конфига — это уже записано в отчёте по метрикам
+        как открытый пункт.
+      </li>
+      <li>
+        <strong>Кастомные лоссы под дисбаланс</strong> (focal, веса классов).
+        Точка инъекции есть — <code>loss:</code> в
+        <code>TabularClassification</code>, — но подбор за пределами «завести
+        четыре постановки».
+      </li>
+    </ul>
+  </section>
+
+  <footer>
+    Источник в репозитории: tabular_tasks_plan.md · ветки plan/tabular-tasks и feat/tabular-four-tasks<br>
+    Все [FAIL] / [OK] и все числа в тексте — вывод запусков, а не пересказ кода.
+  </footer>
+
+</div>

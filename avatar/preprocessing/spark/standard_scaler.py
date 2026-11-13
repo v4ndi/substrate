@@ -1,3 +1,5 @@
+"""Spark standard scaler, with optional signed log1p."""
+
 from __future__ import annotations
 
 from copy import deepcopy
@@ -9,13 +11,14 @@ from .base_preprocessor import BasePreprocessor
 
 
 def signed_log1p(col: str):
+    """``sign(x) * log1p(|x|)`` — log scaling that survives negative values."""
     return F.log1p(F.abs(col)) * F.when(F.col(col) == 0, 0).otherwise(F.signum(col))
 
 
 def _apply_log1p(df: DataFrame, cols: list[str] | None) -> DataFrame:
-    """
-    Apply signed log1p to selected columns in-place (same names).
-    No-op if cols is None or empty.
+    """Apply signed log1p to selected columns, keeping their names.
+
+    A no-op when ``cols`` is None or empty.
     """
     if not cols:
         return df
@@ -26,12 +29,14 @@ def _apply_log1p(df: DataFrame, cols: list[str] | None) -> DataFrame:
 
 
 class StandardScaler(BasePreprocessor):
-    """Standard Scaler
+    """Standardise numeric columns: ``(x - mean) / (std + 1e-8)``.
+
     Args:
         columns (List[str]): list of numerical columns to scale;
         fillna (bool): whether to fill null values in transform.
             Null values will be replaced by 0;
         to_log_columns (list[str]): list of columns to apply log(x + 1);
+
     """
 
     def __init__(
@@ -48,10 +53,10 @@ class StandardScaler(BasePreprocessor):
 
     def fit(self, df: DataFrame) -> None:
         """Compute the mean and standard deviation for later scaling.
+
         Args:
             df (DataFrame): DataFrame containing the data
         """
-
         df_logged = _apply_log1p(df=df, cols=self.to_log_columns)
 
         mean_std_df = df_logged.agg(
@@ -79,6 +84,8 @@ class StandardScaler(BasePreprocessor):
         Args:
             df: DataFrame containing the new columns
             new_columns: List of new column names to add to the scaler
+            new_to_log_columns: New columns that should get signed log1p before
+                standardisation.
 
         Returns:
             None (updates the scaler in-place)
@@ -137,8 +144,7 @@ class StandardScaler(BasePreprocessor):
         return df
 
     def dump(self) -> dict[str, any]:
-        """
-        Creates a dictionary representation of the standard scaler.
+        """Creates a dictionary representation of the standard scaler.
 
         Returns:
             dict[str, any]:

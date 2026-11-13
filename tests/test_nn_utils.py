@@ -1,5 +1,3 @@
-from dataclasses import dataclass
-
 import torch
 
 from avatar.nn.utils import (
@@ -10,8 +8,13 @@ from avatar.nn.utils import (
 from avatar.outputs import BaseSequenceOutput
 
 
-@dataclass
 class TestSample:
+    """Shared fixtures for the aggregation tests, as plain class attributes.
+
+    Not a dataclass: none of these are annotated, so ``@dataclass`` generated
+    no fields and was a no-op.
+    """
+
     __test__ = False
     states = BaseSequenceOutput(
         last_hidden_state=torch.LongTensor([

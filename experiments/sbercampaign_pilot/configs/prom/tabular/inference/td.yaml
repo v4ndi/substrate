@@ -1,18 +1,17 @@
 load_state: /home/datalab/nfs/december_prom_weights/datalab_ai/tdbase.bin
-accelerator:
-  _target_: accelerate.Accelerator
-  _partial_: True
-  dataloader_config:
-    _target_: accelerate.utils.DataLoaderConfiguration
-    dispatch_batches: False
-  dynamo_plugin:
-    _target_: accelerate.utils.TorchDynamoPlugin
-    backend: "inductor"
+distributed:
+  backend: null  # null -> nccl on GPU, gloo on CPU
+  gradient_accumulation_steps: 1
+amp: no  # no | fp16 | bf16
+ddp:
+  find_unused_parameters: False
+compile: inductor
 product: tdbase
 test_dataloader:
   _target_: torch.utils.data.DataLoader
   dataset:
-    _target_: avatar.data.dataset.TabularDataset
+    _target_: avatar.data.TabularDataset
+    drop_tail: false # inference keeps the tail
     path: /home/datalab/projects/avatar/avatards/rusakov/prom/splited_tabular/split_type=test
     shuffle_files: False
     shuffle_pq: False
@@ -22,9 +21,9 @@ test_dataloader:
   drop_last: False
   num_workers: 8
   collate_fn:
-    _target_: avatar.data.dataset.collate_fn.TabularCollateFn
+    _target_: avatar.data.TabularCollateFn
 model:
-  _target_: avatar.pipeline.uplift.SLearner
+  _target_: avatar.pipeline.tabular.SLearner
   embedding:
     _target_: avatar.nn.embedding.TabularEmbedding
     num_numerical_features: 261
@@ -51,6 +50,9 @@ metrics:
     path_to_save: /home/datalab/nfs/april_pilot/2026_05_01_calib/${product}  ###
     save_steps: 1000
     prefix: "first"
+prepare_batch:
+  _target_: avatar.data.campaign.CampaignTaskChannelBatches
+  tasks: ${campaign_meta.tasks}
 campaign_meta:
   tasks:
     td_response:

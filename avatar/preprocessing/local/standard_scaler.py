@@ -24,6 +24,12 @@ from .label_encoder import _run_batches
 
 
 class StandardScaler:
+    """Streaming standardisation: ``(x - mean) / (std + 1e-8)``.
+
+    Statistics are accumulated in one pass over the data, so the fit never
+    holds more than a chunk in memory.
+    """
+
     def __init__(
         self,
         columns: Sequence[str],

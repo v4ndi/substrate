@@ -1,3 +1,5 @@
+"""Encoding a single event."""
+
 from avatar.nn.sequential.event_encoder.attention import (
     EventAggregator,
     IntraFeatureAttention,

@@ -1,3 +1,5 @@
+"""Padding masks for feature tokens."""
+
 import torch
 
 

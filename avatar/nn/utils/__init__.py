@@ -1,3 +1,5 @@
+"""Shared layers: aggregation and feed-forward blocks."""
+
 from avatar.nn.utils.ffn import FeedForwardNetwork
 
 from .agg import (

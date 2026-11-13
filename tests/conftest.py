@@ -65,7 +65,8 @@ def spark_session():
         pytest.skip("pyspark not installed")
     try:
         spark = (
-            SparkSession.builder.appName("avatar-tests")
+            SparkSession.builder
+            .appName("avatar-tests")
             .master("local[2]")
             .config("spark.ui.enabled", "false")
             .config("spark.sql.session.timeZone", "UTC")

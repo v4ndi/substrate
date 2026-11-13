@@ -1,20 +1,77 @@
+"""Uplift metrics: qini, uplift@k, and beta calibration of the two heads.
+
+Uplift is scored on the *difference* between the treatment and control
+probabilities, so both heads' outputs are needed and neither is meaningful
+alone.
+
+Calibration is optional and, when asked for, honest: a calibrator is fitted on
+the ``calib`` slice and the calibrated numbers are reported only for the
+held-out ``test`` slice. A population without such a slice gets no calibrated
+metrics at all, because the only ones it could produce would be measured on the
+rows the calibrator was fitted on.
+"""
+
+import logging
+
 import numpy as np
-import pandas as pd
-import torch
 from betacal import BetaCalibration
 from sklearn.metrics import roc_auc_score
 from sklift.metrics import qini_auc_score, uplift_at_k, uplift_auc_score
 
-from avatar.metrics.base import BaseMetric
+from avatar.metrics.grouped import (
+    CALIB_SPLIT,
+    TEST_SPLIT,
+    GroupedPredictionMetric,
+    defined_scores,
+    group_prefixed,
+)
+
+logger = logging.getLogger(__name__)
+
+#: A monotone calibrator must not reorder records, so per-head ROC AUC should
+#: barely move. Above this the calibrator is distorting the scores.
+RANK_SHIFT_TOLERANCE = 0.01
+
+#: On the slice the calibrator was fitted on, the mean calibrated probability
+#: should reproduce the observed conversion rate.
+CALIBRATION_GAP_TOLERANCE = 1e-3
+
+
+def unscorable_reason(y_true, treatment) -> str | None:
+    """Why uplift metrics cannot be computed for this slice, or ``None``.
+
+    Uplift compares the conversion of the treated against the control, so a
+    slice missing either arm, or missing conversions altogether, has nothing to
+    compare.
+    """
+    if y_true.size == 0:
+        return "the slice is empty"
+    if not (treatment == 1).any():
+        return "the slice has no treated records"
+    if not (treatment == 0).any():
+        return "the slice has no control records"
+    if y_true.sum() == 0:
+        return "the slice has no conversions"
+    return None
 
 
 def calculate_uplift_metrics(
     y_true, uplift, treatment, calibrated=False
 ) -> dict[str, float]:
-    """Computes uplift metrics."""
+    """Uplift metrics for one slice, or an empty dict when they are undefined.
+
+    A degenerate slice used to be given a conversion — ``y_true[0] += 1`` —
+    so that the call would not raise. That turned a broken slice into a
+    plausible-looking number and wrote the invented label into the data the
+    later calls read. Now the slice is skipped and the reason logged: a missing
+    metric is a question the reader can ask, a fabricated one is not.
+    """
+    reason = unscorable_reason(y_true, treatment)
+    if reason is not None:
+        logger.warning("uplift metrics are undefined here: %s", reason)
+        return {}
+
     values = {"y_true": y_true, "uplift": uplift, "treatment": treatment}
-    if y_true.sum() == 0:
-        y_true[0] += 1
     metrics = {
         f"uplift_at_{k}": uplift_at_k(**values, strategy="overall", k=k / 100)
         for k in [5, 10, 15, 20, 50]
@@ -30,68 +87,135 @@ def calculate_uplift_metrics(
 
 
 def fit_calibrator(scores, y_true):
+    """Fit a beta calibrator, or return ``None`` when the slice cannot carry one.
+
+    A calibrator maps scores onto an observed conversion rate, so a slice
+    without conversions has nothing to map onto. That case used to be papered
+    over by adding a conversion to the data; now it simply yields no
+    calibrator, and the caller reports no calibrated metrics.
+    """
+    if y_true.size == 0 or y_true.sum() == 0:
+        return None
     calibrator = BetaCalibration()
-    if y_true.sum() == 0:
-        y_true[0] += 1
     calibrator.fit(scores.reshape(-1, 1), y_true)
     return calibrator
 
 
-def apply_calibration_calculate_metrics(
-    y_true, t_probs, c_probs, treatment, t_calibrator, c_calibrator, is_calib
-):
-    no_calib_metrics = calculate_uplift_metrics(
-        y_true=y_true, uplift=(t_probs - c_probs), treatment=treatment, calibrated=False
-    )
-
-    c_roc_auc = roc_auc_score(y_true[treatment == 0], c_probs[treatment == 0])
-    t_roc_auc = roc_auc_score(y_true[treatment == 1], t_probs[treatment == 1])
-
-    t_probs_ = t_calibrator.predict(t_probs.reshape(-1, 1))
-    c_probs_ = c_calibrator.predict(c_probs.reshape(-1, 1))
-
-    calib_c_roc_auc = roc_auc_score(y_true[treatment == 0], c_probs_[treatment == 0])
-    calib_t_roc_auc = roc_auc_score(y_true[treatment == 1], t_probs_[treatment == 1])
-
-    assert abs(calib_c_roc_auc - c_roc_auc) < 0.01
-    assert abs(calib_t_roc_auc - t_roc_auc) < 0.01
-    if is_calib:
-        assert (
-            abs(c_probs_[treatment == 0].mean() - y_true[treatment == 0].mean()) < 1e-03
-        )
-        assert (
-            abs(t_probs_[treatment == 1].mean() - y_true[treatment == 1].mean()) < 1e-03
-        )
-
-    calibrated_uplift = t_probs_ - c_probs_
-
-    calib_metrics = calculate_uplift_metrics(
-        y_true=y_true, uplift=calibrated_uplift, treatment=treatment, calibrated=True
-    )
-    metrics = {**no_calib_metrics, **calib_metrics}
-    metrics["treatment_roc_auc_score"] = calib_t_roc_auc
-    metrics["control_roc_auc_score"] = calib_c_roc_auc
-    return metrics, calibrated_uplift
+def warn_outside_tolerance(diagnostics: dict[str, float]) -> None:
+    """Log the calibration diagnostics that are too far from zero."""
+    for name, value in diagnostics.items():
+        if name.startswith("calibration_rank_shift"):
+            tolerance = RANK_SHIFT_TOLERANCE
+        elif name.startswith("calibration_gap"):
+            tolerance = CALIBRATION_GAP_TOLERANCE
+        else:
+            continue
+        if value >= tolerance:
+            logger.warning(
+                "%s is %.4g, above the tolerance of %.4g — the calibrated uplift "
+                "metrics from this slice are not trustworthy",
+                name,
+                value,
+                tolerance,
+            )
 
 
-class UpliftMetrics(BaseMetric):
-    """Class for computing campaign uplift metrics.
+def calibration_diagnostics(
+    y_true, treatment, arms, in_sample: bool
+) -> dict[str, float]:
+    """Report what the calibrator did to each head.
+
+    Calibration is monotone, so it must not change the ranking, and on the
+    slice it was fitted on the mean calibrated probability should reproduce the
+    observed conversion rate. Both come back as **metrics**, not assertions: a
+    number that says "the calibrator is off" is more useful in MLflow than a
+    traceback, and a metric has no business stopping training.
+
     Args:
-        require_calibration: bool = False
-            Whether to apply BetaCalibration for uplift and classification metrics.
-        save_submit_path: str = None
-            Path to save predictions.
-        main_metric: str = "qini_auc_score"
-            Available metrics:
-                uplift_at_5
-                uplift_at_10
-                uplift_at_15
-                uplift_at_20
-                uplift_auc_score
-                qini_auc_score
-    }
-
+        y_true: Conversion of every record in the slice.
+        treatment: Arm of every record in the slice.
+        arms: ``(name, arm value, raw probabilities, calibrated probabilities)``
+            per head.
+        in_sample: Whether this is the slice the calibrator was fitted on. The
+            conversion-rate gap is only meaningful there.
     """
+    diagnostics: dict[str, float] = {}
+    for name, arm, raw_probs, calibrated_probs in arms:
+        in_arm = treatment == arm
+        labels = y_true[in_arm]
+        if labels.size == 0 or labels.min() == labels.max():
+            logger.warning(
+                "calibration diagnostics skipped for the %s head: the slice has "
+                "only one class",
+                name,
+            )
+            continue
+        raw_auc = roc_auc_score(labels, raw_probs[in_arm])
+        calibrated_auc = roc_auc_score(labels, calibrated_probs[in_arm])
+        diagnostics[f"{name}_roc_auc_score"] = float(calibrated_auc)
+        diagnostics[f"calibration_rank_shift_{name}"] = float(
+            abs(calibrated_auc - raw_auc)
+        )
+        if in_sample:
+            diagnostics[f"calibration_gap_{name}"] = float(
+                abs(calibrated_probs[in_arm].mean() - labels.mean())
+            )
+
+    warn_outside_tolerance(diagnostics)
+    return diagnostics
+
+
+class UpliftMetrics(GroupedPredictionMetric):
+    """Campaign uplift metrics, optionally over beta-calibrated probabilities.
+
+    Consumes ``outputs.uplift`` (or ``treatment_probs - control_probs`` when
+    ``uplift`` is None), ``outputs.treatment``, ``outputs.conversion`` and
+    ``outputs.group``. The population is split by ``group`` and by
+    ``split_type``.
+
+    Calibration, when requested, is fitted on ``calib`` and **reported only on
+    ``test``**. Fitting and scoring on the same rows is what in-sample means,
+    and the numbers it produces flatter the model; a population with no
+    ``test`` slice — which includes every batch that carries no ``split_type``
+    column at all — therefore gets the raw metrics only, and a warning.
+
+    Args:
+        require_calibration: Fit the calibrators and report the calibrated
+            metrics. With no held-out slice to report them on, nothing
+            calibrated is produced and a warning is logged.
+        save_submit_path: Directory to write per-record predictions into.
+            ``None`` (the default) writes nothing.
+        main_metric: Which metric counts as *the* number for this run. Must be
+            one of ``uplift_at_{5,10,15,20,50}``, ``uplift_auc_score`` or
+            ``qini_auc_score``.
+
+    Returns from :meth:`compute`:
+        Per group and split, the raw uplift metrics; on ``test``, additionally
+        the calibrated ones; and, when calibration ran, the per-head ROC AUC
+        with the diagnostics ``calibration_rank_shift_{control,treatment}``
+        and — on ``calib`` only — ``calibration_gap_{control,treatment}``. A
+        rank shift far from zero means the calibrated numbers should not be
+        read.
+
+        The two summaries are independent: ``mean_{main_metric}`` averages the
+        raw metric over the groups, ``mean_calibrated_{main_metric}`` the
+        calibrated one. They used to be the same number written twice.
+
+    Note:
+        A slice with no conversions, or with only one arm, produces no metrics
+        for that slice and logs why. Nothing is invented to keep the keys
+        present.
+    """
+
+    required_inputs = ("epk_id", "split_type")
+    required_outputs = (
+        "uplift",
+        "treatment",
+        "conversion",
+        "control_probs",
+        "treatment_probs",
+        "group",
+    )
 
     def __init__(
         self,
@@ -99,234 +223,145 @@ class UpliftMetrics(BaseMetric):
         save_submit_path: str | None = None,
         main_metric: str = "qini_auc_score",
     ):
-        self.preds = []
+        super().__init__(save_submit_path=save_submit_path, main_metric=main_metric)
         self.require_calibration = require_calibration
-        self.save_submit = save_submit_path
-        self.main_metric = main_metric
+        self.calibrated_mains: list[float] = []
 
-    def update(self, inputs, outputs):
-        """Stores model predictions for later computation.
-        Args:
-            inputs: Dict[str, any] - epk_id - optional field
-            outputs: Dict[str, torch.Tensor] - uplift, treatment, conversion,
-                control_probs, treatment_probs, group required fields;
-                each field is a torch.Tensor with dim = 1
-        """
+    def collect(self, inputs, outputs) -> dict:
+        """Keep both heads' probabilities, the assignment and the conversion."""
         if outputs.uplift is None:
             uplift = (
                 outputs.treatment_probs.detach().contiguous().cpu().numpy()
                 - outputs.control_probs.detach().contiguous().cpu().numpy()
             )
         else:
-            uplift = None
+            uplift = outputs.uplift.detach().contiguous().cpu().numpy()
 
-        if hasattr(outputs, "task_name") and outputs.task_name is not None:
-            if torch.is_tensor(outputs.task_name):
-                task_name = outputs.task_name.detach().contiguous().cpu().numpy()
-            else:
-                task_name = outputs.task_name
-        elif "product" in inputs:
-            task_name = inputs["product"]
-        else:
-            task_name = None
-
-        self.preds.append({
+        return {
             "epk_id": inputs["epk_id"] if "epk_id" in inputs else None,
-            "uplift": outputs.uplift.detach().contiguous().cpu().numpy()
-            if outputs.uplift is not None
-            else uplift,
+            "uplift": uplift,
             "group": outputs.group.detach().contiguous().cpu().numpy()
             if outputs.group is not None
             else None,
-            "task_name": task_name,
-            # "task_name": outputs.task_name.detach().contiguous().cpu().numpy()
-            # if torch.is_tensor(outputs.task_name)
-            # else outputs.task_name
-            # if (hasattr(outputs, "task_name") and outputs.task_name is not None)
-            # else inputs["product"]
-            # if ("product" in inputs)
-            # else None,
             "split_type": inputs["split_type"] if "split_type" in inputs else None,
             "treatment": outputs.treatment.detach().contiguous().cpu().numpy(),
             "y_true": outputs.conversion.detach().contiguous().cpu().numpy(),
             "c_probs": outputs.control_probs.detach().contiguous().cpu().numpy(),
             "t_probs": outputs.treatment_probs.detach().contiguous().cpu().numpy(),
-        })
-
-    def compute(self) -> dict[str, float]:
-        """Computes uplift and classification metrics."""
-        merged_preds = {
-            key: np.concatenate([p[key] for p in self.preds])
-            for key in self.preds[0]
-            if self.preds[0][key] is not None
         }
 
-        result = {}
-        mean_main_metric = []
-        merged_preds["calibrated_uplift"] = np.full_like(
-            merged_preds["y_true"], np.nan, dtype=float
-        )
-
-        if "group" not in merged_preds:
-            merged_preds["group"] = -1 * np.zeros(
-                merged_preds["y_true"].shape[0]
-            ).astype(np.int32)
-
-        if "task_name" not in merged_preds:
-            task_names = [""]
-            merged_preds["task_name"] = np.array(
-                task_names * merged_preds["y_true"].shape[0]
-            )
-        else:
-            task_names = np.unique(merged_preds["task_name"])
-
-        if "split_type" not in merged_preds:
-            merged_preds["split_type"] = np.array(
-                ["calib"] * merged_preds["y_true"].shape[0]
-            )
-
-        for task in task_names:
-            task_mask = merged_preds["task_name"] == task
-            task_groups = np.unique(merged_preds["group"][task_mask])
-            for group in task_groups:
-                t_group_mask = (
-                    (merged_preds["group"] == group)
-                    & (merged_preds["treatment"] == 1)
-                    & (merged_preds["split_type"] == "calib")
-                    & task_mask
-                )
-                c_group_mask = (
-                    (merged_preds["group"] == group)
-                    & (merged_preds["treatment"] == 0)
-                    & (merged_preds["split_type"] == "calib")
-                    & task_mask
-                )
-
-                t_calibrator = fit_calibrator(
-                    scores=merged_preds["t_probs"][t_group_mask],
-                    y_true=merged_preds["y_true"][t_group_mask],
-                )
-
-                c_calibrator = fit_calibrator(
-                    scores=merged_preds["c_probs"][c_group_mask],
-                    y_true=merged_preds["y_true"][c_group_mask],
-                )
-
-                calib_group_mask = (
-                    (merged_preds["group"] == group)
-                    & (merged_preds["split_type"] == "calib")
-                    & task_mask
-                )
-                test_group_mask = (
-                    (merged_preds["group"] == group)
-                    & (merged_preds["split_type"] == "test")
-                    & task_mask
-                )
-
-                calib_scores, calib_calibrated_uplift = (
-                    apply_calibration_calculate_metrics(
-                        y_true=merged_preds["y_true"][calib_group_mask],
-                        t_probs=merged_preds["t_probs"][calib_group_mask],
-                        c_probs=merged_preds["c_probs"][calib_group_mask],
-                        treatment=merged_preds["treatment"][calib_group_mask],
-                        t_calibrator=t_calibrator,
-                        c_calibrator=c_calibrator,
-                        is_calib=True,
-                    )
-                )
-
-                merged_preds["calibrated_uplift"][calib_group_mask] = (
-                    calib_calibrated_uplift
-                )
-
-                if merged_preds["y_true"][test_group_mask].shape[0] > 0:
-                    test_scores, test_calibrated_uplift = (
-                        apply_calibration_calculate_metrics(
-                            y_true=merged_preds["y_true"][test_group_mask],
-                            t_probs=merged_preds["t_probs"][test_group_mask],
-                            c_probs=merged_preds["c_probs"][test_group_mask],
-                            treatment=merged_preds["treatment"][test_group_mask],
-                            t_calibrator=t_calibrator,
-                            c_calibrator=c_calibrator,
-                            is_calib=False,
-                        )
-                    )
-                    merged_preds["calibrated_uplift"][test_group_mask] = (
-                        test_calibrated_uplift
-                    )
-                    test_scores = {
-                        f"test_group_{group}_{key}": val
-                        for key, val in test_scores.items()
-                    }
-                else:
-                    test_scores = {}
-
-                calib_scores = {
-                    f"calib_group_{group}_{key}": val
-                    for key, val in calib_scores.items()
-                }
-
-                if merged_preds["y_true"][test_group_mask].shape[0] > 0:
-                    if self.require_calibration:
-                        mean_main_metric.append(
-                            test_scores[
-                                f"test_group_{group}_calibrated_{self.main_metric}"
-                            ]
-                        )
-                    else:
-                        mean_main_metric.append(
-                            test_scores[f"test_group_{group}_{self.main_metric}"]
-                        )
-                else:
-                    if self.require_calibration:
-                        mean_main_metric.append(
-                            calib_scores[
-                                f"calib_group_{group}_calibrated_{self.main_metric}"
-                            ]
-                        )
-                    else:
-                        mean_main_metric.append(
-                            calib_scores[f"calib_group_{group}_{self.main_metric}"]
-                        )
-                if len(task_names) > 0:
-
-                    def task_name_prefix(scores, task_name):
-                        return {
-                            (
-                                f"task_{task_name!s}_{key}"
-                                if len(str(task_name)) != 0
-                                else key
-                            ): val
-                            for key, val in scores.items()
-                        }
-
-                    result = {
-                        **result,
-                        **task_name_prefix(scores=calib_scores, task_name=task),
-                        **task_name_prefix(scores=test_scores, task_name=task),
-                    }
-                else:
-                    result = {**result, **calib_scores, **test_scores}
+    def prepare(self, merged: dict) -> None:
+        """Start a fresh calibrated summary, and make room for its column."""
+        self.calibrated_mains = []
         if self.require_calibration:
-            result[f"mean_calibrated_{self.main_metric}"] = np.mean(mean_main_metric)
-            result[f"mean_{self.main_metric}"] = np.mean(mean_main_metric)
-        else:
-            result[f"mean_{self.main_metric}"] = np.mean(mean_main_metric)
-
-        if self.save_submit is not None:
-            import os
-
-            df = pd.DataFrame(merged_preds)
-            if not os.path.exists(self.save_submit):
-                os.makedirs(self.save_submit, exist_ok=True)
-            df.to_parquet(
-                os.path.join(self.save_submit, "predict.parquet"), index=False
+            merged["calibrated_uplift"] = np.full_like(
+                merged["y_true"], np.nan, dtype=float
             )
-            print(
-                f"Predict was saved: {os.path.join(self.save_submit, 'predict.parquet')}"
-            )
-        return result
 
-    def reset(self):
-        """Clears stored predictions."""
-        self.preds = []
+    def _fit_calibrators(self, merged: dict, group, calib_mask: np.ndarray):
+        """Fit one calibrator per head on the ``calib`` slice of this group."""
+        calibrators = []
+        for name, arm, column in (
+            ("treatment", 1, "t_probs"),
+            ("control", 0, "c_probs"),
+        ):
+            in_arm = calib_mask & (merged["treatment"] == arm)
+            calibrator = fit_calibrator(
+                scores=merged[column][in_arm], y_true=merged["y_true"][in_arm]
+            )
+            if calibrator is None:
+                logger.warning(
+                    "group %s: no calibrator could be fitted for the %s head — its "
+                    "calib slice has no conversions; this group reports raw uplift "
+                    "metrics only",
+                    group,
+                    name,
+                )
+                return None, None
+            calibrators.append(calibrator)
+        return calibrators[0], calibrators[1]
+
+    def score_group(self, merged, group, calib_mask, test_mask):
+        """Score both slices; calibrated numbers only where they are honest."""
+        t_calibrator, c_calibrator = (None, None)
+        if self.require_calibration:
+            t_calibrator, c_calibrator = self._fit_calibrators(
+                merged, group, calib_mask
+            )
+        calibrated = t_calibrator is not None and c_calibrator is not None
+
+        scores: dict[str, float] = {}
+        main_value = None
+        for split, mask in ((CALIB_SPLIT, calib_mask), (TEST_SPLIT, test_mask)):
+            if not mask.any():
+                continue
+            y_true = merged["y_true"][mask]
+            treatment = merged["treatment"][mask]
+            t_probs = merged["t_probs"][mask]
+            c_probs = merged["c_probs"][mask]
+
+            context = f"{split} slice of group {group}"
+            slice_scores = defined_scores(
+                calculate_uplift_metrics(
+                    y_true=y_true, uplift=t_probs - c_probs, treatment=treatment
+                ),
+                context,
+            )
+            if self.main_metric in slice_scores:
+                # ``test`` comes second, so a held-out slice overrides the
+                # in-sample one as the group's contribution to the mean.
+                main_value = slice_scores[self.main_metric]
+
+            if calibrated:
+                t_calibrated = t_calibrator.predict(t_probs.reshape(-1, 1))
+                c_calibrated = c_calibrator.predict(c_probs.reshape(-1, 1))
+                merged["calibrated_uplift"][mask] = t_calibrated - c_calibrated
+                in_sample = split == CALIB_SPLIT
+
+                slice_scores.update(
+                    defined_scores(
+                        calibration_diagnostics(
+                            y_true,
+                            treatment,
+                            [
+                                ("treatment", 1, t_probs, t_calibrated),
+                                ("control", 0, c_probs, c_calibrated),
+                            ],
+                            in_sample=in_sample,
+                        ),
+                        context,
+                    )
+                )
+
+                if not in_sample:
+                    calibrated_scores = defined_scores(
+                        calculate_uplift_metrics(
+                            y_true=y_true,
+                            uplift=t_calibrated - c_calibrated,
+                            treatment=treatment,
+                            calibrated=True,
+                        ),
+                        context,
+                    )
+                    slice_scores.update(calibrated_scores)
+                    calibrated_main = f"calibrated_{self.main_metric}"
+                    if calibrated_main in calibrated_scores:
+                        self.calibrated_mains.append(calibrated_scores[calibrated_main])
+
+            scores.update(group_prefixed(slice_scores, split, group))
+        return scores, main_value
+
+    def aggregate(self, result: dict, main_values: list[float]) -> None:
+        """Summarise the raw and the calibrated families separately."""
+        super().aggregate(result, main_values)
+        if self.calibrated_mains:
+            result[f"mean_calibrated_{self.main_metric}"] = float(
+                np.mean(self.calibrated_mains)
+            )
+        elif self.require_calibration:
+            logger.warning(
+                "require_calibration is set, but no calibrated uplift metric could "
+                "be produced. They are reported only on a held-out `test` slice, "
+                "and this population has none — add a split_type column marking "
+                "the rows the calibrator must not be scored on."
+            )

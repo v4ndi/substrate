@@ -23,6 +23,7 @@ from .base_pipe import NumCatPipeline
 
 
 def _pack_list(arr_2d: np.ndarray, arrow_type: pa.DataType) -> pa.ListArray:
+    """Pack a 2-D array into a parquet list column of ``arrow_type``."""
     n, k = arr_2d.shape
     flat = pa.array(np.ascontiguousarray(arr_2d).reshape(-1), type=arrow_type)
     offsets = pa.array(np.arange(0, n * k + 1, k, dtype=np.int32))
@@ -30,6 +31,15 @@ def _pack_list(arr_2d: np.ndarray, arrow_type: pa.DataType) -> pa.ListArray:
 
 
 class TabularPreprocessor(NumCatPipeline):
+    """Streaming tabular preprocessing: one machine, bounded memory.
+
+    Emits ``cat_features`` (cumulative-offset ids, so all categorical columns
+    share one embedding table) and ``num_features`` (standardised floats) — the
+    two columns :class:`~avatar.data.TabularDataset` expects.
+
+    Produces the same artifact and the same output as the Spark backend.
+    """
+
     def __init__(
         self,
         categorical_columns: Sequence[str] | None = None,

@@ -1,4 +1,4 @@
-"""Event-sequence model stack, split into three sub-packages:
+"""Event-sequence model stack, split into three sub-packages.
 
 - ``avatar.nn.sequential.event_encoder`` -- raw event features -> ``(B, S, H)``
   (``EventEncoder``, feature-attention aggregation, temporal encoding).

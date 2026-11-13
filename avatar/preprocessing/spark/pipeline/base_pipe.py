@@ -1,3 +1,5 @@
+"""Shared behaviour of the Spark pipelines."""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -141,8 +143,7 @@ class NumCatPipeline(BaseDataPipeline):
         return df
 
     def dump(self):
-        """
-        Creates a dictionary representation of the label encoder.
+        """Creates a dictionary representation of the label encoder.
 
         Returns:
             dict[str, any]:

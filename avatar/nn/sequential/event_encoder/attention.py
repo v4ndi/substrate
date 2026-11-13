@@ -1,7 +1,14 @@
+"""Attention *within* one event, across its attributes.
+
+Before events are compared to each other, each event's attributes attend to
+one another and are pooled into a single event vector. That is what lets one
+sequence carry heterogeneous event types.
+"""
+
 import torch
 import torch.nn as nn
 
-from avatar.data.event_seq_batch import EventSequenceBatch
+from avatar.data.sequential.batch import EventSequenceBatch
 
 
 class IntraFeatureAttention(nn.Module):
@@ -195,6 +202,11 @@ class EventAggregator(nn.Module):
 def build_event_attention_mask(
     seq_features: EventSequenceBatch, n_features: int, columns_meta
 ) -> torch.LongTensor:
+    """Build the attention mask over one event's attributes.
+
+    Attributes that are absent for a given event type must not be attended to,
+    which is what lets one sequence carry heterogeneous events.
+    """
     batch_size, seq_len = seq_features.attention_mask.shape
     attention_mask = (
         torch.ones(batch_size, seq_len, n_features).long().to(seq_features.device)
@@ -208,7 +220,8 @@ def build_event_attention_mask(
         [attention_mask.unsqueeze(-1), attention_mask.unsqueeze(-2)],
     )
     diag_matrix = (
-        torch.eye(n_features, dtype=torch.long)
+        torch
+        .eye(n_features, dtype=torch.long)
         .unsqueeze(0)
         .unsqueeze(1)
         .to(seq_features.device)

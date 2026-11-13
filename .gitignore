@@ -47,6 +47,7 @@ lightning_logs/
 **/best_models/
 **/best_model/
 checkpoints/
+predict/
 **/dynamo_cache/
 catboost_info/
 _SUCCESS
@@ -56,6 +57,7 @@ _SUCCESS
 **/data/*.parquet
 **/data/*.csv
 examples/**/data/
+examples/**/run/
 experiments/**/data/
 tests/data/**/*.parquet
 

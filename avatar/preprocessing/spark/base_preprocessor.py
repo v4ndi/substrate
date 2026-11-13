@@ -1,9 +1,10 @@
+"""Shared behaviour of the Spark preprocessors."""
+
 from abc import ABC, abstractmethod
 
 
 class BasePreprocessor(ABC):
-    """
-    Abstract base class for data preprocessing components.
+    """Abstract base class for data preprocessing components.
 
     This class defines the standard interface for all data preprocessors, following
     the scikit-learn transformer pattern. It ensures that all concrete preprocessor
@@ -54,8 +55,7 @@ class BasePreprocessor(ABC):
 
     @abstractmethod
     def fit(self, df):
-        """
-        Learn preprocessing parameters from the input data.
+        """Learn preprocessing parameters from the input data.
 
         This method analyzes the training data to compute and store any parameters
         needed for transformation (e.g., means, standard deviations, encodings).
@@ -77,8 +77,7 @@ class BasePreprocessor(ABC):
 
     @abstractmethod
     def transform(self, df):
-        """
-        Apply the learned preprocessing transformation to data.
+        """Apply the learned preprocessing transformation to data.
 
         This method applies the preprocessing transformation using parameters
         learned during the fit phase. It can be called on training, validation,
@@ -104,8 +103,7 @@ class BasePreprocessor(ABC):
 
     @abstractmethod
     def fit_transform(self, df):
-        """
-        Fit the preprocessor and transform the data in one step.
+        """Fit the preprocessor and transform the data in one step.
 
         This convenience method combines the fit and transform operations,
         learning parameters from the input data and immediately applying

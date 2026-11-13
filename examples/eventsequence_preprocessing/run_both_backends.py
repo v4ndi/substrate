@@ -84,6 +84,11 @@ def _canon(row):
 
 
 def compare(sout, lout, label: str) -> None:
+    """Compare per-user event multisets, and check the local output is time-ordered.
+
+    Spark's group-by shuffle does not preserve the sort, so the sequences are
+    compared as multisets rather than element-wise.
+    """
     sout = sout.sort_values("epk_id").reset_index(drop=True)
     lout = lout.sort_values("epk_id").reset_index(drop=True)
     assert len(sout) == len(lout), (label, len(sout), len(lout))
@@ -103,6 +108,7 @@ def compare(sout, lout, label: str) -> None:
 
 
 def main() -> None:
+    """Fit both backends, cross-load their artifacts and compare the output."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", default=DATA)
     ap.add_argument("--users", type=int, default=6_000)

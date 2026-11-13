@@ -1,4 +1,4 @@
-"""Public API surface of avatar.nn.sequential + the deprecation shims."""
+"""Public API surface of avatar.nn.sequential."""
 
 import warnings
 
@@ -41,31 +41,6 @@ def test_subpackage_paths():
     assert EventAggregator is not None
 
 
-def test_sequence_shim_warns_and_resolves():
-    import importlib
-
-    with pytest.warns(DeprecationWarning, match="avatar.nn.sequence"):
-        mod = importlib.reload(importlib.import_module("avatar.nn.sequence"))
-
-    from avatar.nn.sequential import BaseSequenceModel, TransformersWrapper
-
-    assert mod.BaseSequenceModel is BaseSequenceModel
-    assert mod.TransformersWrapper is TransformersWrapper
-
-
-def test_feature_encoder_shim_warns_and_resolves():
-    import importlib
-
-    with pytest.warns(DeprecationWarning, match="avatar.nn.feature_encoder"):
-        mod = importlib.reload(importlib.import_module("avatar.nn.feature_encoder"))
-
-    from avatar.nn.sequential import BaseEventEncoder, EventEncoder
-
-    assert mod.BaseSequenceFeatureEncoder is BaseEventEncoder
-    assert mod.FeatureEncoder is EventEncoder
-    assert mod.FeatureAttentionEncoder is EventEncoder
-
-
 def test_feature_encoder_attribute_alias_on_model():
     import torch.nn as nn
 
@@ -82,3 +57,12 @@ def test_no_deprecation_warning_from_top_level_import():
         import importlib
 
         importlib.reload(importlib.import_module("avatar.nn.sequential"))
+
+
+def test_deprecation_shims_are_gone():
+    """avatar.nn.sequence / avatar.nn.feature_encoder were dropped after migration."""
+    import importlib
+
+    for name in ("avatar.nn.sequence", "avatar.nn.feature_encoder"):
+        with pytest.raises(ModuleNotFoundError):
+            importlib.import_module(name)

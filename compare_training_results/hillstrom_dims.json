@@ -1,0 +1,12 @@
+{
+  "dataset": "hillstrom",
+  "num_numerical_features": 2,
+  "num_categorical_features": 6,
+  "vocab_size": 26,
+  "n_groups": 4,
+  "train_path": "/home/jovyan/rusakov/runs/compare_training/data/hillstrom_processed/train",
+  "valid_path": "/home/jovyan/rusakov/runs/compare_training/data/hillstrom_processed/valid",
+  "train_rows": 51288,
+  "valid_rows": 12712,
+  "shards": 8
+}

@@ -1,3 +1,5 @@
+"""Spark event-sequence preprocessing: encode, sort, group into per-client lists."""
+
 from __future__ import annotations
 
 from copy import deepcopy
@@ -13,21 +15,23 @@ from .base_pipe import NumCatPipeline
 
 
 class EventSequencePreprocessor(NumCatPipeline):
-    """Preprocessor for sequence features
+    """Preprocess event sequences into per-client time-ordered lists.
+
     Args:
-        event_time_column: str - column with date and time Default: "evt_dttm"
-        id_column: str - name of column with id
-        event_time_column: str - timestamp column
-        time_unit: str - The time unit to scale by ('days', 'weeks' or 'months')
-        event_type_ids_column: str - column containing event type identifiers (0, 1, 2, ... n);
-        groupby_columns: Optional[List[str]] - list of additional columns for grouby operation
-            for aggregation into a sequence of event attributes
-            Default: None - df.groupby(id_column)
-            if you pass groupby_columns -> df.groupby(id_column, *groupby_columns)
-        label_encoder (Union[None, LabelEncoder]): Pre-initialized label encoder.
-        standard_scaler (Union[None, StandardScaler]): Pre-initialized standard scaler.
-        label_encoder_kwargs (Dict[str, Any]): kwargs for LabelEncoder.
-        standard_scaler_kwargs (Dict[str, Any]): kwargs for StandardScaler.
+    event_time_column: str - column with date and time Default: "evt_dttm"
+    id_column: str - name of column with id
+    event_time_column: str - timestamp column
+    time_unit: str - The time unit to scale by ('days', 'weeks' or 'months')
+    event_type_ids_column: str - column containing event type identifiers (0, 1, 2, ... n);
+    groupby_columns: Optional[List[str]] - list of additional columns for grouby operation
+        for aggregation into a sequence of event attributes
+        Default: None - df.groupby(id_column)
+        if you pass groupby_columns -> df.groupby(id_column, *groupby_columns)
+    label_encoder (Union[None, LabelEncoder]): Pre-initialized label encoder.
+    standard_scaler (Union[None, StandardScaler]): Pre-initialized standard scaler.
+    label_encoder_kwargs (Dict[str, Any]): kwargs for LabelEncoder.
+    standard_scaler_kwargs (Dict[str, Any]): kwargs for StandardScaler.
+
     """
 
     def __init__(
@@ -86,6 +90,7 @@ class EventSequencePreprocessor(NumCatPipeline):
     @property
     def columns_meta(self):
         """Return columns meta informations.
+
         Return:
             Dict[str, Dict[str, any]]
             example_output = {
@@ -115,11 +120,13 @@ class EventSequencePreprocessor(NumCatPipeline):
         return columns_meta
 
     def transform(self, df):
-        """Transform dataframe
+        """Encode, sort and group the events.
+
         Args:
             df: pyspark.sql.functions.DataFrame
         Return:
-            pyspark.sql.functions.DataFrame
+            pyspark.sql.functions.DataFrame.
+
         """
         encoded_df = super().transform(df)
         sorted_df = encoded_df.sort(self.id_column, self.event_time_column)
@@ -156,20 +163,24 @@ class EventSequencePreprocessor(NumCatPipeline):
         return aggregated_df
 
     def fit(self, df):
-        """Fit preprocessor
+        """Learn the encoder and scaler statistics.
+
         Args:
             df: pyspark.sql.DataFrame
         Return:
-            None
+            None.
+
         """
         super().fit(df)
 
     def fit_transform(self, df):
-        """Fit preprocessor and transform dataframe
+        """Fit, then transform in one call.
+
         Args:
             df: pyspark.sql.functions.DataFrame
         Return:
-            pyspark.sql.functions.DataFrame
+            pyspark.sql.functions.DataFrame.
+
         """
         self.fit(df)
         df = self.transform(df)
@@ -177,7 +188,7 @@ class EventSequencePreprocessor(NumCatPipeline):
         return df
 
     def dump(self):
-        """Dump the preprocessor state to a dictionary.."""
+        """Dump the preprocessor state to a dictionary."""
         dumped_state = deepcopy(super().dump())
         dumped_state.update({
             "groupby_columns": self.groupby_columns,

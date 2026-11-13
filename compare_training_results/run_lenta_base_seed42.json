@@ -1,0 +1,9 @@
+{
+  "tag": "lenta_base_seed42",
+  "revision_dir": "/home/jovyan/rusakov/repos/avatar_fm/.claude/worktrees/cmp-base",
+  "avatar": "/home/jovyan/rusakov/repos/avatar_fm/.claude/worktrees/cmp-base/avatar/__init__.py",
+  "overrides": [],
+  "exit_code": 0,
+  "seconds": 1343.5,
+  "log": "/home/jovyan/rusakov/runs/compare_training/logs/lenta_base_seed42.log"
+}

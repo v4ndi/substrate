@@ -1,0 +1,32 @@
+{
+  "base": {
+    "side": "base",
+    "per_rank": [
+      549732,
+      549732
+    ],
+    "per_rank_unique": [
+      549732,
+      549732
+    ],
+    "union": 549732,
+    "overlap": 549732
+  },
+  "new": {
+    "side": "new",
+    "per_rank": [
+      274866,
+      274866
+    ],
+    "per_rank_unique": [
+      274866,
+      274866
+    ],
+    "union": 549732,
+    "overlap": 0
+  },
+  "identical_coverage": true,
+  "only_base": 0,
+  "only_new": 0,
+  "train_rows": 549732
+}

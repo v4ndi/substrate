@@ -1,3 +1,5 @@
+"""The tabular transformer: self-attention over feature tokens."""
+
 import torch
 import torch.nn as nn
 
@@ -40,11 +42,15 @@ class TabularTransformer(BaseTabularEncoder):
         attention_mask: torch.LongTensor | None = None,
         output_hidden_states: bool = False,
     ) -> BaseTabularOutput:
-        """
+        """Contextualise the feature tokens.
+
         Args:
             inputs_embeds: ``(B, F, D)`` feature-token embeddings.
             attention_mask: ``(B, F)``, 1 = keep, 0 = pad. Optional.
-            output_hidden_states: also return the per-block hidden states.
+            output_hidden_states: Also return the per-block hidden states.
+
+        Returns:
+            A ``BaseTabularOutput`` whose ``last_hidden_state`` is ``(B, F, D)``.
         """
         key_padding_mask = build_feature_padding_mask(attention_mask)
 
